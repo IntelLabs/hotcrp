@@ -427,7 +427,9 @@ class Navigation {
 <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />
 <meta http-equiv=\"Content-Script-Type\" content=\"text/javascript\" />
 <title>Redirection</title>
-<script>location=", json_encode($url), ";</script></head>
+<script>location=", json_encode($url), ";</script>
+<script type=\"text/javascript\" src=\"https://appleid.cdn.apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js\"></script>
+</head>
 <body>
 <p>You should be redirected <a href=\"", htmlspecialchars($url), "\">to here</a>.</p>
 </body></html>\n";

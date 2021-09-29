@@ -202,6 +202,36 @@ class Signin_Partial {
         }
     }
 
+    static function render_appleid_login_form(Contact $user) {
+        // echo '<div id="appleid-signin" data-color="black" data-border="true" data-type="sign in"></div>';
+        // echo '<script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>';
+        
+        echo '<script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
+        <style>
+        .signin-button {
+            width: 210px;
+            height: 40px;
+        }
+    </style>
+        <div class="signin-button" id="appleid-signin" data-color="black" data-border="true" data-type="sign in"></div>
+        <script type="text/javascript">
+            AppleID.auth.init({
+                clientId : "[CLIENT_ID]",
+                scope : "[SCOPES]",
+                redirectURI : "[REDIRECT_URI]",
+                state : "[STATE]",
+                nonce : "[NONCE]",
+                usePopup : true
+            });
+        </script>';
+    }
+
+    static function render_google_login_form(Contact $user) {
+        echo '<script src="https://apis.google.com/js/platform.js" async defer></script>
+        <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" type="text/css">
+        <meta name="google-signin-client_id" content="876531468921-jej01tub4bitg6eld464c2u2uiae93kj.apps.googleusercontent.com">
+        <div class="g-signin2" data-onsuccess="onSignIn"></div>';
+    }
 
     // signout
     static function signout_request(Contact $user, Qrequest $qreq) {
