@@ -4445,13 +4445,15 @@ class Conf {
     function footer() {
         global $Me;
         echo "<hr class=\"c\"></div>", // class='body'
-            '<div id="footer">',
-            $this->opt("extraFooter", ""),
-            '<a class="uu" href="https://hotcrp.com/">HotCRP</a>';
+            '<div id="footer">';
 
-            echo "<!--IGHF Footer-->",
-            "<H1>This is my awesome footer!</H1>",
-            "<!--/IGHF Footer-->";
+        
+        echo "<!--IGHF Footer-->",
+        "<H1>This is my awesome footer!</H1>",
+        "<!--/IGHF Footer-->";
+
+        echo    $this->opt("extraFooter", "");
+
 
         if (!$this->opt("noFooterVersion")) {
             if ($Me && $Me->privChair) {
