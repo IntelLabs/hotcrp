@@ -4051,28 +4051,28 @@ class Conf {
             <meta http-equiv=\"X-UA-Compatible\" content=\"IE=9\"/>
         <![endif]-->
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes\">
+        <!-- foo -->";
 
-        <!--IGHF (Performance tweaks for Mobile and Slow connections)-->
-        <meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">
-        <link rel=\"dns-prefetch\" href=\"https://www.intel.com\" pr=\"1.0\">
-        <link rel=\"dns-prefetch\" href=\"https://www.google-analytics.com\" pr=\"1.0\">
-        <link rel=\"preconnect\" href=\"https://www.intel.com\" crossorigin=\"anonymous\" pr=\"1.0\">
-        <link rel=\"preconnect\" href=\"https://www.google-analytics.com\" crossorigin=\"anonymous\" pr=\"1.0\"> 
-        <!--/IGHF-->
+        // <!--IGHF (Performance tweaks for Mobile and Slow connections)-->
+        // <meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">
+        // <link rel=\"dns-prefetch\" href=\"https://www.intel.com\" pr=\"1.0\">
+        // <link rel=\"dns-prefetch\" href=\"https://www.google-analytics.com\" pr=\"1.0\">
+        // <link rel=\"preconnect\" href=\"https://www.intel.com\" crossorigin=\"anonymous\" pr=\"1.0\">
+        // <link rel=\"preconnect\" href=\"https://www.google-analytics.com\" crossorigin=\"anonymous\" pr=\"1.0\"> 
+        // <!--/IGHF-->
 
-        <!--IGHF Loader-->
-        <!--[if le IE 9]>
-        <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC DEFER></script>
-        <![endif]-->
-        <!--[if gt IE 9]><!-->
-        <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC></script>
-        <!--<![endif]-->
-        <script>INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"--\",culture:\"--\",OutputId:\"--\"};</script>
-        <!--/IGHF Loader-->
+        // <!--IGHF Loader-->
+        // <!--[if le IE 9]>
+        // <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC DEFER></script>
+        // <![endif]-->
+        // <!--[if gt IE 9]><!-->
+        // <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC></script>
+        // <!--<![endif]-->
+        // <script>INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"--\",culture:\"--\",OutputId:\"--\"};</script>
+        // <!--/IGHF Loader-->
+        // <!-- \"PUT IGHF DASHBOARD SCRIPT HERE\" -->
 
-        <!-- \"PUT IGHF DASHBOARD SCRIPT HERE\" -->
-
-        <META NAME=\"ROBOTS\" CONTENT=\"NOINDEX, NOFOLLOW, NOSNIPPET, NOIMAGEINDEX\"><!-- hide this demo page from search engines -->";
+        echo "<META NAME=\"ROBOTS\" CONTENT=\"NOINDEX, NOFOLLOW, NOSNIPPET, NOIMAGEINDEX\"><!-- hide this demo page from search engines -->";
 
         if (($font_script = $this->opt("fontScript"))) {
             if (!str_starts_with($font_script, "<script")) {
