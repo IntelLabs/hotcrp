@@ -4259,15 +4259,15 @@ class Conf {
         }
         echo "\">\n";
 
-        echo "<!--IGHF Header-->
-        <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
-        <div id=\"recode50header\" class=\"no-animate\"></div>
-        <script type=\"text/javascript\">
-        /*<![CDATA[*/
-        INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"ltr\",culture:\"en_US\",OutputId:\"default\"};
-        /*]]>*/</script>
-        <noscript><link rel=\"stylesheet\" href=\"https://www.intel.com/ighf/50recode.2/css/ltr_nojsheader.css\" type=\"text/css\"><div id=\"smallfootprint-header\"><a href=\"https://www.intel.com/content/www/us/en/homepage.html\" class=\"gaat40-logo\" title=\"Logo - Intel\"></a><form method=\"get\" id=\"user-bar-searchbox-form\" name=\"user-bar-searchbox-form\" action=\"https://www.intel.com/content/www/us/en/search.html\"><fieldset><legend></legend><label for=\"input-search\">Search</label><input type=\"text\" id=\"input-search\" name=\"keyword\" /><input type=\"submit\" id=\"input-submit\" name=\"input-submit\" value=\"Search\" /></fieldset></form></div></noscript>
-        <!--/IGHF Header-->";
+        // echo "<!--IGHF Header-->
+        // <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
+        // <div id=\"recode50header\" class=\"no-animate\"></div>
+        // <script type=\"text/javascript\">
+        // /*<![CDATA[*/
+        // INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"ltr\",culture:\"en_US\",OutputId:\"default\"};
+        // /*]]>*/</script>
+        // <noscript><link rel=\"stylesheet\" href=\"https://www.intel.com/ighf/50recode.2/css/ltr_nojsheader.css\" type=\"text/css\"><div id=\"smallfootprint-header\"><a href=\"https://www.intel.com/content/www/us/en/homepage.html\" class=\"gaat40-logo\" title=\"Logo - Intel\"></a><form method=\"get\" id=\"user-bar-searchbox-form\" name=\"user-bar-searchbox-form\" action=\"https://www.intel.com/content/www/us/en/search.html\"><fieldset><legend></legend><label for=\"input-search\">Search</label><input type=\"text\" id=\"input-search\" name=\"keyword\" /><input type=\"submit\" id=\"input-submit\" name=\"input-submit\" value=\"Search\" /></fieldset></form></div></noscript>
+        // <!--/IGHF Header-->";
 
         // initial load (JS's timezone offsets are negative of PHP's)
         Ht::stash_script("hotcrp.onload.time(" . (-(int) date("Z", Conf::$now) / 60) . "," . ($this->opt("time24hour") ? 1 : 0) . ")");
@@ -4483,15 +4483,15 @@ class Conf {
             }
         }
         echo '</div>', Ht::unstash();
-        echo "<!--IGHF Footer--> 
-        <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
-        <div id=\"recode50footer\"></div>
-        <script type=\"text/javascript\">
-        /*<![CDATA[*/
-        INTELNAV = window.INTELNAV || {}; INTELNAV.renderSettingsFooter={version:\"2.0 - 03/12/2017 08:00:00\",OutputId:\"gf_default\"};
-        /*]]>*/</script> 
-        <noscript><div id=\"smallfootprint-footer\"><ul><li>©Intel Corporation</li><li><a href=\"https://www.intel.com/content/www/us/en/legal/terms-of-use.html\" target=\"\">Terms of Use</a></li><li><a href=\"https://www.intel.com/content/www/us/en/legal/trademarks.html\" target=\"\">*Trademarks</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-privacy-notice.html\" target=\"\">Privacy</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-cookie-notice.html\" target=\"\">Cookies</a></li><li><a href=\"https://www.intel.com/content/www/us/en/policy/policy-human-trafficking-and-slavery.html\" target=\"\">Supply Chain Transparency </a></li><li><a href=\"https://www.intel.com/content/www/us/en/siteindex.html\" target=\"\">Site Map</a></li></ul></div></noscript>
-        <!--/IGHF Footer-->";
+        // echo "<!--IGHF Footer--> 
+        // <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
+        // <div id=\"recode50footer\"></div>
+        // <script type=\"text/javascript\">
+        // /*<![CDATA[*/
+        // INTELNAV = window.INTELNAV || {}; INTELNAV.renderSettingsFooter={version:\"2.0 - 03/12/2017 08:00:00\",OutputId:\"gf_default\"};
+        // /*]]>*/</script> 
+        // <noscript><div id=\"smallfootprint-footer\"><ul><li>©Intel Corporation</li><li><a href=\"https://www.intel.com/content/www/us/en/legal/terms-of-use.html\" target=\"\">Terms of Use</a></li><li><a href=\"https://www.intel.com/content/www/us/en/legal/trademarks.html\" target=\"\">*Trademarks</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-privacy-notice.html\" target=\"\">Privacy</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-cookie-notice.html\" target=\"\">Cookies</a></li><li><a href=\"https://www.intel.com/content/www/us/en/policy/policy-human-trafficking-and-slavery.html\" target=\"\">Supply Chain Transparency </a></li><li><a href=\"https://www.intel.com/content/www/us/en/siteindex.html\" target=\"\">Site Map</a></li></ul></div></noscript>
+        // <!--/IGHF Footer-->";
         echo "</body>\n</html>\n";
     }
 
