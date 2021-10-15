@@ -94,6 +94,7 @@ class Signin_Partial {
     static function render_signin_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("Sign in", "home");
+        $user->conf->msg("Why no footer bob?", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if ($qreq->is_get() && $qreq->redirect) {
             $user->conf->msg("You need to sign in to access that page.", 2);
@@ -200,37 +201,6 @@ class Signin_Partial {
                 $user->conf->hoturl("newaccount"),
                 '" class="uic js-href-add-email">Create an account</a></p>';
         }
-    }
-
-    static function render_appleid_login_form(Contact $user) {
-        // echo '<div id="appleid-signin" data-color="black" data-border="true" data-type="sign in"></div>';
-        // echo '<script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>';
-        
-        echo '<script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
-        <style>
-        .signin-button {
-            width: 210px;
-            height: 40px;
-        }
-    </style>
-        <div class="signin-button" id="appleid-signin" data-color="black" data-border="true" data-type="sign in"></div>
-        <script type="text/javascript">
-            AppleID.auth.init({
-                clientId : "[CLIENT_ID]",
-                scope : "[SCOPES]",
-                redirectURI : "[REDIRECT_URI]",
-                state : "[STATE]",
-                nonce : "[NONCE]",
-                usePopup : true
-            });
-        </script>';
-    }
-
-    static function render_google_login_form(Contact $user) {
-        echo '<script src="https://apis.google.com/js/platform.js" async defer></script>
-        <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" type="text/css">
-        <meta name="google-signin-client_id" content="876531468921-jej01tub4bitg6eld464c2u2uiae93kj.apps.googleusercontent.com">
-        <div class="g-signin2" data-onsuccess="onSignIn"></div>';
     }
 
     // signout
@@ -343,6 +313,7 @@ class Signin_Partial {
     static function render_newaccount_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("New account", "newaccount", ["action_bar" => false]);
+        $user->conf->msg("Why no footer bob?", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if (!$user->conf->allow_user_self_register()) {
             $user->conf->msg("New users can’t self-register for this site.", 2);
@@ -400,6 +371,7 @@ class Signin_Partial {
     static function render_forgot_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("Forgot password", "resetpassword", ["action_bar" => false]);
+        $user->conf->msg("Why no footer bob?", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if ($user->conf->external_login()) {
             return $gx->render("forgotpassword/__externallogin");
@@ -516,6 +488,7 @@ class Signin_Partial {
     static function render_reset_head(Contact $user, Qrequest $qreq, $gx, $gj) {
         ensure_session();
         $user->conf->header("Reset password", "resetpassword", ["action_bar" => false]);
+        $user->conf->msg("Why no footer bob?", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if ($user->conf->external_login()) {
             return $gx->render("forgotpassword/__externallogin");

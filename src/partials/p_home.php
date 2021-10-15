@@ -66,6 +66,7 @@ class Home_Partial {
         if ($qreq->signedout && $user->is_empty()) {
             $user->conf->msg("You have been signed out of the site.", "xconfirm");
         }
+        $user->conf->msg("Why no footer bob?", "xconfirm");
         $gx->push_render_cleanup("__footer");
         echo '<noscript><div class="msg msg-error"><strong>This site requires JavaScript.</strong> Your browser does not support JavaScript.<br><a href="https://github.com/kohler/hotcrp/">Report bad compatibility problems</a></div></noscript>', "\n";
         if ($user->privChair) {
