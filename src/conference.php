@@ -4470,6 +4470,15 @@ class Conf {
             '<div id="footer">',
             $this->opt("extraFooter", ""),
             '<a class="uu" href="https://hotcrp.com/">HotCRP</a>';
+            echo "<!--IGHF Footer--> 
+            <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
+            <div id=\"recode50footer\"></div>
+            <script type=\"text/javascript\">
+            /*<![CDATA[*/
+            INTELNAV = window.INTELNAV || {}; INTELNAV.renderSettingsFooter={version:\"2.0 - 03/12/2017 08:00:00\",OutputId:\"gf_default\"};
+            /*]]>*/</script> 
+            <noscript><div id=\"smallfootprint-footer\"><ul><li>©Intel Corporation</li><li><a href=\"https://www.intel.com/content/www/us/en/legal/terms-of-use.html\" target=\"\">Terms of Use</a></li><li><a href=\"https://www.intel.com/content/www/us/en/legal/trademarks.html\" target=\"\">*Trademarks</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-privacy-notice.html\" target=\"\">Privacy</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-cookie-notice.html\" target=\"\">Cookies</a></li><li><a href=\"https://www.intel.com/content/www/us/en/policy/policy-human-trafficking-and-slavery.html\" target=\"\">Supply Chain Transparency </a></li><li><a href=\"https://www.intel.com/content/www/us/en/siteindex.html\" target=\"\">Site Map</a></li></ul></div></noscript>
+            <!--/IGHF Footer-->";
         if (!$this->opt("noFooterVersion")) {
             if ($Me && $Me->privChair) {
                 echo " v", HOTCRP_VERSION, " [";
@@ -4483,15 +4492,6 @@ class Conf {
             }
         }
         echo '</div>', Ht::unstash();
-        echo "<!--IGHF Footer--> 
-        <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
-        <div id=\"recode50footer\"></div>
-        <script type=\"text/javascript\">
-        /*<![CDATA[*/
-        INTELNAV = window.INTELNAV || {}; INTELNAV.renderSettingsFooter={version:\"2.0 - 03/12/2017 08:00:00\",OutputId:\"gf_default\"};
-        /*]]>*/</script> 
-        <noscript><div id=\"smallfootprint-footer\"><ul><li>©Intel Corporation</li><li><a href=\"https://www.intel.com/content/www/us/en/legal/terms-of-use.html\" target=\"\">Terms of Use</a></li><li><a href=\"https://www.intel.com/content/www/us/en/legal/trademarks.html\" target=\"\">*Trademarks</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-privacy-notice.html\" target=\"\">Privacy</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-cookie-notice.html\" target=\"\">Cookies</a></li><li><a href=\"https://www.intel.com/content/www/us/en/policy/policy-human-trafficking-and-slavery.html\" target=\"\">Supply Chain Transparency </a></li><li><a href=\"https://www.intel.com/content/www/us/en/siteindex.html\" target=\"\">Site Map</a></li></ul></div></noscript>
-        <!--/IGHF Footer-->";
         echo "</body>\n</html>\n";
     }
 
