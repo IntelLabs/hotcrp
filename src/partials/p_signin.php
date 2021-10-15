@@ -95,6 +95,7 @@ class Signin_Partial {
         ensure_session();
         $user->conf->header("Sign in", "home");
         $user->conf->msg("Why no footer bob?render_signin_head", "xconfirm");
+        $user->conf->footer();
         $gx->push_render_cleanup("__footer");
         if ($qreq->is_get() && $qreq->redirect) {
             $user->conf->msg("You need to sign in to access that page.", 2);
