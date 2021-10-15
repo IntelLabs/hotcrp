@@ -4053,13 +4053,13 @@ class Conf {
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes\">
         <!-- foo -->";
 
-        // <!--IGHF (Performance tweaks for Mobile and Slow connections)-->
-        // <meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">
-        // <link rel=\"dns-prefetch\" href=\"https://www.intel.com\" pr=\"1.0\">
-        // <link rel=\"dns-prefetch\" href=\"https://www.google-analytics.com\" pr=\"1.0\">
-        // <link rel=\"preconnect\" href=\"https://www.intel.com\" crossorigin=\"anonymous\" pr=\"1.0\">
-        // <link rel=\"preconnect\" href=\"https://www.google-analytics.com\" crossorigin=\"anonymous\" pr=\"1.0\"> 
-        // <!--/IGHF-->
+        echo "<!--IGHF (Performance tweaks for Mobile and Slow connections)-->
+        <meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">
+        <link rel=\"dns-prefetch\" href=\"https://www.intel.com\" pr=\"1.0\">
+        <link rel=\"dns-prefetch\" href=\"https://www.google-analytics.com\" pr=\"1.0\">
+        <link rel=\"preconnect\" href=\"https://www.intel.com\" crossorigin=\"anonymous\" pr=\"1.0\">
+        <link rel=\"preconnect\" href=\"https://www.google-analytics.com\" crossorigin=\"anonymous\" pr=\"1.0\"> 
+        <!--/IGHF-->";
 
         // <!--IGHF Loader-->
         // <!--[if le IE 9]>
