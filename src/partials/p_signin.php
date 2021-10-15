@@ -94,7 +94,7 @@ class Signin_Partial {
     static function render_signin_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("Sign in", "home");
-        $user->conf->msg("Why no footer bob?", "xconfirm");
+        $user->conf->msg("Why no footer bob?render_signin_head", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if ($qreq->is_get() && $qreq->redirect) {
             $user->conf->msg("You need to sign in to access that page.", 2);
@@ -313,7 +313,7 @@ class Signin_Partial {
     static function render_newaccount_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("New account", "newaccount", ["action_bar" => false]);
-        $user->conf->msg("Why no footer bob?", "xconfirm");
+        $user->conf->msg("Why no footer bob?render_newaccount_head", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if (!$user->conf->allow_user_self_register()) {
             $user->conf->msg("New users can’t self-register for this site.", 2);
@@ -371,7 +371,7 @@ class Signin_Partial {
     static function render_forgot_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("Forgot password", "resetpassword", ["action_bar" => false]);
-        $user->conf->msg("Why no footer bob?", "xconfirm");
+        $user->conf->msg("Why no footer bob?render_forgot_head", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if ($user->conf->external_login()) {
             return $gx->render("forgotpassword/__externallogin");
@@ -488,7 +488,7 @@ class Signin_Partial {
     static function render_reset_head(Contact $user, Qrequest $qreq, $gx, $gj) {
         ensure_session();
         $user->conf->header("Reset password", "resetpassword", ["action_bar" => false]);
-        $user->conf->msg("Why no footer bob?", "xconfirm");
+        $user->conf->msg("Why no footer bob?render_reset_head", "xconfirm");
         $gx->push_render_cleanup("__footer");
         if ($user->conf->external_login()) {
             return $gx->render("forgotpassword/__externallogin");
