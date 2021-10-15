@@ -1,7 +1,4 @@
-[{
-        "name": "__footer",
-        "render_function": "*Conf::footer"
-    },
+[
 
 
     { "name": "index", "alias": "home" },
@@ -173,8 +170,6 @@
     ["signin/form/password", 30, "Signin_Partial::render_signin_form_password"],
     ["signin/form/actions", 100, "Signin_Partial::render_signin_form_actions"],
     ["signin/form/create", 150, "Signin_Partial::render_signin_form_create"],
-    ["signin/form/applelogin", 170, "Signin_Partial::render_appleid_login_form"],
-    ["signin/form/googlelogin", 190, "Signin_Partial::render_google_login_form"],
 
     { "name": "signout", "allow_disabled": true },
     {
