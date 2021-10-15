@@ -756,4 +756,4 @@ echo "</main></form>";
 if (!$newProfile) {
     Ht::stash_script('hotcrp.highlight_form_children("#form-profile")');
 }
-// $Conf->footer();
+$Conf->footer();
