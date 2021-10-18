@@ -10,7 +10,7 @@ class Track {
     const ASSREV = 4;
     const UNASSREV = 5;
     const VIEWTRACKER = 6;
-    const ADMIN = 7;
+    const ADMIN = 7;000
     const HIDDENTAG = 8;
     const VIEWALLREV = 9;
 
@@ -4052,6 +4052,28 @@ class Conf {
         <![endif]-->
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes\">";
 
+        echo "<!--IGHF (Performance tweaks for Mobile and Slow connections)-->
+        <meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">
+        <link rel=\"dns-prefetch\" href=\"https://www.intel.com\" pr=\"1.0\">
+        <link rel=\"dns-prefetch\" href=\"https://www.google-analytics.com\" pr=\"1.0\">
+        <link rel=\"preconnect\" href=\"https://www.intel.com\" crossorigin=\"anonymous\" pr=\"1.0\">
+        <link rel=\"preconnect\" href=\"https://www.google-analytics.com\" crossorigin=\"anonymous\" pr=\"1.0\"> 
+        <!--/IGHF-->
+
+        <!--IGHF Loader-->
+        <!--[if le IE 9]>
+        <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC DEFER></script>
+        <![endif]-->
+        <!--[if gt IE 9]><!-->
+        <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC></script>
+        <!--<![endif]-->
+        <script>INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"--\",culture:\"--\",OutputId:\"--\"};</script>
+        <!--/IGHF Loader-->
+        <!-- \"PUT IGHF DASHBOARD SCRIPT HERE\" -->
+
+        echo "<META NAME=\"ROBOTS\" CONTENT=\"NOINDEX, NOFOLLOW, NOSNIPPET, NOIMAGEINDEX\"><!-- hide this demo page from search engines -->";
+
+
         if (($font_script = $this->opt("fontScript"))) {
             if (!str_starts_with($font_script, "<script")) {
                 $font_script = Ht::script($font_script);
@@ -4237,15 +4259,15 @@ class Conf {
         }
         echo "\">\n";
 
-        // echo "<!--IGHF Header-->
-        // <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
-        // <div id=\"recode50header\" class=\"no-animate\"></div>
-        // <script type=\"text/javascript\">
-        // /*<![CDATA[*/
-        // INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"ltr\",culture:\"en_US\",OutputId:\"default\"};
-        // /*]]>*/</script>
-        // <noscript><link rel=\"stylesheet\" href=\"https://www.intel.com/ighf/50recode.2/css/ltr_nojsheader.css\" type=\"text/css\"><div id=\"smallfootprint-header\"><a href=\"https://www.intel.com/content/www/us/en/homepage.html\" class=\"gaat40-logo\" title=\"Logo - Intel\"></a><form method=\"get\" id=\"user-bar-searchbox-form\" name=\"user-bar-searchbox-form\" action=\"https://www.intel.com/content/www/us/en/search.html\"><fieldset><legend></legend><label for=\"input-search\">Search</label><input type=\"text\" id=\"input-search\" name=\"keyword\" /><input type=\"submit\" id=\"input-submit\" name=\"input-submit\" value=\"Search\" /></fieldset></form></div></noscript>
-        // <!--/IGHF Header-->";
+        echo "<!--IGHF Header-->
+        <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
+        <div id=\"recode50header\" class=\"no-animate\"></div>
+        <script type=\"text/javascript\">
+        /*<![CDATA[*/
+        INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"ltr\",culture:\"en_US\",OutputId:\"default\"};
+        /*]]>*/</script>
+        <noscript><link rel=\"stylesheet\" href=\"https://www.intel.com/ighf/50recode.2/css/ltr_nojsheader.css\" type=\"text/css\"><div id=\"smallfootprint-header\"><a href=\"https://www.intel.com/content/www/us/en/homepage.html\" class=\"gaat40-logo\" title=\"Logo - Intel\"></a><form method=\"get\" id=\"user-bar-searchbox-form\" name=\"user-bar-searchbox-form\" action=\"https://www.intel.com/content/www/us/en/search.html\"><fieldset><legend></legend><label for=\"input-search\">Search</label><input type=\"text\" id=\"input-search\" name=\"keyword\" /><input type=\"submit\" id=\"input-submit\" name=\"input-submit\" value=\"Search\" /></fieldset></form></div></noscript>
+        <!--/IGHF Header-->";
 
         // initial load (JS's timezone offsets are negative of PHP's)
         Ht::stash_script("hotcrp.onload.time(" . (-(int) date("Z", Conf::$now) / 60) . "," . ($this->opt("time24hour") ? 1 : 0) . ")");
