@@ -10,7 +10,7 @@ class Track {
     const ASSREV = 4;
     const UNASSREV = 5;
     const VIEWTRACKER = 6;
-    const ADMIN = 7;000
+    const ADMIN = 7;
     const HIDDENTAG = 8;
     const VIEWALLREV = 9;
 
