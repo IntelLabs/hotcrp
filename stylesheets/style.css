@@ -829,14 +829,14 @@ body.paper>#body {
 /* footer */
 
 #footer {
-    position: absolute;
+    /* position: absolute;
     bottom: 0;
     right: 0;
     font-size: 69%;
     background: #ffc9d6;
     color: #0071c5;
     padding: 0.2em 0.5em;
-    border-top-left-radius: 4px;
+    border-top-left-radius: 4px; */
     z-index: 3;
 }
 
