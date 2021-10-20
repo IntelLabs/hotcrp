@@ -4045,35 +4045,9 @@ class Conf {
         echo "<!DOCTYPE html>
         <html lang=\"en\">
         <head>
-        <meta charset=\"UTF-8\"/>
-        <meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"/>
-        <!--[if lte IE 9]>
-            <meta http-equiv=\"X-UA-Compatible\" content=\"IE=9\"/>
-        <![endif]-->
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes\">";
-
-        echo "<!--IGHF (Performance tweaks for Mobile and Slow connections)-->
-        <meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">
-        <link rel=\"dns-prefetch\" href=\"https://www.intel.com\" pr=\"1.0\">
-        <link rel=\"dns-prefetch\" href=\"https://www.google-analytics.com\" pr=\"1.0\">
-        <link rel=\"preconnect\" href=\"https://www.intel.com\" crossorigin=\"anonymous\" pr=\"1.0\">
-        <link rel=\"preconnect\" href=\"https://www.google-analytics.com\" crossorigin=\"anonymous\" pr=\"1.0\"> 
-        <!--/IGHF-->
-
-        <!--IGHF Loader-->
-        <!--[if le IE 9]>
-        <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC DEFER></script>
-        <![endif]-->
-        <!--[if gt IE 9]><!-->
-        <script type=\"text/javascript\" src=\"https://www.intel.com/ighf/50recode.2/js/headerchooser.js\" ASYNC></script>
-        <!--<![endif]-->
-        <script>INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"--\",culture:\"--\",OutputId:\"--\"};</script>
-        <!--/IGHF Loader-->
-        <!-- \"PUT IGHF DASHBOARD SCRIPT HERE\" -->
-
-        echo "<META NAME=\"ROBOTS\" CONTENT=\"NOINDEX, NOFOLLOW, NOSNIPPET, NOIMAGEINDEX\"><!-- hide this demo page from search engines -->";
-
-
+        <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">
+        <meta name=\"google\" content=\"notranslate\">\n";
+        
         if (($font_script = $this->opt("fontScript"))) {
             if (!str_starts_with($font_script, "<script")) {
                 $font_script = Ht::script($font_script);
@@ -4258,16 +4232,6 @@ class Conf {
             echo '" data-document-max-size="', (int) $s;
         }
         echo "\">\n";
-
-        echo "<!--IGHF Header-->
-        <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
-        <div id=\"recode50header\" class=\"no-animate\"></div>
-        <script type=\"text/javascript\">
-        /*<![CDATA[*/
-        INTELNAV = window.INTELNAV || {};INTELNAV.renderSettings={version:\"2.0 - 03/12/2017 08:00:00\",textDirection:\"ltr\",culture:\"en_US\",OutputId:\"default\"};
-        /*]]>*/</script>
-        <noscript><link rel=\"stylesheet\" href=\"https://www.intel.com/ighf/50recode.2/css/ltr_nojsheader.css\" type=\"text/css\"><div id=\"smallfootprint-header\"><a href=\"https://www.intel.com/content/www/us/en/homepage.html\" class=\"gaat40-logo\" title=\"Logo - Intel\"></a><form method=\"get\" id=\"user-bar-searchbox-form\" name=\"user-bar-searchbox-form\" action=\"https://www.intel.com/content/www/us/en/search.html\"><fieldset><legend></legend><label for=\"input-search\">Search</label><input type=\"text\" id=\"input-search\" name=\"keyword\" /><input type=\"submit\" id=\"input-submit\" name=\"input-submit\" value=\"Search\" /></fieldset></form></div></noscript>
-        <!--/IGHF Header-->";
 
         // initial load (JS's timezone offsets are negative of PHP's)
         Ht::stash_script("hotcrp.onload.time(" . (-(int) date("Z", Conf::$now) / 60) . "," . ($this->opt("time24hour") ? 1 : 0) . ")");
@@ -4467,23 +4431,10 @@ class Conf {
     function footer() {
         global $Me;
         echo "<hr class=\"c\"></div>", // class='body'
-            '<div id="footer">';
-
-        
-        // echo "<!--IGHF Footer-->",
-        // "<H1>This is my awesome footer!</H1>",
-        // "<!--/IGHF Footer-->";
-        echo "<!--IGHF Footer--> 
-        <!--GAATversion='50recode.2' date='09/11/2017 08:00:00' Version='2.0':CharacterEncoding:utf8--> 
-        <div id=\"recode50footer\"></div>
-        <script type=\"text/javascript\">
-        /*<![CDATA[*/
-        INTELNAV = window.INTELNAV || {}; INTELNAV.renderSettingsFooter={version:\"2.0 - 03/12/2017 08:00:00\",OutputId:\"gf_default\"};
-        /*]]>*/</script> 
-        <noscript><div id=\"smallfootprint-footer\"><ul><li>©Intel Corporation</li><li><a href=\"https://www.intel.com/content/www/us/en/legal/terms-of-use.html\" target=\"\">Terms of Use</a></li><li><a href=\"https://www.intel.com/content/www/us/en/legal/trademarks.html\" target=\"\">*Trademarks</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-privacy-notice.html\" target=\"\">Privacy</a></li><li><a href=\"https://www.intel.com/content/www/us/en/privacy/intel-cookie-notice.html\" target=\"\">Cookies</a></li><li><a href=\"https://www.intel.com/content/www/us/en/policy/policy-human-trafficking-and-slavery.html\" target=\"\">Supply Chain Transparency </a></li><li><a href=\"https://www.intel.com/content/www/us/en/siteindex.html\" target=\"\">Site Map</a></li></ul></div></noscript>
-        <!--/IGHF Footer-->";
-        echo    $this->opt("extraFooter", "");
-        if (!$this->opt("noFooterVersion")) {
+        '<div id="footer">',
+        $this->opt("extraFooter", ""),
+        '<a class="uu" href="https://hotcrp.com/">HotCRP</a>';
+    if (!$this->opt("noFooterVersion")) {
             if ($Me && $Me->privChair) {
                 echo " v", HOTCRP_VERSION, " [";
                 if (($git_data = self::git_status())
@@ -4495,9 +4446,8 @@ class Conf {
                 echo "<!-- Version ", HOTCRP_VERSION, " -->";
             }
         }
-        echo '</div>', Ht::unstash();
-        echo "</body>\n</html>\n";
-    }
+        echo '</div>', Ht::unstash(), "</body>\n</html>\n";
+       }
 
     /** @param Contact $viewer
      * @param Contact $user */
