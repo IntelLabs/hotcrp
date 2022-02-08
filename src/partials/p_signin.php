@@ -143,7 +143,7 @@ class Signin_Partial {
             echo '<p class="is-warning"><span class="warning-mark"></span> ', $user->conf->_("You are already signed in as %s. Use this form to add another account to this browser session.", commajoin($links)), '</p>';
         }
         echo '<p class="mb-5">',
-            $user->conf->_("Sign in to submit or review papers."), '</p>';
+            $user->conf->_("Sign in to submit or review papers."), '</p>', _("Intel Employees, login with your standard credentials."), '</p>';
     }
 
     static function render_signin_form_email(Contact $user, Qrequest $qreq, $gx) {
@@ -197,8 +197,7 @@ class Signin_Partial {
     static function render_signin_form_create(Contact $user) {
         if ($user->conf->allow_user_self_register()) {
             echo '<p class="mt-2 hint fx">New to the site? <a href="',
-                //$user->conf->hoturl("newaccount"),
-                $user->conf->self_register_url(),
+                $user->conf->hoturl("newaccount"),
                 '" class="uic js-href-add-email">Create an account</a></p>';
         }
     }
