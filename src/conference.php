@@ -2053,14 +2053,15 @@ class Conf {
 
     /** @return bool */
     function external_login() {
-        return ($this->opt["ldapLogin"] ?? false) || ($this->opt["httpAuthLogin"] ?? false);
+        //return ($this->opt["ldapLogin"] ?? false) || ($this->opt["httpAuthLogin"] ?? false);
+    	return false;
     }
 
     /** @return bool */
-    function allow_user_self_register() {
+    function allow_user_self_register() { 
         return !$this->external_login()
             && !$this->opt("disableNewUsers")
-            && !$this->opt("disableNonPC");
+	    && !$this->opt("disableNonPC");
     }
 
     function self_register_url() {
