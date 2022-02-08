@@ -197,9 +197,8 @@ class Signin_Partial {
     static function render_signin_form_create(Contact $user) {
         if ($user->conf->allow_user_self_register()) {
             echo '<p class="mt-2 hint fx">New to the site? <a href="',
-                //$user->conf->hoturl("newaccount"),
                 $user->conf->self_register_url(),
-                '" class="uic js-href-add-email">Create an account</a></p>';
+		'" class="uic js-href-add-email">Create an account</a></p>';
         }
     }
 
