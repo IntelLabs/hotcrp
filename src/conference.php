@@ -2063,6 +2063,10 @@ class Conf {
             && !$this->opt("disableNonPC");
     }
 
+    function self_register_url() {
+        return $this->opt("selfRegisterURL");
+    }
+    
     /** @return Author */
     function default_site_contact() {
         $result = $this->ql("select firstName, lastName, affiliation, email from ContactInfo where roles!=0 and (roles&" . (Contact::ROLE_CHAIR | Contact::ROLE_ADMIN) . ")!=0 order by (roles&" . Contact::ROLE_CHAIR . ") desc, contactId asc limit 1");
