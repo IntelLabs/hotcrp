@@ -166,7 +166,8 @@ class Signin_Partial {
         echo '<div class="', Ht::control_class("password", "f-i fx"), '">';
         if (!$is_external_login) {
             echo '<div class="float-right"><a href="',
-                $user->conf->hoturl("forgotpassword"),
+//                $user->conf->hoturl("forgotpassword"),
+                "https://wcm-qa.intel.com/content/www/us/en/my-intel/forgot-password.html",
                 '" class="n x small uic js-href-add-email">Forgot your password?</a></div>';
         }
         $password_reset = $user->session("password_reset");
