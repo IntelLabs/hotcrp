@@ -2053,21 +2053,19 @@ class Conf {
 
     /** @return bool */
     function external_login() {
-        //return ($this->opt["ldapLogin"] ?? false) || ($this->opt["httpAuthLogin"] ?? false);
-    	return false;
+        return ($this->opt["ldapLogin"] ?? false) || ($this->opt["httpAuthLogin"] ?? false);
     }
 
     /** @return bool */
     function allow_user_self_register() { 
-        return !$this->external_login()
-            && !$this->opt("disableNewUsers")
+        return !$this->opt("disableNewUsers")
 	    && !$this->opt("disableNonPC");
     }
 
     function self_register_url() {
         return $this->opt("selfRegisterURL");
     }
-    
+
     /** @return Author */
     function default_site_contact() {
         $result = $this->ql("select firstName, lastName, affiliation, email from ContactInfo where roles!=0 and (roles&" . (Contact::ROLE_CHAIR | Contact::ROLE_ADMIN) . ")!=0 order by (roles&" . Contact::ROLE_CHAIR . ") desc, contactId asc limit 1");
