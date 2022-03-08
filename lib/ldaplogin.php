@@ -34,7 +34,12 @@ class LDAPLogin {
 
 		$success = @ldap_bind($ldapc, (string) $qreq->email, (string) $qreq->password);
 		if (!$success) {
-		return self::fail($conf, $qreq, $ldapc);
+			// return self::fail($conf, $qreq, $ldapc);
+
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: LDAP BIND FAILED." . $ldapc
+			];
 		}
 
 		// use LDAP information to prepopulate the database with names
@@ -90,7 +95,7 @@ class LDAPLogin {
 				"ok" => false, "ldap" => true, "nopw" => true,
 				"detail_html" => "Password missing." . ($lerrno == 53 ? "" : $suffix)
 		];
-		} else if ($lerrno != 0 && $lerrno < 5) {
+		} else if ($lerrno < 5) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
 				"detail_html" => "LDAP protocol error: $lerrno.  Logins will fail until this error is fixed.$suffix"
