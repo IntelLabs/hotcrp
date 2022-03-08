@@ -50,7 +50,12 @@ class LDAPLogin {
 			$e = @ldap_get_entries($ldapc, $sr);
 
 			if ($e["count"] == 0){
-				return self::fail($conf, $qreq, $ldapc);
+				return [
+					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+					"detail_html" => "Internal error: ldap_get_entries. Logins disabled until this error is fixed." . "m1" . $m[1] . "m2" . $m[2]
+				];
+	
+				// return self::fail($conf, $qreq, $ldapc);
 			}
 			
 			$e = ($e["count"] == 1 ? $e[0] : array());
