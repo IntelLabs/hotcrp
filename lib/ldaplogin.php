@@ -52,7 +52,7 @@ class LDAPLogin {
 			if ($e["count"] == 0){
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Internal error: ldap_get_entries. Logins disabled until this error is fixed." . implode(" ", $e)
+					"detail_html" => "Internal error: ldap_get_entries. Logins disabled until this error is fixed." . implode(" ", $sr)
 				];
 	
 				// return self::fail($conf, $qreq, $ldapc);
