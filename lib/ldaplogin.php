@@ -82,7 +82,7 @@ class LDAPLogin {
         $lerrno = ldap_errno($ldapc);
         $suffix = "";
         if ($lerrno != 49) {
-            $suffix = "<br><span class='hint'>(LDAP error $lerrno: " . htmlspecialchars(ldap_err2str($lerrno)) . ")</span>";
+            $suffix = "<br><span class='hint'>(LDAP error: $lerrno - " . htmlspecialchars(ldap_err2str($lerrno)) . ")</span>";
         }
 
         if ((string) $qreq->password === "") {
