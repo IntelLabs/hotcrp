@@ -43,7 +43,7 @@ class LDAPLogin {
 		}
 
 		// use LDAP information to prepopulate the database with names
-		$sr = @ldap_search($ldapc, "dc=*", $dn,
+		$sr = @ldap_search($ldapc, "DC=amr,DC=corp,DC=intel,DC=com", $dn,
 							array("mail"));
 
 		if ($sr) {
