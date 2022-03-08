@@ -93,7 +93,7 @@ class LDAPLogin {
 	} else if ($lerrno < 5) {
             return [
                 "ok" => false, "ldap" => true, "internal" => true, "email" => true,
-                "detail_html" => "LDAP protocol error. Logins will fail until this error is fixed.$suffix"
+                "detail_html" => "LDAP protocol error: $lerrno.  Logins will fail until this error is fixed.$suffix"
             ];
        } else {
             return [
