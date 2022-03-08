@@ -80,10 +80,10 @@ class LDAPLogin {
     static private function fail(Conf $conf, Qrequest $qreq, $ldapc) {
         // connection failed, report error
         $lerrno = ldap_errno($ldapc);
-        $suffix = "";
-        if ($lerrno != 49) {
-            $suffix = "<br><span class='hint'>(LDAP error: $lerrno - " . htmlspecialchars(ldap_err2str($lerrno)) . ")</span>";
-        }
+        $suffix = $suffix = "<br><span class='hint'>(LDAP error: $lerrno - " . htmlspecialchars(ldap_err2str($lerrno)) . ")</span>";
+        // if ($lerrno != 49) {
+        //     $suffix = "<br><span class='hint'>(LDAP error: $lerrno - " . htmlspecialchars(ldap_err2str($lerrno)) . ")</span>";
+        // }
 
         if ((string) $qreq->password === "") {
             return [
