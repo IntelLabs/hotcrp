@@ -44,7 +44,7 @@ class LDAPLogin {
 
 		// use LDAP information to prepopulate the database with names
 		$sr = @ldap_search($ldapc, "dc=corp,DC=intel,dc=com", $dn,
-							array("sn", "givenname", "cn", "mail", "telephonenumber"));
+							array("sn"));
 
 		if ($sr) {
 			$e = @ldap_get_entries($ldapc, $sr);
