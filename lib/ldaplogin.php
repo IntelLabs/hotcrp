@@ -43,7 +43,7 @@ class LDAPLogin {
 		}
 
 		// use LDAP information to prepopulate the database with names
-		$sr = @ldap_search($ldapc, "dc=corp,DC=intel,dc=com", $dn,
+		$sr = @ldap_search($ldapc, "dc=*", $dn,
 							array("mail"));
 
 		if ($sr) {
@@ -52,7 +52,7 @@ class LDAPLogin {
 			if ($e["count"] == 0){
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Internal error: ldap_get_entries. Logins disabled until this error is fixed." . $sr
+					"detail_html" => "Internal error: ldap_get_entries. Logins disabled until this error is fixed." . $e
 				];
 	
 				// return self::fail($conf, $qreq, $ldapc);
