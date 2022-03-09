@@ -73,7 +73,7 @@ class LDAPLogin {
 	else {
 		return [
 			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Found User Data"
+			"detail_html" => "Found User Data - DN:" . $entries[0]['dn']
 		];
 	}
 	// if not there, check the EIDR directory
