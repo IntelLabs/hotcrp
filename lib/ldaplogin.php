@@ -4,6 +4,14 @@
 
 class LDAPLogin {
 	static function ldap_login_info2(Conf $conf, Qreqeust $qreq) {
+		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
+			$conf->opt("ldapLogin"), $m)) {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "x
+			];
+		}
+
 		// connect to the LDAP server
 		if ($m[2] == "") {
             $ldapc = @ldap_connect($m[1]);
