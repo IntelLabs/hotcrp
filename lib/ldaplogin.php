@@ -49,6 +49,11 @@ class LDAPLogin {
             ];
 		}
 
+		if ((string) $qreq->password === "") {
+			return self::fail($conf, $qreq, $ldapc);
+		}
+
+
 		// search for user DN value in Workers LDAP directory
 
 		// if not there, check the EIDR directory
