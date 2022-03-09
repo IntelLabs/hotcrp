@@ -3,7 +3,8 @@
 // Copyright (c) 2009-2020 Eddie Kohler; see LICENSE.
 
 class LDAPLogin {
-	static function ldap_login_info2(Conf $conf, Qreqeust $qreq) {
+
+/*	static function ldap_login_info2(Conf $conf, Qreqeust $qreq) {
 		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
 			$conf->opt("ldapLogin"), $m)) {
 			return [
@@ -69,8 +70,7 @@ class LDAPLogin {
 
 		// Success!  Get user data
 	}
-
-	/*
+*/
     static function ldap_login_info(Conf $conf, Qrequest $qreq) {
         if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
             $conf->opt("ldapLogin"), $m)) {
@@ -163,5 +163,5 @@ class LDAPLogin {
             ];
         }
     }
-	*/
+
 }
