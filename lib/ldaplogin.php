@@ -4,26 +4,22 @@
 
 class LDAPLogin {
 	static function ldap_login_info2(Conf $conf, Qreqeust $qreq) {
-		return [
-			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "x
-		];
 
 		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
 			$conf->opt("ldapLogin"), $m)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "x
+				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
 			];
 		}
-
 		// connect to the LDAP server
 		if ($m[2] == "") {
             $ldapc = @ldap_connect($m[1]);
         } else {
             $ldapc = @ldap_connect($m[1], (int) $m[2]);
         }
-        if (!$ldapc) {
+        
+		if (!$ldapc) {
             return [
                 "ok" => false, "ldap" => true, "internal" => true, "email" => true,
                 "detail_html" => "Internal error: ldap_connect. Logins disabled until this error is fixed."
@@ -41,7 +37,6 @@ class LDAPLogin {
             $success = @ldap_bind($ldapc, $dn, $pwd);
         }
         if (!$success) {
-//            return self::fail($conf, $qreq, $ldapc);
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
 				"detail_html" => "Internal error: ldap_bind Failed!"

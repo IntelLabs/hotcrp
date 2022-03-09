@@ -87,7 +87,7 @@ class LoginHelper {
         return $info;
     }
 
-    static function external_login_info(Conf $conf, Qrequest $qreq) {
+    static function external_login_info2(Conf $conf, Qrequest $qreq) {
         assert($conf->external_login());
 
         $user = self::user_lookup($conf, $qreq);
