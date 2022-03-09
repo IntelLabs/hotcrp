@@ -64,15 +64,16 @@ class LDAPLogin {
 		// 	];
 	
 		// }
+		$lerrno = ldap_errno($ldapc);
 		return [
 			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Found User Data"
+			"detail_html" => "Didn't find User Data - Error: " . $lerrno
 		];
 	}
 	else {
 		return [
 			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Didn't find user data"
+			"detail_html" => "Found User Data"
 		];
 	}
 	// if not there, check the EIDR directory
