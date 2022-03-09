@@ -48,19 +48,19 @@ class LDAPLogin {
 	// 	];
 	// }
 	// search for user DN value in Workers LDAP directory
-	$result = ldap_search($ldapc, 'OU=Workers,DC=amr,DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array('dn'), 0, 1);
+	$result = ldap_search($ldapc, 'OU=Workers,DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array('dn'), 0, 1);
     $entries = ldap_get_entries($ldapc, $result);
     if ($entries['count'] == 1) {
         if (ldap_bind($ldapc, $entries[0]['dn'], $qreq->password)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Email Bind Success!"
+				"detail_html" => "Email Bind Success! " . $entries[0]['dn']
 			];
 	    }
 		else {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Email Bind Failed!"
+				"detail_html" => "Email Bind Failed!" . $entries[0]['dn']
 			];	
 		}
 	}
