@@ -48,32 +48,27 @@ class LDAPLogin {
 	// 	];
 	// }
 	// search for user DN value in Workers LDAP directory
-	$result = ldap_search($ldapc, 'OU=Workers,DC=amr,DC=corp,DC=intel,DC=com', "(mail=michael.beale@intel.com)", array('dn'), 0, 1);
+	$result = ldap_search($ldapc, 'OU=Workers,DC=amr,DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array('dn'), 0, 1);
     $entries = ldap_get_entries($ldapc, $result);
-    if ($entries['count'] != 1) {
-        // if (ldap_bind($ldapc, $entries[0]['dn'], $password)) {
-		// 	return [
-		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-		// 		"detail_html" => "EMail Bind Failed: ldap_bind Failed!"
-		// 	];
-	    // }
-		// else {
-		// 	return [
-		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-		// 		"detail_html" => "Internal error: ldap_bind Failed!"
-		// 	];
-	
-		// }
+    if ($entries['count'] == 1) {
+        if (ldap_bind($ldapc, $entries[0]['dn'], $qreq->password)) {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Email Bind Success!"
+			];
+	    }
+		else {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Email Bind Failed!"
+			];	
+		}
+	}
+	else {
 		$lerrno = ldap_errno($ldapc);
 		return [
 			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
 			"detail_html" => "Didn't find User Data - Error: " . $lerrno
-		];
-	}
-	else {
-		return [
-			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Found User Data - DN:" . $entries[0]['dn']
 		];
 	}
 	// if not there, check the EIDR directory
