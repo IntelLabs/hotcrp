@@ -97,7 +97,7 @@ class LoginHelper {
 
         // do LDAP login before validation, since we might create an account
         if ($conf->opt("ldapLogin")) {
-            $info = LdapLogin::ldap_login_info($conf, $qreq);
+            $info = LdapLogin::ldap_login_info2($conf, $qreq);
             if (!$info["ok"]) {
                 return $info;
             }

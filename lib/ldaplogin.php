@@ -3,12 +3,67 @@
 // Copyright (c) 2009-2020 Eddie Kohler; see LICENSE.
 
 class LDAPLogin {
+	static function ldap_login_info2(Conf $conf, Qreqeust $qreq) {
+		// connect to the LDAP server
+		if ($m[2] == "") {
+            $ldapc = @ldap_connect($m[1]);
+        } else {
+            $ldapc = @ldap_connect($m[1], (int) $m[2]);
+        }
+        if (!$ldapc) {
+            return [
+                "ok" => false, "ldap" => true, "internal" => true, "email" => true,
+                "detail_html" => "Internal error: ldap_connect. Logins disabled until this error is fixed."
+            ];
+        }
+
+		// bind as faceless account
+        @ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 3);
+		$dn = "CN=sys_vlabldap,OU=Generic-Account,OU=Resources,DC=amr,DC=corp,DC=intel,DC=com";
+		$pwd = "N0tallwhow@nderarelost";
+
+        $success = @ldap_bind($ldapc, $dn, $pwd);
+        if (!$success && @ldap_errno($ldapc) == 2) {
+            @ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
+            $success = @ldap_bind($ldapc, $dn, $pwd);
+        }
+        if (!$success) {
+//            return self::fail($conf, $qreq, $ldapc);
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: ldap_bind Failed!"
+			];
+        }
+		else {
+			return [
+                "ok" => false, "ldap" => true, "internal" => true, "email" => true,
+                "detail_html" => "Internal error: ldap_bind Success!"
+            ];
+		}
+
+		// search for user DN value in Workers LDAP directory
+
+		// if not there, check the EIDR directory
+
+		// return failure if user doesn't exist
+
+		// Attempt to bind with user DN and password
+
+		// return failure if password failure
+
+		// search for user in Entitlement for project
+
+		// return failure if not found
+
+		// Success!  Get user data
+	}
+
     static function ldap_login_info(Conf $conf, Qrequest $qreq) {
         if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
             $conf->opt("ldapLogin"), $m)) {
             return [
                 "ok" => false, "ldap" => true, "internal" => true, "email" => true,
-                "detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. " . $m[0] . $m[1] . $m[2] . $m[3] . $m[4]
+                "detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "x
             ];
         }
 
