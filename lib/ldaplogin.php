@@ -4,13 +4,14 @@
 
 class LDAPLogin {
     static function ldap_login_info(Conf $conf, Qrequest $qreq) {
-		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
-			$conf->opt("ldapLogin"), $m)) {
-			return [
-				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
-			];
-		}
+		// if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
+		// 	$conf->opt("ldapLogin"), $m)) {
+		// 	return [
+		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+		// 		"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
+		// 	];
+		// }
+		$ldapURI = $conf->opt("ldapServerURI");
 
 		if ((string) $qreq->password === "") {
 			return [
@@ -20,11 +21,7 @@ class LDAPLogin {
 		}
 
 		// connect to the LDAP server
-		if ($m[2] == "") {
-			$ldapc = @ldap_connect($m[1]);
-		} else {
-			$ldapc = @ldap_connect($m[1], (int) $m[2]);
-		}
+		$ldapc = @ldap_connect($ldapURI);
 		
 		if (!$ldapc) {
 			return [
