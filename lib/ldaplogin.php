@@ -12,12 +12,12 @@ class LDAPLogin {
 			];
 		}
 
-		if ((string) $qreq->password === "") {
-			return [
-				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "No Password provided."
-			];
-		}
+		// if ((string) $qreq->password === "") {
+		// 	return [
+		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+		// 		"detail_html" => "No Password provided."
+		// 	];
+		// }
 
 		// connect to the LDAP server
 		if ($m[2] == "") {
