@@ -35,13 +35,13 @@ class LDAPLogin {
 
 		// bind as faceless account
 		@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 3);
-		$dn = "CN=sys_workingjoe,OU=Generic-Account,OU=Resources,DC=amr,DC=corp,DC=intel,DC=com";
-		$pwd = "";
+		$dn = $conf->opt("ldapLoginDN");
+		$pwd = $conf->opt("ldapLoginDNPassword");
 
-		$success = @ldap_bind($ldapc);
+		$success = @ldap_bind($ldapc, $dn, $pwd);
 		if (!$success && @ldap_errno($ldapc) == 2) {
 			@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
-			$success = @ldap_bind($ldapc);
+			$success = @ldap_bind($ldapc, $dn, $pwd);
 		}
 		if (!$success) {
 			return [
@@ -73,7 +73,7 @@ class LDAPLogin {
 			$lerrno = ldap_errno($ldapc);
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Didn't find User Data - Error: " . $lerrno . implode(",", $result)
+				"detail_html" => "Didn't find User Data - Error: " . $lerrno
 			];
 		}
 	// if not there, check the EIDR directory
