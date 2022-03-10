@@ -13,12 +13,6 @@ class LDAPLogin {
 				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapFilter")) . "</code> syntax error; expected “<code><i>ldapfilter</i></code>”, where <code><i>ldapfilter</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
 			];
 		}
-		else {
-			return [
-				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "SUCESS!!!: $m[0] $m[1] $m[2] $m[3] $m[4]"
-			];
-		}
 
 		if ((string) $qreq->password === "") {
 			return [
@@ -55,7 +49,10 @@ class LDAPLogin {
 		}
 
 		// search for user DN value in Workers LDAP directory
-		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(&(objectClass=user)(mail=$qreq->email)(memberof=CN=OneCloud,OU=Managed,OU=Groups,DC=amr,DC=corp,DC=intel,DC=com))", array("dn", "name", "mail"), 0, 1);
+        $qemail = addcslashes((string) $qreq->email, ',=+<>#;\"');
+        $dn = $m[3] . $qemail . $m[4];
+
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', $dn, array("dn", "name", "mail"), 0, 1);
 
 		$entries = ldap_get_entries($ldapc, $result);
 		if ($entries['count'] == 1) {
