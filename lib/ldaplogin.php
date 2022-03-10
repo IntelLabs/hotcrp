@@ -51,28 +51,21 @@ class LDAPLogin {
 		}
 
 		// search for user DN value in Workers LDAP directory
-		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array("dn", "name", "mail"), 0, 1);
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(&(objectClass=user)(mail=$qreq->email)(memberof=CN=OneCloud,OU=Managed,OU=Groups,DC=amr,DC=corp,DC=intel,DC=com))", array("dn", "name", "mail"), 0, 1);
 
 		$entries = ldap_get_entries($ldapc, $result);
 		if ($entries['count'] == 1) {
-            $name = "Unknown";
-			$e = ($entries["count"] == 1 ? $entries[0] : array());
-			if (isset($e['dn']) && $e['dn']['count'] == 1) {
-                $name = $e["dn"][0];
-            }
-
-
 			$success = ldap_bind($ldapc, $entries[0]['dn'], $qreq->password);
 			if ($success) {
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Email Bind Success! " . $name . "Result:" . ldap_errno($ldapc)
+					"detail_html" => "Email Bind Success! " . "Result:" . ldap_errno($ldapc)
 				];
 			}
 			else {
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Email Bind Failed!" . $name . "Result:" . ldap_errno($ldapc)
+					"detail_html" => "Email Bind Failed!" . "Result:" . ldap_errno($ldapc)
 				];	
 			}
 		}
