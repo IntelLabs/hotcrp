@@ -57,7 +57,7 @@ class LDAPLogin {
         if (ldap_bind($ldapc, $entries[0]['dn'], $qreq->password)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Email Bind Success! " . $entries[0]['dn']
+				"detail_html" => "Email Bind Success! " . $entries[0]['dn'] . " " . $qreq->password
 			];
 	    }
 		else {
