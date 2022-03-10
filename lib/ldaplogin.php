@@ -59,7 +59,7 @@ class LDAPLogin {
 			if ($success) {
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Email Bind Success! " . "Result:" . ldap_errno($ldapc)
+					"detail_html" => "Email Bind Success! " . "DN: ". $entries[0]['dn'] . " Result:" . ldap_errno($ldapc)
 				];
 			}
 			else {
