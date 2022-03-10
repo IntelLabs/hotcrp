@@ -51,14 +51,14 @@ class LDAPLogin {
 		}
 
 		// search for user DN value in Workers LDAP directory
-		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array("name", "mail", "cn"), 0, 1);
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array("name", "mail"), 0, 1);
 
 		$entries = ldap_get_entries($ldapc, $result);
 		if ($entries['count'] == 1) {
             $name = "Unknown";
 			$e = ($entries["count"] == 1 ? $entries[0] : array());
-			if (isset($e["cn"]) && $e["cn"]["count"] == 1) {
-                $name = $e["cn"][0];
+			if (isset($e['name']) && $e['name']['count'] == 1) {
+                $name = $e["name"][0];
             }
 
 
