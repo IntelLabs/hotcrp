@@ -10,7 +10,7 @@ class LDAPLogin {
 			$conf->opt("ldapFilter"), $m)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
+				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapFilter")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
 			];
 		}
 		else {
