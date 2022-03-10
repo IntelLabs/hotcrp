@@ -49,8 +49,11 @@ class LDAPLogin {
 	// }
 	// search for user DN value in Workers LDAP directory
 	$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array('dn'), 0, 1);
+	ldap_close($ldapc);
+
     $entries = ldap_get_entries($ldapc, $result);
     if ($entries['count'] == 1) {
+		$ldapc = @ldap_connect($m[1]);
         if (ldap_bind($ldapc, $entries[0]['dn'], $qreq->password)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
