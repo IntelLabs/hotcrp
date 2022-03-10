@@ -62,17 +62,24 @@ class LDAPLogin {
 		ldap_close($ldapc);
 		if ($entries['count'] == 1) {
 			$ldapc = @ldap_connect($m[1]);
+            
+			$e = ($e["count"] == 1 ? $e[0] : array());
+			if (isset($e["name"]) && $e["name"]["count"] == 1) {
+                $name = $e["name"][0];
+            }
+
+
 			$success = ldap_bind($ldapc, $entries[0]['dn'], $qreq->password);
 			if ($success) {
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Email Bind Success! " . $entries[0]['name'] . "Result:" . ldap_errno($ldapc)
+					"detail_html" => "Email Bind Success! " . $name . "Result:" . ldap_errno($ldapc)
 				];
 			}
 			else {
 				return [
 					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Email Bind Failed!" . $entries[0]['name']. "Result:" . ldap_errno($ldapc)
+					"detail_html" => "Email Bind Failed!" . $name . "Result:" . ldap_errno($ldapc)
 				];	
 			}
 		}
