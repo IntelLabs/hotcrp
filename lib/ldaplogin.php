@@ -5,76 +5,84 @@
 class LDAPLogin {
     static function ldap_login_info(Conf $conf, Qrequest $qreq) {
 		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
-		$conf->opt("ldapLogin"), $m)) {
-		return [
-			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
-		];
-	}
-	// connect to the LDAP server
-	if ($m[2] == "") {
-		$ldapc = @ldap_connect($m[1]);
-	} else {
-		$ldapc = @ldap_connect($m[1], (int) $m[2]);
-	}
-	
-	if (!$ldapc) {
-		return [
-			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Internal error: ldap_connect. Logins disabled until this error is fixed."
-		];
-	}
-
-	// bind as faceless account
-	@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 3);
-	$dn = "CN=sys_workingjoe,OU=Generic-Account,OU=Resources,DC=amr,DC=corp,DC=intel,DC=com";
-	$pwd = "N0tallwhow@nderarelost";
-
-	$success = @ldap_bind($ldapc, $dn, $pwd);
-	if (!$success && @ldap_errno($ldapc) == 2) {
-		@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
-		$success = @ldap_bind($ldapc, $dn, $pwd);
-	}
-	if (!$success) {
-		return [
-			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Internal error: ldap_bind Failed!"
-		];
-	}
-	// else {
-	// 	return [
-	// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-	// 		"detail_html" => "Internal error: ldap_bind Success!"
-	// 	];
-	// }
-	// search for user DN value in Workers LDAP directory
-	$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array('dn'), 0, 1);
-
-    $entries = ldap_get_entries($ldapc, $result);
-	ldap_close($ldapc);
-    if ($entries['count'] == 1) {
-		$ldapc = @ldap_connect($m[1]);
-		$success = ldap_bind($ldapc, $entries[0]['dn'], $qreq->password);
-        if ($success) {
+			$conf->opt("ldapLogin"), $m)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Email Bind Success! " . $entries[0]['dn'] . "Result:" . ldap_errno($ldapc)
+				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
 			];
-	    }
-		else {
+		}
+
+		if ((string) $qreq->password === "") {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Email Bind Failed!" . $entries[0]['dn']. "Result:" . ldap_errno($ldapc)
-			];	
+				"detail_html" => "No Password provided."
+			];
 		}
-	}
-	else {
-		$lerrno = ldap_errno($ldapc);
-		return [
-			"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-			"detail_html" => "Didn't find User Data - Error: " . $lerrno . implode(",", $result)
-		];
-	}
+
+		// connect to the LDAP server
+		if ($m[2] == "") {
+			$ldapc = @ldap_connect($m[1]);
+		} else {
+			$ldapc = @ldap_connect($m[1], (int) $m[2]);
+		}
+		
+		if (!$ldapc) {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: ldap_connect. Logins disabled until this error is fixed."
+			];
+		}
+
+		// bind as faceless account
+		@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 3);
+		$dn = "CN=sys_workingjoe,OU=Generic-Account,OU=Resources,DC=amr,DC=corp,DC=intel,DC=com";
+		$pwd = "N0tallwhow@nderarelost";
+
+		$success = @ldap_bind($ldapc, $dn, $pwd);
+		if (!$success && @ldap_errno($ldapc) == 2) {
+			@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
+			$success = @ldap_bind($ldapc, $dn, $pwd);
+		}
+		if (!$success) {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: ldap_bind Failed!"
+			];
+		}
+		// else {
+		// 	return [
+		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+		// 		"detail_html" => "Internal error: ldap_bind Success!"
+		// 	];
+		// }
+		// search for user DN value in Workers LDAP directory
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array('dn'), 0, 1);
+
+		$entries = ldap_get_entries($ldapc, $result);
+		ldap_close($ldapc);
+		if ($entries['count'] == 1) {
+			$ldapc = @ldap_connect($m[1]);
+			$success = ldap_bind($ldapc, $entries[0]['dn'], $qreq->password);
+			if ($success) {
+				return [
+					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+					"detail_html" => "Email Bind Success! " . $entries[0]['dn'] . "Result:" . ldap_errno($ldapc)
+				];
+			}
+			else {
+				return [
+					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+					"detail_html" => "Email Bind Failed!" . $entries[0]['dn']. "Result:" . ldap_errno($ldapc)
+				];	
+			}
+		}
+		else {
+			$lerrno = ldap_errno($ldapc);
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Didn't find User Data - Error: " . $lerrno . implode(",", $result)
+			];
+		}
 	// if not there, check the EIDR directory
 
 	// return failure if user doesn't exist
