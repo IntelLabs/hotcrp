@@ -4,14 +4,21 @@
 
 class LDAPLogin {
     static function ldap_login_info(Conf $conf, Qrequest $qreq) {
-		// if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
-		// 	$conf->opt("ldapLogin"), $m)) {
-		// 	return [
-		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-		// 		"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
-		// 	];
-		// }
 		$ldapURI = $conf->opt("ldapServerURI");
+
+		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
+			$conf->opt("ldapFilter"), $m)) {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
+			];
+		}
+		else {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: $m[0] $m[1] $m[2] $m[3] $m[4]"
+			];
+		}
 
 		if ((string) $qreq->password === "") {
 			return [
