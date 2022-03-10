@@ -57,8 +57,8 @@ class LDAPLogin {
 		if ($entries['count'] == 1) {
             $name = "Unknown";
 			$e = ($entries["count"] == 1 ? $entries[0] : array());
-			if (isset($e['name']) && $e['name']['count'] == 1) {
-                $name = $e["name"][0];
+			if (isset($e['dn']) && $e['dn']['count'] == 1) {
+                $name = $e["dn"][0];
             }
 
 
