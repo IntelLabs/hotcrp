@@ -56,7 +56,7 @@ class LDAPLogin {
 		// 	];
 		// }
 		// search for user DN value in Workers LDAP directory
-		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array("name", "mail"), 0, 1);
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(&(mail=$qreq->email)(CN=GitLab Users,OU=Managed,OU=Groups,DC=amr,DC=corp,DC=intel,DC=com))", array("name", "mail"), 0, 1);
 
 		$entries = ldap_get_entries($ldapc, $result);
 		ldap_close($ldapc);
