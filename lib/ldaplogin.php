@@ -49,19 +49,12 @@ class LDAPLogin {
 				"detail_html" => "Internal error: ldap_bind Failed!"
 			];
 		}
-		// else {
-		// 	return [
-		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-		// 		"detail_html" => "Internal error: ldap_bind Success!"
-		// 	];
-		// }
+
 		// search for user DN value in Workers LDAP directory
-		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(&(mail=$qreq->email)(CN=GitLab Users,OU=Managed,OU=Groups,DC=amr,DC=corp,DC=intel,DC=com))", array("name", "mail"), 0, 1);
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(mail=$qreq->email)", array("name", "mail"), 0, 1);
 
 		$entries = ldap_get_entries($ldapc, $result);
-		ldap_close($ldapc);
 		if ($entries['count'] == 1) {
-			$ldapc = @ldap_connect($m[1]);
             $name = "Unknown";
 			$e = ($entries["count"] == 1 ? $entries[0] : array());
 			if (isset($e["name"]) && $e["name"]["count"] == 1) {
