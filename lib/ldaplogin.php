@@ -36,7 +36,7 @@ class LDAPLogin {
 		// bind as faceless account
 		@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 3);
 		$dn = "CN=sys_workingjoe,OU=Generic-Account,OU=Resources,DC=amr,DC=corp,DC=intel,DC=com";
-		$pwd = "N0tallwhow@nderarelost";
+		$pwd = "";
 
 		$success = @ldap_bind($ldapc, $dn, $pwd);
 		if (!$success && @ldap_errno($ldapc) == 2) {
