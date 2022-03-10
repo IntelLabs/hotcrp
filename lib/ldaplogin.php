@@ -38,17 +38,17 @@ class LDAPLogin {
 		$dn = "CN=sys_workingjoe,OU=Generic-Account,OU=Resources,DC=amr,DC=corp,DC=intel,DC=com";
 		$pwd = "";
 
-		// $success = @ldap_bind($ldapc, $dn, $pwd);
-		// if (!$success && @ldap_errno($ldapc) == 2) {
-		// 	@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
-		// 	$success = @ldap_bind($ldapc, $dn, $pwd);
-		// }
-		// if (!$success) {
-		// 	return [
-		// 		"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-		// 		"detail_html" => "Internal error: ldap_bind Failed!"
-		// 	];
-		// }
+		$success = @ldap_bind($ldapc);
+		if (!$success && @ldap_errno($ldapc) == 2) {
+			@ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
+			$success = @ldap_bind($ldapc);
+		}
+		if (!$success) {
+			return [
+				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+				"detail_html" => "Internal error: ldap_bind Failed!"
+			];
+		}
 
 		// search for user DN value in Workers LDAP directory
 		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', "(&(objectClass=user)(mail=$qreq->email)(memberof=CN=OneCloud,OU=Managed,OU=Groups,DC=amr,DC=corp,DC=intel,DC=com))", array("dn", "name", "mail"), 0, 1);
