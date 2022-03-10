@@ -54,10 +54,25 @@ class LDAPLogin {
 		if ($entries['count'] == 1) {
 			$success = ldap_bind($ldapc, $entries[0]['dn'], $qreq->password);
 			if ($success) {
-				return [
-					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-					"detail_html" => "Email Bind Success! " . "DN: ". $entries[0]['dn'] . " Result:" . ldap_errno($ldapc)
-				];
+				$e = ($entries["count"] == 1 ? $entries[0] : array());
+				if (isset($e["cn"]) && $e["cn"]["count"] == 1) {
+					list($qreq->firstName, $qreq->lastName) = Text::split_name($e["cn"][0]);
+				}
+				if (isset($e["sn"]) && $e["sn"]["count"] == 1) {
+					$qreq->lastName = $e["sn"][0];
+				}
+				if (isset($e["givenname"]) && $e["givenname"]["count"] == 1) {
+					$qreq->firstName = $e["givenname"][0];
+				}
+				if (isset($e["mail"]) && $e["mail"]["count"] == 1) {
+					$qreq->preferredEmail = $e["mail"][0];
+				}
+				if (isset($e["telephonenumber"]) && $e["telephonenumber"]["count"] == 1) {
+					$qreq->phone = $e["telephonenumber"][0];
+				}
+
+				ldap_close($ldapc);
+				return ["ok" => true];
 			}
 			else {
 				return [
@@ -73,84 +88,46 @@ class LDAPLogin {
 				"detail_html" => "Didn't find User Data - Error: " . $lerrno
 			];
 		}
-	// if not there, check the EIDR directory
-
-	// return failure if user doesn't exist
-
-	// Attempt to bind with user DN and password
-
-	// return failure if password failure
-
-	// search for user in Entitlement for project
-
-	// return failure if not found
-
 	// Success!  Get user data
-		/*
-        if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
-            $conf->opt("ldapLogin"), $m)) {
-            return [
-                "ok" => false, "ldap" => true, "internal" => true, "email" => true,
-                "detail_html" => "Internal error: <code>" . htmlspecialchars($conf->opt("ldapLogin")) . "</code> syntax error; expected “<code><i>LDAP-URL</i> <i>distinguished-name</i></code>”, where <code><i>distinguished-name</i></code> contains a <code>*</code> character to be replaced by the user's email address.  Logins will fail until this error is fixed. "
-            ];
-        }
 
-		if ((string) $qreq->password === "") {
-			return self::fail($conf, $qreq, $ldapc);
-		}
 
-        // connect to the LDAP server
-        if ($m[2] == "") {
-            $ldapc = @ldap_connect($m[1]);
-        } else {
-            $ldapc = @ldap_connect($m[1], (int) $m[2]);
-        }
-        if (!$ldapc) {
-            return [
-                "ok" => false, "ldap" => true, "internal" => true, "email" => true,
-                "detail_html" => "Internal error: ldap_connect. Logins disabled until this error is fixed."
-            ];
-        }
-        @ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 3);
+        // $qemail = addcslashes((string) $qreq->email, ',=+<>#;\"');
+        // $dn = $m[3] . $qemail . $m[4];
 
-        $qemail = addcslashes((string) $qreq->email, ',=+<>#;\"');
-        $dn = $m[3] . $qemail . $m[4];
-
-        $success = @ldap_bind($ldapc, $dn, (string) $qreq->password);
-        if (!$success && @ldap_errno($ldapc) == 2) {
-            @ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
-            $success = @ldap_bind($ldapc, $dn, (string) $qreq->password);
-        }
-        if (!$success) {
-            return self::fail($conf, $qreq, $ldapc);
-        }
+        // $success = @ldap_bind($ldapc, $dn, (string) $qreq->password);
+        // if (!$success && @ldap_errno($ldapc) == 2) {
+        //     @ldap_set_option($ldapc, LDAP_OPT_PROTOCOL_VERSION, 2);
+        //     $success = @ldap_bind($ldapc, $dn, (string) $qreq->password);
+        // }
+        // if (!$success) {
+        //     return self::fail($conf, $qreq, $ldapc);
+        // }
 
         // use LDAP information to prepopulate the database with names
-        $sr = @ldap_search($ldapc, $dn, "(cn=*)",
-                           array("sn", "givenname", "cn", "mail", "telephonenumber"));
-        if ($sr) {
-            $e = @ldap_get_entries($ldapc, $sr);
-            $e = ($e["count"] == 1 ? $e[0] : array());
-            if (isset($e["cn"]) && $e["cn"]["count"] == 1) {
-                list($qreq->firstName, $qreq->lastName) = Text::split_name($e["cn"][0]);
-            }
-            if (isset($e["sn"]) && $e["sn"]["count"] == 1) {
-                $qreq->lastName = $e["sn"][0];
-            }
-            if (isset($e["givenname"]) && $e["givenname"]["count"] == 1) {
-                $qreq->firstName = $e["givenname"][0];
-            }
-            if (isset($e["mail"]) && $e["mail"]["count"] == 1) {
-                $qreq->preferredEmail = $e["mail"][0];
-            }
-            if (isset($e["telephonenumber"]) && $e["telephonenumber"]["count"] == 1) {
-                $qreq->phone = $e["telephonenumber"][0];
-            }
-        }
-		*/
+        // $sr = @ldap_search($ldapc, $dn, "(cn=*)",
+        //                    array("sn", "givenname", "cn", "mail", "telephonenumber"));
+        // if ($sr) {
+        //     $e = @ldap_get_entries($ldapc, $sr);
+        //     $e = ($e["count"] == 1 ? $e[0] : array());
+        //     if (isset($e["cn"]) && $e["cn"]["count"] == 1) {
+        //         list($qreq->firstName, $qreq->lastName) = Text::split_name($e["cn"][0]);
+        //     }
+        //     if (isset($e["sn"]) && $e["sn"]["count"] == 1) {
+        //         $qreq->lastName = $e["sn"][0];
+        //     }
+        //     if (isset($e["givenname"]) && $e["givenname"]["count"] == 1) {
+        //         $qreq->firstName = $e["givenname"][0];
+        //     }
+        //     if (isset($e["mail"]) && $e["mail"]["count"] == 1) {
+        //         $qreq->preferredEmail = $e["mail"][0];
+        //     }
+        //     if (isset($e["telephonenumber"]) && $e["telephonenumber"]["count"] == 1) {
+        //         $qreq->phone = $e["telephonenumber"][0];
+        //     }
+        // }
 
-        ldap_close($ldapc);
-        return ["ok" => true];
+        // ldap_close($ldapc);
+        // return ["ok" => true];
     }
 
     static private function fail(Conf $conf, Qrequest $qreq, $ldapc) {
