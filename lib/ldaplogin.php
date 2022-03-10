@@ -6,7 +6,7 @@ class LDAPLogin {
     static function ldap_login_info(Conf $conf, Qrequest $qreq) {
 		$ldapURI = $conf->opt("ldapServerURI");
 
-		if (!preg_match('/\A\s*(\S+)\s+(\d+\s+)?([^*]+)\*(.*?)\s*\z/s',
+		if (!preg_match('/([^*]+)\*(.*?)\s*\z/s',
 			$conf->opt("ldapFilter"), $m)) {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
