@@ -63,7 +63,7 @@ class LDAPLogin {
 		if ($entries['count'] == 1) {
 			$ldapc = @ldap_connect($m[1]);
             
-			$e = ($e["count"] == 1 ? $e[0] : array());
+			$e = ($entries["count"] == 1 ? $entries[0] : array());
 			if (isset($e["name"]) && $e["name"]["count"] == 1) {
                 $name = $e["name"][0];
             }
