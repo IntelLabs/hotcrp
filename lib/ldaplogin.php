@@ -16,7 +16,7 @@ class LDAPLogin {
 		else {
 			return [
 				"ok" => false, "ldap" => true, "internal" => true, "email" => true,
-				"detail_html" => "Internal error: $m[0] $m[1] $m[2] $m[3] $m[4]"
+				"detail_html" => "SUCESS!!!: $m[0] $m[1] $m[2] $m[3] $m[4]"
 			];
 		}
 
