@@ -1,6 +1,6 @@
 <?php
 // search/st_proposal.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ReviewRequestSearchMatcher extends ContactCountMatcher {
     public $round;
@@ -12,11 +12,12 @@ class ReviewRequestSearchMatcher extends ContactCountMatcher {
     }
 
     function apply_round($word, Conf $conf) {
-        if (($round = $conf->round_number($word, false)) === false) {
+        if (($round = $conf->round_number($word, false)) !== null) {
+            $this->round[] = $round;
+            return true;
+        } else {
             return false;
         }
-        $this->round[] = $round;
-        return true;
     }
     function apply_comparison($word) {
         $a = CountMatcher::unpack_search_comparison($word);

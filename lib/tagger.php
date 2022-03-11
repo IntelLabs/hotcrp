@@ -1,6 +1,6 @@
 <?php
 // tagger.php -- HotCRP helper class for dealing with tags
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 // Note that tags MUST NOT contain HTML or URL special characters:
 // no "'&<>.  If you add PHP-protected characters, such as $, make sure you
@@ -53,7 +53,9 @@ class TagInfo {
     public $colors;
     /** @var bool */
     public $basic_color = false;
+    /** @var ?list<string> */
     public $badges;
+    /** @var ?list<string> */
     public $emoji;
     /** @var ?string */
     public $autosearch;
@@ -89,6 +91,7 @@ class TagInfo {
                 $this->$property = array_unique(array_merge($this->$property ?? [], $t->$property));
         }
     }
+    /** @return string */
     function tag_regex() {
         $t = preg_quote($this->tag);
         if ($this->pattern) {
@@ -235,6 +238,7 @@ class TagAnno implements JsonSerializable {
         $ta->heading = "Untagged";
         return $ta;
     }
+    #[\ReturnTypeWillChange]
     function jsonSerialize() {
         $j = [];
         if ($this->pos !== null) {
@@ -469,6 +473,7 @@ class TagMap implements IteratorAggregate {
         ksort($this->storage);
         $this->sorted = true;
     }
+    #[\ReturnTypeWillChange]
     function getIterator() {
         $this->sorted || $this->sort_storage();
         return new ArrayIterator($this->storage);
@@ -868,24 +873,25 @@ class TagMap implements IteratorAggregate {
                 $tag = substr($tag, $twiddle);
             } else if (($p = $viewer->conf->cached_user_by_id($cid))) {
                 if ($flags & self::UNPARSE_TEXT) {
-                    return $hash . $p->email . substr($tag, $twiddle) . $suffix;
+                    $tag = substr($tag, $twiddle);
+                    return "{$hash}{$p->email}{$tag}{$suffix}";
                 }
+                $emailh = htmlspecialchars($p->email);
                 if (($cc = $p->viewable_color_classes($viewer))) {
-                    $prefix = $hash . "<span class=\"" . $cc
-                        . " taghh\">" . htmlspecialchars($p->email) . "</span>";
+                    $prefix = "{$hash}<span class=\"{$cc} taghh\">{$emailh}</span>";
                     $hash = "";
                 } else {
-                    $hash .= htmlspecialchars($p->email);
+                    $hash .= $emailh;
                 }
                 $tag = substr($tag, $twiddle);
             }
         }
         if (($flags & self::UNPARSE_TEXT)
             || !($cc = $this->styles($tag))) {
-            return $prefix . $hash . $tag . $suffix;
+            return "{$prefix}{$hash}{$tag}{$suffix}";
         } else {
-            return $prefix . "<span class=\""  . join(" ", $cc)
-                . " taghh\">" . $hash . $tag . $suffix . "</span>";
+            $ccs = join(" ", $cc);
+            return "{$prefix}<span class=\"{$ccs} taghh\">{$hash}{$tag}{$suffix}</span>";
         }
     }
 
@@ -920,7 +926,7 @@ class TagMap implements IteratorAggregate {
         $vt = $conf->setting_data("tag_vote") ?? "";
         foreach (Tagger::split_unpack($vt) as $ti) {
             $t = $map->add($ti[0]);
-            $t->allotment = ($ti[1] ? : 1.0);
+            $t->allotment = ($ti[1] ?? 1.0);
             $map->has_allotment = true;
             $t->votish = $map->has_votish = true;
             $t->automatic = $map->has_automatic = true;
@@ -1096,14 +1102,14 @@ class Tagger {
     }
 
     /** @param string $tag
-     * @return array{false|string,false|float} */
+     * @return array{false|string,?float} */
     static function unpack($tag) {
         if (!$tag) {
-            return [false, false];
+            return [false, null];
         } else if (!($pos = strpos($tag, "#")) && !($pos = strpos($tag, "="))) {
-            return [$tag, false];
+            return [$tag, null];
         } else if ($pos === strlen($tag) - 1) {
-            return [substr($tag, 0, $pos), false];
+            return [substr($tag, 0, $pos), null];
         } else {
             return [substr($tag, 0, $pos), (float) substr($tag, $pos + 1)];
         }
@@ -1117,7 +1123,7 @@ class Tagger {
     }
 
     /** @param string $taglist
-     * @return list<array{false|string,false|float}> */
+     * @return list<array{false|string,?float}> */
     static function split_unpack($taglist) {
         return array_map("Tagger::unpack", self::split($taglist));
     }
@@ -1138,39 +1144,39 @@ class Tagger {
     /** @param bool $verbose
      * @return ?string */
     function error_html($verbose = false) {
-        $t = $verbose ? " “" . htmlspecialchars($this->errtag ?? "") . "”" : "";
+        $t = $verbose ? " ‘" . htmlspecialchars($this->errtag ?? "") . "’" : "";
         switch ($this->errcode) {
         case 0:
             return null;
         case self::EEMPTY:
-            return "Tag missing.";
+            return "Tag required";
         case self::EMULTIPLE:
-            return "Expected a single tag.";
+            return "Single tag required";
         case self::E2BIG:
-            return "Tag too long.";
+            return "Tag too long";
         case self::ALLOWSTAR:
-            return "Invalid tag{$t} (stars aren’t allowed here).";
+            return "Invalid tag{$t} (stars aren’t allowed here)";
         case self::NOCHAIR:
             if ($this->contact->privChair) {
-                return "Invalid tag{$t} (chair tags aren’t allowed here).";
+                return "Invalid tag{$t} (chair tags aren’t allowed here)";
             } else {
-                return "Invalid tag{$t} (tag reserved for chair).";
+                return "Invalid tag{$t} (tag reserved for chair)";
             }
         case self::NOPRIVATE:
-            return "Private tags aren’t allowed here.";
+            return "Private tags aren’t allowed here";
         case self::ALLOWCONTACTID:
             if ($verbose && ($twiddle = strpos($this->errtag ?? "", "~"))) {
-                return "Invalid tag{$t} (did you mean “#" . substr($this->errtag, $twiddle) . "”?).";
+                return "Invalid tag{$t} (did you mean ‘#" . substr($this->errtag, $twiddle) . "’?)";
             } else {
-                return "Invalid private tag.";
+                return "Invalid private tag";
             }
         case self::NOVALUE:
-            return "Tag values aren’t allowed here.";
+            return "Tag values aren’t allowed here";
         case self::ALLOWRESERVED:
-            return $verbose ? "Tag{$t} is reserved." : "Tag reserved.";
+            return $verbose ? "Tag{$t} is reserved" : "Tag reserved";
         case self::EINVAL:
         default:
-            return "Invalid tag{$t}.";
+            return "Invalid tag{$t}";
         }
     }
 
@@ -1342,7 +1348,7 @@ class Tagger {
                 }
                 $b = self::unparse_emoji_html($e, $count);
                 if ($type === self::DECOR_PAPER && !empty($links)) {
-                    $b = '<a class="qq" href="' . $this->conf->hoturl("search", ["q" => join(" OR ", $links)]) . '">' . $b . '</a>';
+                    $b = '<a class="q" href="' . $this->conf->hoturl("search", ["q" => join(" OR ", $links)]) . '">' . $b . '</a>';
                 }
                 if ($x === "") {
                     $x = " ";
@@ -1353,22 +1359,23 @@ class Tagger {
         if ($dt->has_badges
             && preg_match_all($dt->badge_regex(), $tags, $m, PREG_SET_ORDER)) {
             foreach ($m as $mx) {
-                if (($t = $dt->check($mx[1])) && $t->badges !== null) {
-                    $klass = ' class="badge ' . $t->badges[0] . 'badge"';
+                if (($t = $dt->check($mx[1])) && $t->badges) {
+                    /** @phan-suppress-next-line PhanTypeArraySuspiciousNullable */
+                    $klass = " class=\"badge {$t->badges[0]}badge\"";
                     $tag = $this->unparse(trim($mx[0]));
                     if ($type === self::DECOR_PAPER && ($link = $this->link($tag))) {
-                        $b = '<a href="' . $link . '"' . $klass . '>#' . $tag . '</a>';
+                        $b = "<a href=\"{$link}\"{$klass}>#{$tag}</a>";
                     } else {
                         if ($type !== self::DECOR_USER) {
-                            $tag = '#' . $tag;
+                            $tag = "#{$tag}";
                         }
-                        $b = '<span' . $klass . '>' . $tag . '</span>';
+                        $b = "<span{$klass}>{$tag}</span>";
                     }
                     $x .= ' ' . $b;
                 }
             }
         }
-        return $x === "" ? "" : '<span class="tagdecoration">' . $x . '</span>';
+        return $x === "" ? "" : "<span class=\"tagdecoration\">{$x}</span>";
     }
 
     /** @param string $tag
@@ -1418,23 +1425,24 @@ class Tagger {
 
         // decorate with URL matches
         $dt = $this->conf->tags();
-        $tt = "";
+        $tt = [];
         foreach (preg_split('/\s+/', $tags) as $tag) {
             if (!($base = Tagger::base($tag))) {
                 continue;
             }
             $lbase = strtolower($base);
             if (($link = $this->link($tag))) {
-                $tx = '<a class="nn pw" href="' . $link . '"><u class="x">#'
-                    . $base . '</u>' . substr($tag, strlen($base)) . '</a>';
+                $tsuf = substr($tag, strlen($base));
+                $tx = "<a class=\"qo pw\" href=\"{$link}\"><u class=\"x\">#{$base}</u>{$tsuf}</a>";
             } else {
-                $tx = "#" . $tag;
+                $tx = "#{$tag}";
             }
             if (($cc = $dt->styles($base))) {
-                $tx = '<span class="' . join(" ", $cc) . ' taghh">' . $tx . '</span>';
+                $ccs = join(" ", $cc);
+                $tx = "<span class=\"{$ccs} taghh\">{$tx}</span>";
             }
-            $tt .= $tx . " ";
+            $tt[] = $tx;
         }
-        return rtrim($tt);
+        return join(" ", $tt);
     }
 }

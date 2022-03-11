@@ -1,6 +1,6 @@
 <?php
 // api_searchconfig.php -- HotCRP search configuration API calls
-// Copyright (c) 2008-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2022 Eddie Kohler; see LICENSE.
 
 class SearchConfig_API {
     static function viewoptions(Contact $user, Qrequest $qreq) {
@@ -64,7 +64,7 @@ class SearchConfig_API {
                 $fj["editable"] = true;
             }
             if (!$f->check()) {
-                $fj["error_html"] = $f->error_html();
+                $fj["error_html"] = MessageSet::feedback_html($f->message_list());
             }
             $fjs[] = $fj;
         }
@@ -145,7 +145,7 @@ class SearchConfig_API {
         foreach ($new_formula_by_id as $f) {
             $lname = strtolower($f->name);
             if (isset($lnames_used[$lname]))  {
-                $msgset->error_at("formulaname_" . $id2idx[$f->formulaId], htmlspecialchars($f->name ? $f->name . ": " : "") . "Formula names should be distinct.");
+                $msgset->error_at("formulaname_" . $id2idx[$f->formulaId], htmlspecialchars($f->name ? $f->name . ": " : "") . "Formula names must be distinct");
             }
             $lnames_used[$lname] = true;
         }
@@ -158,10 +158,12 @@ class SearchConfig_API {
             if ($f->check($user)) {
                 if ((!$fdef || $fdef->expression !== $f->expression)
                     && !$user->can_view_formula($f))  {
-                    $msgset->error_at("formulaexpression_" . $id2idx[$f->formulaId], $pfx . "This expression refers to properties you can’t access.");
+                    $msgset->error_at("formulaexpression_" . $id2idx[$f->formulaId], $pfx . "This expression refers to properties you can’t access");
                 }
             } else {
-                $msgset->error_at("formulaexpression_" . $id2idx[$f->formulaId], $pfx . "Formula error: " . $f->error_html());
+                foreach ($f->message_list() as $mi) {
+                    $msgset->append_item($mi->with_field("formulaexpression_" . $id2idx[$f->formulaId]));
+                }
             }
         }
 
@@ -305,7 +307,7 @@ class SearchConfig_API {
                 $qv[] = ["ss:" . $search_names[$lname], Conf::$now, json_encode_db($q)];
             }
             if (!empty($qv)) {
-                $user->conf->qe("insert into Settings (name, value, data) values ?v on duplicate key update value=values(value), data=values(data)", $qv);
+                $user->conf->qe("insert into Settings (name, value, data) values ?v ?U on duplicate key update value=?U(value), data=?U(data)", $qv);
             }
             $user->conf->replace_named_searches();
             return self::namedsearch($user, $qreq);

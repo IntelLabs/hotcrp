@@ -1,6 +1,6 @@
 <?php
 // redirect.php -- HotCRP redirection helper functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 /** @return string */
 function make_session_name(Conf $conf, $n) {
@@ -21,8 +21,9 @@ function set_session_name(Conf $conf) {
         return false;
     }
 
-    $secure = $conf->opt("sessionSecure");
     $domain = $conf->opt("sessionDomain");
+    $secure = $conf->opt("sessionSecure") ?? false;
+    $samesite = $conf->opt("sessionSameSite") ?? "Lax";
 
     // maybe upgrade from an old session name to this one
     if (!isset($_COOKIE[$sn])
@@ -34,7 +35,7 @@ function set_session_name(Conf $conf) {
         hotcrp_setcookie($upgrade_sn, "", [
             "expires" => time() - 3600, "path" => "/",
             "domain" => $conf->opt("sessionUpgradeDomain") ?? ($domain ? : ""),
-            "secure" => !!$secure
+            "secure" => $secure
         ]);
     }
 
@@ -53,14 +54,12 @@ function set_session_name(Conf $conf) {
     if (($lifetime = $conf->opt("sessionLifetime")) !== null) {
         $params["lifetime"] = $lifetime;
     }
-    if ($secure !== null) {
-        $params["secure"] = !!$secure;
-    }
+    $params["secure"] = $secure;
     if ($domain !== null || !isset($params["domain"])) {
         $params["domain"] = $domain;
     }
     $params["httponly"] = true;
-    if (($samesite = $conf->opt("sessionSameSite") ?? "Lax")) {
+    if ($samesite && ($secure || $samesite !== "None")) {
         $params["samesite"] = $samesite;
     }
     if (PHP_VERSION_ID >= 70300) {
@@ -76,6 +75,9 @@ const ENSURE_SESSION_ALLOW_EMPTY = 1;
 const ENSURE_SESSION_REGENERATE_ID = 2;
 
 function ensure_session($flags = 0) {
+    if (Conf::$test_mode) {
+        return;
+    }
     if (headers_sent($hsfn, $hsln)) {
         error_log("$hsfn:$hsln: headers sent: " . debug_string_backtrace());
     }

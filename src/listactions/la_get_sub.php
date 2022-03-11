@@ -1,6 +1,6 @@
 <?php
 // listactions/la_get_sub.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class GetCheckFormat_ListAction extends ListAction {
     function run(Contact $user, Qrequest $qreq, SearchSelection $ssel) {
@@ -18,7 +18,7 @@ class GetCheckFormat_ListAction extends ListAction {
             $dtype = $prow->finalPaperStorageId ? DTYPE_FINAL : DTYPE_SUBMISSION;
             $doc = $prow->document($dtype, 0, true);
             if ($doc && $doc->mimetype === "application/pdf") {
-                $cf->check_document($prow, $doc);
+                $cf->check_document($doc);
                 $pages = $cf->npages ?? "?";
                 $errf = $cf->problem_fields();
                 if (empty($errf)) {
@@ -26,7 +26,7 @@ class GetCheckFormat_ListAction extends ListAction {
                     $messages = "";
                 } else {
                     $format = join(" ", $errf);
-                    $messages = join("\n", $cf->message_texts());
+                    $messages = rtrim($cf->full_feedback_text());
                 }
             } else {
                 $pages = "";
@@ -56,7 +56,7 @@ class GetPcconflicts_ListAction extends ListAction {
                 $m = [];
                 foreach ($prow->conflicts() as $cid => $cflt) {
                     if (($pc = $pcm[$cid] ?? null) && $cflt->is_conflicted()) {
-                        $m[$pc->sort_position] = [$prow->paperId, $prow->title, $pc->firstName, $pc->lastName, $pc->email, $confset->unparse_text($cflt->conflictType)];
+                        $m[$pc->pc_index] = [(string) $prow->paperId, $prow->title, $pc->firstName, $pc->lastName, $pc->email, $confset->unparse_text($cflt->conflictType)];
                     }
                 }
                 if ($m) {

@@ -1,6 +1,6 @@
 <?php
 // filer.php -- generic document helper class
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class HashAnalysis {
     /** @var string */
@@ -124,7 +124,7 @@ class Filer {
      * @param int $p0 - start of object
      * @param string $s - object
      * @return int */
-    static function echo_subrange($out, $r0, $r1, $p0, $s) {
+    static function print_subrange($out, $r0, $r1, $p0, $s) {
         $sz = strlen($s);
         $p1 = $p0 + $sz;
         if ($p1 <= $r0 || $r1 <= $p0 || $p0 === $p1) {
@@ -295,7 +295,7 @@ class Filer {
         if (self::check_download_opts(strlen($s), $opts)) {
             $out = fopen("php://output", "wb");
             foreach (self::download_ranges(strlen($s), $mimetype, $opts) as $r) {
-                Filer::echo_subrange($out, $r[0], $r[1], 0, $s);
+                Filer::print_subrange($out, $r[0], $r[1], 0, $s);
             }
         }
     }
@@ -319,8 +319,10 @@ class Filer {
     // filestore path functions
     const FPATH_EXISTS = 1;
     const FPATH_MKDIR = 2;
+    /** @param int $flags
+     * @return ?string */
     static function docstore_path(DocumentInfo $doc, $flags = 0) {
-        if ($doc->error || !($pattern = $doc->conf->docstore())) {
+        if ($doc->has_error() || !($pattern = $doc->conf->docstore())) {
             return null;
         }
         if (!($path = self::_expand_docstore($pattern, $doc, true))) {
@@ -344,7 +346,8 @@ class Filer {
         }
         if (($flags & self::FPATH_MKDIR)
             && !self::prepare_docstore(self::docstore_fixed_prefix($pattern), $path)) {
-            return $doc->add_error_html("File system storage cannot be initialized.", true);
+            $doc->message_set()->warning_at(null, "<0>File system storage cannot be initialized");
+            return null;
         } else {
             return $path;
         }
@@ -402,7 +405,7 @@ class Filer {
         if (($prefix = self::docstore_fixed_prefix($conf->docstore()))) {
             $tmpdir = $prefix . "tmp/";
             '@phan-var non-empty-string $tmpdir';
-            if (self::prepare_docstore($tmpdir, $tmpdir)) {
+            if (self::prepare_docstore($prefix, $tmpdir)) {
                 return $tmpdir;
             }
         }

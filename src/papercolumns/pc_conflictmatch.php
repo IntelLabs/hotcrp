@@ -1,6 +1,6 @@
 <?php
 // pc_conflictmatch.php -- HotCRP paper columns for author/collaborator match
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ConflictMatch_PaperColumn extends PaperColumn {
     /** @var Contact */
@@ -28,7 +28,7 @@ class ConflictMatch_PaperColumn extends PaperColumn {
         if ($this->show_user && $this->contact->affiliation) {
             $t .= " (" . htmlspecialchars($this->contact->affiliation) . ")";
         }
-        return $is_text ? $t : "<strong>$t</strong>";
+        return $is_text ? $t : "<strong>{$t}</strong>";
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
         $this->nonempty = false;
@@ -110,7 +110,7 @@ class ConflictMatch_PaperColumn extends PaperColumn {
             $rs[] = (object) $fj;
         }
         if (empty($rs)) {
-            PaperColumn::column_error($user, "No PC member matches “" . htmlspecialchars($m[1]) . "”.");
+            PaperColumn::column_error($user, "<0>PC member ‘{$m[1]}’ not found");
         }
         return $rs;
     }

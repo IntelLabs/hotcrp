@@ -1,6 +1,6 @@
 <?php
 // search/st_comment.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Comment_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -10,11 +10,12 @@ class Comment_SearchTerm extends SearchTerm {
     /** @var ?TagSearchMatcher */
     private $tags;
     /** @var int */
-    private $type_mask = COMMENTTYPE_DRAFT;
+    private $type_mask;
     /** @var int */
     private $type_value = 0;
     /** @var bool */
     private $only_author = false;
+    /** @var ?int */
     private $commentRound;
 
     /** @param ?TagSearchMatcher $tags */
@@ -23,12 +24,13 @@ class Comment_SearchTerm extends SearchTerm {
         $this->user = $user;
         $this->csm = $csm;
         $this->tags = $tags;
+        $this->type_mask = CommentInfo::CT_DRAFT;
         if (!$kwdef->response || !$kwdef->comment) {
-            $this->type_mask |= COMMENTTYPE_RESPONSE;
-            $this->type_value |= $kwdef->comment ? 0 : COMMENTTYPE_RESPONSE;
+            $this->type_mask |= CommentInfo::CT_RESPONSE;
+            $this->type_value |= $kwdef->comment ? 0 : CommentInfo::CT_RESPONSE;
         }
         if ($kwdef->draft) {
-            $this->type_value |= COMMENTTYPE_DRAFT;
+            $this->type_value |= CommentInfo::CT_DRAFT;
         }
         $this->only_author = $kwdef->only_author;
         $this->commentRound = $kwdef->round;
@@ -47,15 +49,15 @@ class Comment_SearchTerm extends SearchTerm {
         ];
     }
     static function response_factory($keyword, Contact $user, $kwfj, $m) {
-        $round = $user->conf->resp_round_number($m[2]);
-        if ($round === false
+        $rrd = $user->conf->response_round($m[2]);
+        if (!$rrd
             && $m[1] === ""
-            && preg_match('/\A(draft-?)(.*)\z/i', $m[2], $mm)) {
+            && preg_match('/\A(draft-?)(.*)\z/si', $m[2], $mm)) {
             $m[1] = $mm[1];
             $m[2] = $mm[2];
-            $round = $user->conf->resp_round_number($m[2]);
+            $rrd = $user->conf->response_round($m[2]);
         }
-        if ($round === false || ($m[1] && $m[3])) {
+        if (!$rrd || ($m[1] && $m[3])) {
             return null;
         }
         return (object) [
@@ -63,7 +65,7 @@ class Comment_SearchTerm extends SearchTerm {
             "parse_function" => "Comment_SearchTerm::parse",
             "response" => true,
             "comment" => false,
-            "round" => $round,
+            "round" => $rrd->number,
             "draft" => $m[1] || $m[3],
             "only_author" => false,
             "has" => ">0"
@@ -81,7 +83,7 @@ class Comment_SearchTerm extends SearchTerm {
             $tags = new TagSearchMatcher($srch->user);
             $tags->add_check_tag(substr($a[0], 1), true);
             foreach ($tags->error_texts() as $e) {
-                $srch->warning($e);
+                $srch->lwarning($sword, "<5>$e");
             }
         } else if ($a[0] !== "") {
             $contacts = $srch->matching_uids($a[0], $sword->quoted, false);
@@ -99,7 +101,7 @@ class Comment_SearchTerm extends SearchTerm {
             $where[] = "(commentType&{$this->type_mask})={$this->type_value}";
         }
         if ($this->only_author) {
-            $where[] = "commentType>=" . COMMENTTYPE_AUTHOR;
+            $where[] = "commentType>=" . CommentInfo::CT_AUTHOR;
         }
         if ($this->commentRound) {
             $where[] = "commentRound=" . $this->commentRound;
@@ -115,12 +117,12 @@ class Comment_SearchTerm extends SearchTerm {
         return "coalesce($thistab.count,0)" . $this->csm->conservative_nonnegative_comparison();
     }
     function test(PaperInfo $row, $rrow) {
-        $textless = $this->type_mask === (COMMENTTYPE_DRAFT | COMMENTTYPE_RESPONSE);
+        $textless = $this->type_mask === (CommentInfo::CT_DRAFT | CommentInfo::CT_RESPONSE);
         $n = 0;
         foreach ($row->viewable_comment_skeletons($this->user, $textless) as $crow) {
             if ($this->csm->test_contact($crow->contactId)
                 && ($crow->commentType & $this->type_mask) == $this->type_value
-                && (!$this->only_author || $crow->commentType >= COMMENTTYPE_AUTHOR)
+                && (!$this->only_author || $crow->commentType >= CommentInfo::CT_AUTHOR)
                 && (!$this->tags || $this->tags->test((string) $crow->viewable_tags($this->user))))
                 ++$n;
         }

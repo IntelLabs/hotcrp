@@ -1,6 +1,6 @@
 <?php
 // listactions/la_mail.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Mail_ListAction extends ListAction {
     private $template;
@@ -12,7 +12,7 @@ class Mail_ListAction extends ListAction {
     function allow(Contact $user, Qrequest $qreq) {
         return $user->is_manager() && $qreq->page() !== "reviewprefs";
     }
-    static function render(PaperList $pl, Qrequest $qreq, GroupedExtensions $gex) {
+    static function render(PaperList $pl, Qrequest $qreq, ComponentSet $gex) {
         $sel_opt = ListAction::members_selector_options($gex, "mail");
         if (!empty($sel_opt)) {
             return Ht::select("mailfn", $sel_opt, $qreq->mailfn,
@@ -33,6 +33,6 @@ class Mail_ListAction extends ListAction {
         $args["t"] = $qreq->t;
         $args["template"] = $this->template;
         $args["to"] = $this->recipients;
-        $user->conf->redirect_hoturl("mail", $args);
+        return new Redirection($user->conf->hoturl("mail", $args));
     }
 }

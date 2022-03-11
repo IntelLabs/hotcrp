@@ -1,6 +1,6 @@
 <?php
 // paperrank.php -- HotCRP helper functions for dealing with ranks
-// Copyright (c) 2009-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class PaperRank {
     /** @var Conf */
@@ -69,11 +69,14 @@ class PaperRank {
         }
 
         // load current ranks: $userrank maps user => [rank, paper]
-        $result = $this->conf->qe_raw("select paperId, tag, tagIndex from PaperTag where tag like '%~" . sqlq_for_like($source_tag) . "' and paperId in (" . join(",", $papersel) . ")");
+        $x = sqlq(Dbl::escape_like($source_tag));
+        $result = $this->conf->qe_raw("select paperId, tag, tagIndex from PaperTag where tag like '%~{$x}' and paperId in (" . join(",", $papersel) . ")");
         $len = strlen($source_tag) + 1;
         while (($row = $result->fetch_row())) {
-            $l = (int) substr($row[1], 0, strlen($row[1]) - $len);
-            $this->userrank[$l][] = [(int) $row[2], (int) $row[0]];
+            if ($row[1] !== "~") {
+                $l = (int) substr($row[1], 0, strlen($row[1]) - $len);
+                $this->userrank[$l][] = [(int) $row[2], (int) $row[0]];
+            }
         }
         Dbl::free($result);
 
@@ -132,7 +135,7 @@ class PaperRank {
 
 
     // compare two vote sets
-    function _comparRankIRV($a, $b) {
+    static function _comparRankIRV($a, $b) {
         for ($i = 0; $i < count($a); ++$i) {
             if ($a[$i] != $b[$i])
                 return $a[$i] < $b[$i] ? -1 : 1;

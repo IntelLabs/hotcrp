@@ -1,6 +1,6 @@
 <?php
 // o_title.php -- HotCRP helper class for title intrinsic
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Title_PaperOption extends PaperOption {
     function __construct($conf, $args) {
@@ -20,18 +20,18 @@ class Title_PaperOption extends PaperOption {
         return (string) $ov->data();
     }
     function value_save(PaperValue $ov, PaperStatus $ps) {
-        $ps->mark_diff("title");
+        $ps->change_at($this);
         $ps->save_paperf("title", $ov->data());
         return true;
     }
-    function parse_web(PaperInfo $prow, Qrequest $qreq) {
+    function parse_qreq(PaperInfo $prow, Qrequest $qreq) {
         return $this->parse_json_string($prow, $qreq->title, PaperOption::PARSE_STRING_CONVERT | PaperOption::PARSE_STRING_SIMPLIFY);
     }
     function parse_json(PaperInfo $prow, $j) {
         return $this->parse_json_string($prow, $j, PaperOption::PARSE_STRING_SIMPLIFY);
     }
-    function echo_web_edit(PaperTable $pt, $ov, $reqov) {
-        $this->echo_web_edit_text($pt, $ov, $reqov, ["no_format_description" => true, "rows" => 1]);
+    function print_web_edit(PaperTable $pt, $ov, $reqov) {
+        $this->print_web_edit_text($pt, $ov, $reqov, ["no_format_description" => true, "rows" => 1]);
     }
     function render(FieldRender $fr, PaperValue $ov) {
         $fr->value = $ov->prow->title ? : "[No title]";

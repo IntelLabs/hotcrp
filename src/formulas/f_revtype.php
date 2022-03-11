@@ -1,11 +1,11 @@
 <?php
 // formulas/f_revtype.php -- HotCRP helper class for formula expressions
-// Copyright (c) 2009-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class Revtype_Fexpr extends Fexpr {
     function __construct() {
         parent::__construct("retype");
-        $this->_format = self::FREVTYPE;
+        $this->set_format(Fexpr::FREVTYPE);
     }
     function inferred_index() {
         return Fexpr::IDX_REVIEW;

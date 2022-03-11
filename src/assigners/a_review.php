@@ -1,6 +1,6 @@
 <?php
 // a_review.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Review_Assignable extends Assignable {
     /** @var ?int */
@@ -76,11 +76,16 @@ class Review_Assignable extends Assignable {
 }
 
 class Review_AssignmentParser extends AssignmentParser {
+    /** @var int */
     private $rtype;
     function __construct(Conf $conf, $aj) {
         parent::__construct($aj->name);
-        if ($aj->review_type) {
-            $this->rtype = (int) ReviewInfo::parse_type($aj->review_type);
+        if ($aj->review_type === "none") {
+            $this->rtype = 0;
+        } else if ($aj->review_type) {
+            $rt = ReviewInfo::parse_type($aj->review_type, false);
+            assert($rt > 0);
+            $this->rtype = $rt;
         } else {
             $this->rtype = -1;
         }
@@ -104,9 +109,21 @@ class Review_AssignmentParser extends AssignmentParser {
         self::load_review_state($state);
         Conflict_AssignmentParser::load_conflict_state($state);
     }
-    /** @param CsvRow $req */
+    /** @param CsvRow $req
+     * @return ReviewAssigner_Data */
     private function make_rdata($req, AssignmentState $state) {
         return ReviewAssigner_Data::make($req, $state, $this->rtype);
+    }
+    function allow_paper(PaperInfo $prow, AssignmentState $state) {
+        if ($state->user->can_administer($prow)) {
+            if ($prow->timeWithdrawn <= 0 || $this->rtype === 0) {
+                return true;
+            } else {
+                return new AssignmentError($prow->make_whynot(["withdrawn" => true]));
+            }
+        } else {
+            return false;
+        }
     }
     /** @param CsvRow $req */
     function user_universe($req, AssignmentState $state) {
@@ -132,7 +149,7 @@ class Review_AssignmentParser extends AssignmentParser {
     function expand_any_user(PaperInfo $prow, $req, AssignmentState $state) {
         $rdata = $this->make_rdata($req, $state);
         if ($rdata->might_create_review()) {
-            return false;
+            return null;
         } else {
             $cf = $state->make_filter("cid",
                 new Review_Assignable($prow->paperId, null, $rdata->oldtype ? : null, $rdata->oldround));
@@ -155,7 +172,7 @@ class Review_AssignmentParser extends AssignmentParser {
             && ($u = $state->user_by_email($user, true, []))) {
             return [$u];
         } else {
-            return false;
+            return null;
         }
     }
     function allow_user(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
@@ -166,7 +183,8 @@ class Review_AssignmentParser extends AssignmentParser {
         // PC reviews must be PC members
         $rdata = $this->make_rdata($req, $state);
         if ($rdata->newtype >= REVIEW_PC && !$contact->is_pc_member()) {
-            return $contact->name_h(NAME_E) . " is not a PC member and cannot be assigned a PC review.";
+            $uname = $contact->name(NAME_E);
+            return new AssignmentError("<0>{$uname} is not a PC member and cannot be assigned a PC review.");
         }
         // Conflict allowed if we're not going to assign a new review
         if ($this->rtype == 0
@@ -177,15 +195,16 @@ class Review_AssignmentParser extends AssignmentParser {
         // Check whether review assignments are acceptable
         if ($contact->is_pc_member()
             && !$contact->can_accept_review_assignment_ignore_conflict($prow)) {
-            return $contact->name_h(NAME_E) . " cannot be assigned to review #{$prow->paperId}.";
+            $uname = $contact->name(NAME_E);
+            return new AssignmentError("<0>{$uname} cannot be assigned to review #{$prow->paperId}.");
         }
         // Conflicts are checked later
         return true;
     }
     function apply(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
         $rdata = $this->make_rdata($req, $state);
-        if ($rdata->error) {
-            return $rdata->error;
+        if ($rdata->error_ftext) {
+            return new AssignmentError($rdata->error_ftext);
         }
 
         $revmatch = new Review_Assignable($prow->paperId, $contact->contactId);
@@ -260,8 +279,8 @@ class Review_Assigner extends Assigner {
         if (!$item->pre("_rtype") && $item->post("_rtype")) {
             Conflict_Assigner::check_unconflicted($item, $state);
         } else if ($item->pre("_rtype") && !$item->post("_rtype") && $item->pre("_rmodified")) {
-            $uname = $state->user_by_id($item["cid"])->name_h(NAME_E);
-            throw new Exception("{$uname} has already modified their review, so it cannot be unassigned.");
+            $uname = $state->user_by_id($item["cid"])->name(NAME_E);
+            throw new AssignmentError("<0>{$uname} has already modified their review for #" . $item->pid() . ", so it cannot be unassigned.");
         }
         return new Review_Assigner($item, $state);
     }
@@ -355,7 +374,7 @@ class Review_Assigner extends Assigner {
         if ($this->contact->is_anonymous_user()
             && (!$this->item->existed() || !$this->item["_rtype"])) {
             $extra["token"] = true;
-            $aset->cleanup_callback("rev_token", function ($vals) use ($aset) {
+            $aset->register_cleanup_function("rev_token", function ($vals) use ($aset) {
                 $aset->conf->update_rev_tokens_setting(min($vals));
             }, $this->item->existed() ? 0 : 1);
         }

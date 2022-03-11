@@ -1,13 +1,13 @@
 <?php
-// src/help/h_chairsguide.php -- HotCRP help functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// help/h_chairsguide.php -- HotCRP help functions
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ChairsGuide_HelpTopic {
-    static function render_presubmission(HelpRenderer $hth, $gj) {
+    static function print_presubmission(HelpRenderer $hth, $gj) {
         if ($gj->itemid === -1) {
             echo $hth->subhead("Submission time");
             echo "<p>Follow these steps to prepare to accept submissions.</p>\n\n<ol>\n";
-            $hth->render_group("chair/presubmission");
+            $hth->print_group("chair/presubmission");
             echo "</ol>\n\n";
 
         } else if ($gj->itemid === 1) {
@@ -80,11 +80,11 @@ form also can include:</p>
         }
     }
 
-    static function render_assignments(HelpRenderer $hth, $gj) {
+    static function print_assignments(HelpRenderer $hth, $gj) {
         if ($gj->itemid === -1) {
             echo $hth->subhead("Assignments");
             echo "<p>After the submission deadline has passed:</p>\n<ol>\n";
-            $hth->render_group("chair/assignments");
+            $hth->print_group("chair/assignments");
             echo "</ol>\n\n";
 
         } else if ($gj->itemid === 1) {
@@ -121,8 +121,11 @@ form also can include:</p>
   multi-track conferences.</li>\n";
 
         } else if ($gj->itemid === 6) {
-            echo "<li><p><strong>", $hth->hotlink("Collect review preferences from the PC.", "reviewprefs"), "</strong> PC members can rank-order papers they
-  want or don’t want to review.  They can either set their preferences ",
+            echo "<li><p><strong>", $hth->hotlink("Collect review preferences from the PC.", "reviewprefs"), "</strong>
+  PC members can enter per-paper review preferences (also known as bids) to
+  mark papers they want or don’t want to review. Preferences are integers, typically
+  in the range −20 to 20; the higher the number, the more desired the review assignment.
+  Users can either set their preferences ",
   $hth->hotlink("all at once", "reviewprefs"), ", or (often more
   convenient) page through the ", $hth->search_link("list of submitted papers", ""),
   " and set their preferences on the ", $hth->hotlink("paper pages", "paper"), ".</p>
@@ -159,7 +162,7 @@ form also can include:</p>
         }
     }
 
-    static function render_chair_conflicts(HelpRenderer $hth) {
+    static function print_chair_conflicts(HelpRenderer $hth) {
         echo $hth->subhead("Chair conflicts");
         echo "<p>Chairs and system administrators can access any information stored in the
 conference system, including reviewer identities for conflicted papers.
@@ -195,15 +198,15 @@ review tokens; then even web server access logs store only the
 administrator’s identity.</p>\n\n";
     }
 
-    static function render_premeeting(HelpRenderer $hth, $gj) {
+    static function print_premeeting(HelpRenderer $hth, $gj) {
         if ($gj->itemid === -1) {
             echo $hth->subhead("Before the meeting");
             echo "<ol>\n";
-            $hth->render_group("chair/premeeting");
+            $hth->print_group("chair/premeeting");
             echo "</ol>\n\n";
 
         } else if ($gj->itemid === 1) {
-            echo "<li><p><strong>", $hth->setting_link("Collect authors’ responses to the reviews (optional).", "resp_open"),
+            echo "<li><p><strong>", $hth->setting_link("Collect authors’ responses to the reviews (optional).", "response_active"),
   "</strong>  Authors’ responses (also called rebuttals) let authors correct reviewer misconceptions
   before decisions are made.  Responses are entered
   into the system as comments.  On the ", $hth->setting_link("decision settings page", "dec"),
@@ -255,11 +258,11 @@ administrator’s identity.</p>\n\n";
     }
 
 
-    static function render_atmeeting(HelpRenderer $hth, $gj) {
+    static function print_atmeeting(HelpRenderer $hth, $gj) {
         if ($gj->itemid === -1) {
             echo $hth->subhead("At the meeting");
             echo "<ol>\n";
-            $hth->render_group("chair/atmeeting");
+            $hth->print_group("chair/atmeeting");
             echo "</ol>\n\n";
 
         } else if ($gj->itemid === 1) {
@@ -293,11 +296,11 @@ administrator’s identity.</p>\n\n";
         }
     }
 
-    static function render_postmeeting(HelpRenderer $hth, $gj) {
+    static function print_postmeeting(HelpRenderer $hth, $gj) {
         if ($gj->itemid === -1) {
             echo $hth->subhead("After the meeting");
             echo "<ol>\n";
-            $hth->render_group("chair/postmeeting");
+            $hth->print_group("chair/postmeeting");
             echo "</ol>\n\n";
 
         } else if ($gj->itemid === 1) {
@@ -311,7 +314,7 @@ administrator’s identity.</p>\n\n";
 
         } else if ($gj->itemid === 3) {
             echo "<li><p>Set ", $hth->setting_link("“Who can <strong>see decisions?</strong>”", "seedec"),
-  " to “Authors, PC members, and reviewers.”";
+  " to “Authors, reviewers, and all PC members.”";
             if (!$hth->conf->setting("shepherd_hide"))
                 echo " This will also make shepherd names visible to authors.";
             echo "</p></li>\n";

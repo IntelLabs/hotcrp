@@ -1,6 +1,6 @@
 <?php
 // documentinfoset.php -- HotCRP document set
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class DocumentInfoSet_ZipInfo {
     /** @var ?int */
@@ -39,8 +39,8 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
     private $ufn = [];
     /** @var list<DocumentInfo> */
     private $docs = [];
-    /** @var ?list<string> */
-    private $_errors_html;
+    /** @var ?MessageSet */
+    private $_ms;
     /** @var ?string */
     private $_filename;
     /** @var ?string */
@@ -80,11 +80,9 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
      * @return bool */
     function add_as(DocumentInfo $doc, $fn) {
         if ($this->_filename) { // might generate a .zip later; check filename
-            assert(!$doc->error && $fn !== "");
+            assert(!$doc->has_error() && $fn !== "");
             $slash = strpos($fn, "/");
-            if ($doc->error
-                || $fn === ""
-                || strlen($fn) > 1000
+            if (strlen($fn) > 1000
                 || preg_match('/[\000]|\/\/|\/\z/', $fn)) {
                 return $this->_add_fail($doc, $fn);
             }
@@ -126,10 +124,6 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
             "timestamp" => $timestamp ?? Conf::$now
         ], $this->conf), $fn);
     }
-    /** @param string $error_html */
-    function add_error_html($error_html) {
-        $this->_errors_html[] = $error_html;
-    }
 
     /** @return list<DocumentInfo> */
     function as_list() {
@@ -147,17 +141,10 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
     function size() {
         return count($this->docs);
     }
+    #[\ReturnTypeWillChange]
     /** @return int */
     function count() {
         return count($this->docs);
-    }
-    /** @return bool */
-    function has_errors() {
-        return !empty($this->_errors_html);
-    }
-    /** @return list<string> */
-    function error_texts() {
-        return $this->_errors_html ?? [];
     }
     /** @param int $i
      * @return ?DocumentInfo */
@@ -184,10 +171,12 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
     function filename_by_index($i) {
         return $this->ufn[$i] ?? null;
     }
+    #[\ReturnTypeWillChange]
     /** @return Iterator<DocumentInfo> */
     function getIterator() {
         return new ArrayIterator($this->docs);
     }
+    #[\ReturnTypeWillChange]
     /** @param int|string $offset
      * @return bool */
     function offsetExists($offset) {
@@ -195,6 +184,7 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
             ? isset($this->docs[$offset])
             : $offset !== "" && in_array($offset, $this->ufn);
     }
+    #[\ReturnTypeWillChange]
     /** @param int|string $offset
      * @return ?DocumentInfo */
     function offsetGet($offset) {
@@ -203,18 +193,39 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
         }
         return is_int($offset) ? $this->docs[$offset] ?? null : null;
     }
+    #[\ReturnTypeWillChange]
     function offsetSet($offset, $value) {
         throw new Exception("invalid DocumentInfoSet::offsetSet");
     }
+    #[\ReturnTypeWillChange]
     function offsetUnset($offset) {
         throw new Exception("invalid DocumentInfoSet::offsetUnset");
+    }
+
+    /** @return bool */
+    function has_error() {
+        return $this->_ms && $this->_ms->has_error();
+    }
+    /** @return MessageSet */
+    function message_set() {
+        $this->_ms = $this->_ms ?? (new MessageSet)->set_want_ftext(true, 5);
+        return $this->_ms;
+    }
+    /** @return list<MessageItem> */
+    function message_list() {
+        return $this->_ms ? $this->_ms->message_list() : [];
+    }
+    /** @param string $msg
+     * @return MessageItem */
+    function error($msg) {
+        return $this->message_set()->error_at(null, $msg);
     }
 
     /** @return string|false */
     private function _tmpdir() {
         if ($this->_tmpdir === null
             && ($this->_tmpdir = tempdir()) === false) {
-            $this->_errors_html[] = "Could not create temporary directory.";
+            $this->error("<0>Could not create temporary directory");
         }
         return $this->_tmpdir;
     }
@@ -371,8 +382,8 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
     }
     private function _hotzip_make() {
         $this->_hotzip_progress();
-        if (!empty($this->_errors_html)) {
-            $this->add_string_as(Text::html_to_text(join("\n", $this->_errors_html) . "\n"), "README-warnings.txt");
+        if ($this->has_error()) {
+            $this->add_string_as($this->_ms->full_feedback_text(), "README-warnings.txt");
             $this->_hotzip_progress();
         }
         $this->_hotzip_final();
@@ -384,8 +395,8 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
             foreach ($this->docs as $doc) {
                 $s .= $doc->member_filename() . "\n" . $doc->text_hash() . "\n";
             }
-            if (!empty($this->_errors_html)) {
-                $s .= "README-warnings.txt\nsha2-" . hash("sha256", join("\n", $this->_errors_html)) . "\n";
+            if ($this->has_error()) {
+                $s .= "README-warnings.txt\nsha2-" . hash("sha256", $this->_ms->full_feedback_text()) . "\n";
             }
             $this->_signature = "content.sha2-" . hash("sha256", $s);
         }
@@ -407,14 +418,14 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
         // otherwise, need to create new .zip
         if (!$this->_filestore) {
             if (!($tmpdir = $this->_tmpdir())) {
-                $this->add_error_html("Cannot create temporary directory.");
+                $this->error("<0>Cannot create temporary directory");
                 return null;
             }
             $this->_filestore = $tmpdir . "/_hotcrp.zip";
         }
 
         if (!($out = fopen($this->_filestore . "~", "wb"))) {
-            $this->add_error_html("Cannot create temporary file.");
+            $this->error("<0>Cannot create temporary file");
             return null;
         }
 
@@ -435,7 +446,8 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
                 $sz += fwrite($out, $doc->content());
             }
             if ($sz !== $zi->local_end_offset() - $zi->local_offset) {
-                $this->add_error_html("Failure writing {$this->ufn[$i]}, wrote $sz, expected " . ($zi->local_end_offset() - $zi->local_offset) . ".");
+                $mi = $this->error("<0>Write failure: wrote $sz, expected " . ($zi->local_end_offset() - $zi->local_offset));
+                $mi->landmark = $this->ufn[$i];
                 fclose($out);
                 return null;
             }
@@ -446,7 +458,7 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
         }
         fclose($out);
         if ($sz !== $this->_hotzip_filesize() - $this->_zipi[0]->central_offset) {
-            $this->add_error_html("Failure creating temporary file (dir @{$this->_zipi[0]->central_offset}).");
+            $this->error("<0>Failure creating temporary file (dir @{$this->_zipi[0]->central_offset})");
             return null;
         }
 
@@ -486,13 +498,13 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
             $zi = $this->_zipi[$d0];
             $doc = $this->docs[$d0];
             $p0 = $zi->local_offset;
-            $p0 += Filer::echo_subrange($out, $r0, $r1, $p0, $zi->localh);
+            $p0 += Filer::print_subrange($out, $r0, $r1, $p0, $zi->localh);
             if ($zi->compressed !== null) {
-                $p0 += Filer::echo_subrange($out, $r0, $r1, $p0, $zi->compressed);
+                $p0 += Filer::print_subrange($out, $r0, $r1, $p0, $zi->compressed);
             } else if (($f = $doc->available_content_file())) {
                 $p0 += Filer::readfile_subrange($out, $r0, $r1, $p0, $f, $doc->size());
             } else {
-                $p0 += Filer::echo_subrange($out, $r0, $r1, $p0, $doc->content());
+                $p0 += Filer::print_subrange($out, $r0, $r1, $p0, $doc->content());
             }
             if ($p0 < min($r1, $zi->local_end_offset())) {
                 throw new Exception("Failure writing {$this->ufn[$d0]}, wrote " . ($p0 - $zi->local_offset) . ", expected " . (min($r1, $zi->local_end_offset()) - $zi->local_offset));
@@ -501,7 +513,7 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
         }
         if ($d0 === count($this->docs)) {
             foreach ($this->_zipi as $zi) {
-                Filer::echo_subrange($out, $r0, $r1, $zi->central_offset, $zi->centralh);
+                Filer::print_subrange($out, $r0, $r1, $zi->central_offset, $zi->centralh);
             }
         }
     }
@@ -554,12 +566,15 @@ class DocumentInfoSet implements ArrayAccess, IteratorAggregate, Countable {
             throw new Exception("trying to download blank-named DocumentInfoSet");
         }
         if (count($this->docs) === 1
-            && empty($this->_errors_html)
+            && !$this->has_error()
             && ($opts["single"] ?? false)) {
-            if ($this->docs[0]->download($opts)) {
+            $doc = $this->docs[0];
+            if ($doc->download($opts)) {
                 return true;
             } else {
-                $this->add_error_html($this->docs[0]->error_html);
+                foreach ($doc->message_list() as $mi) {
+                    $this->message_set()->append_item($mi->with_landmark($doc->export_filename()));
+                }
                 return false;
             }
         } else {

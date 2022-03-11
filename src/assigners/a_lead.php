@@ -1,6 +1,6 @@
 <?php
 // a_lead.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Lead_Assignable extends Assignable {
     /** @var ?int */
@@ -42,11 +42,13 @@ class Lead_AssignmentParser extends AssignmentParser {
     }
     function allow_paper(PaperInfo $prow, AssignmentState $state) {
         if ($this->key === "manager") {
-            return $state->user->privChair ? true : "You can’t change paper administrators.";
-        } else if (!$state->user->can_administer($prow)) {
-            return "You can’t administer #{$prow->paperId}.";
+            if ($state->user->privChair) {
+                return true;
+            } else {
+                return new AssignmentError("<0>Only chairs and sysadmins can change paper administrators.");
+            }
         } else {
-            return true;
+            return $state->user->can_administer($prow);
         }
     }
     function user_universe($req, AssignmentState $state) {
@@ -62,7 +64,7 @@ class Lead_AssignmentParser extends AssignmentParser {
             $cids = array_map(function ($x) { return $x->_cid; }, $m);
             return $state->users_by_id($cids);
         } else {
-            return false;
+            return null;
         }
     }
     function expand_missing_user(PaperInfo $prow, $req, AssignmentState $state) {
@@ -77,8 +79,9 @@ class Lead_AssignmentParser extends AssignmentParser {
                 && $prow->review_type($contact) == REVIEW_EXTERNAL)) {
             return true;
         } else {
+            $uname = $contact->name(NAME_E);
             $verb = $this->key === "manager" ? "administer" : $this->key;
-            return $contact->name_h(NAME_E) . " can’t $verb #{$prow->paperId}.";
+            return new AssignmentError("<0>{$uname} can’t $verb #{$prow->paperId}.");
         }
     }
     function apply(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
@@ -175,14 +178,14 @@ class Lead_Assigner extends Assigner {
             $aset->user->log_activity("Clear {$this->description}", $this->pid);
         }
         if ($this->type === "lead" || $this->type === "shepherd") {
-            $aset->cleanup_callback("lead", function ($vals) use ($aset) {
+            $aset->register_cleanup_function("lead", function ($vals) use ($aset) {
                 $aset->conf->update_paperlead_setting(min($vals));
             }, $new_cid ? 1 : 0);
         } else if ($this->type === "manager") {
-            $aset->cleanup_callback("manager", function ($vals) use ($aset) {
+            $aset->register_cleanup_function("manager", function ($vals) use ($aset) {
                 $aset->conf->update_papermanager_setting(min($vals));
             }, $new_cid ? 1 : 0);
         }
-        $aset->cleanup_update_rights();
+        $aset->register_update_rights();
     }
 }

@@ -1,6 +1,6 @@
 <?php
 // paperrequest.php -- HotCRP helper class for parsing paper requests
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class PaperRequest {
     /** @var PaperInfo */
@@ -30,7 +30,7 @@ class PaperRequest {
 
     static function simple_qreq(Qrequest $qreq) {
         return ($qreq->is_get() || $qreq->is_head())
-            && !array_diff($qreq->keys(), ["p", "paperId", "m", "mode", "forceShow", "t", "q", "r", "reviewId", "cap", "actas"]);
+            && !array_diff($qreq->keys(), ["p", "paperId", "m", "mode", "forceShow", "t", "q", "r", "reviewId", "cap", "actas", "accept", "decline"]);
     }
 
     private function normalize(Conf $conf, Qrequest $qreq, $review) {
@@ -148,7 +148,7 @@ class PaperRequest {
      * @param int $pid
      * @return Redirection */
     private function signin_redirection($conf, $qreq, $pid) {
-        return new Redirection($conf->hoturl("signin", ["redirect" => $conf->selfurl($qreq, ["p" => $pid ? : "new"], Conf::HOTURL_SITE_RELATIVE | Conf::HOTURL_RAW)]));
+        return new Redirection($conf->hoturl("signin", ["redirect" => $conf->selfurl($qreq, ["p" => $pid ? : "new"], Conf::HOTURL_SITEREL | Conf::HOTURL_RAW)]));
     }
 
     /** @param Conf $conf

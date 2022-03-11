@@ -1,6 +1,6 @@
 <?php
 // paperlist.php -- HotCRP helper class for producing paper lists
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class PaperListTableRender {
     /** @var ?string */
@@ -81,7 +81,7 @@ class PaperListTableRender {
     function heading_separator_row() {
         return "  <tr class=\"plheading\"><td class=\"plheading-separator\" colspan=\"{$this->ncol}\"></td></tr>\n";
     }
-    function echo_tbody_rows() {
+    function print_tbody_rows() {
         foreach ($this->rows as $r) {
             echo $r;
         }
@@ -189,6 +189,8 @@ class PaperList implements XtContext {
     private $_view_kanban = false;
     /** @var bool */
     private $_view_force = false;
+    /** @var int */
+    private $_view_hide_all = -1;
     /** @var array<string,int> */
     private $_viewf = [];
     /** @var array<string,?list<string>> */
@@ -228,10 +230,10 @@ class PaperList implements XtContext {
     private $_vcolumns = [];
     /** @var array<string,list<PaperColumn>> */
     private $_columns_by_name;
-    /** @var array<string,list<string>> */
-    private $_column_errors_by_name = [];
     /** @var ?string */
-    private $_current_find_column;
+    private $_finding_column;
+    /** @var ?list<MessageItem> */
+    private $_finding_column_errors;
 
     /** @var list<PaperColumn> */
     private $_sortcol = [];
@@ -266,8 +268,6 @@ class PaperList implements XtContext {
     public $count; // also exported to columns access: 1 more than row index
     /** @var ?array<string,bool> */
     private $_has;
-    /** @var ?MessageSet */
-    private $_ms;
 
     /** @var bool */
     static public $include_stash = true;
@@ -304,9 +304,6 @@ class PaperList implements XtContext {
 
         $this->_report_id = $report;
         $this->parse_view($this->_list_columns(), self::VIEWORIGIN_REPORT);
-        if ($this->viewable_author_types() === 1) {
-            $this->set_view("anonau", true, self::VIEWORIGIN_REPORT);
-        }
 
         if ($this->_sortable) {
             if (is_string($sortarg)) {
@@ -321,8 +318,8 @@ class PaperList implements XtContext {
             for ($i = 0; $i < $qe->nthen; ++$i) {
                 $this->apply_view_search($qe->child[$i], $i);
             }
-            $this->_then_map = $qe->then_map;
-            $this->_highlight_map = $qe->highlight_map;
+            $this->_then_map = $this->search->groups_by_paper_id();
+            $this->_highlight_map = $this->search->highlights_by_paper_id();
         }
         $this->apply_view_search($qe, -1);
 
@@ -355,21 +352,21 @@ class PaperList implements XtContext {
         case "authorHome":
             return "id title status";
         case "reviewerHome":
-            return "id title revtype status [linkto finishreview]";
+            return "id title revtype status linkto[finishreview]";
         case "pl":
             return "sel id title revtype revstat status";
         case "reqrevs":
             return "id title revdelegation revstat status";
         case "reviewAssignment":
-            return "id title mypref topicscore desirability assignment potentialconflict topics reviewers [linkto assign]";
+            return "id title mypref topicscore desirability assignment potentialconflict topics reviewers linkto[assign]";
         case "conflictassign":
-            return "id title authors aufull potentialconflict [revtype basicheader] [editconf basicheader] [linkto assign]";
+            return "id title authors aufull potentialconflict revtype[basicheader] editconf[basicheader] linkto[assign]";
         case "pf":
-            return "sel id title topicscore revtype [editmypref topicsort]";
+            return "sel id title topicscore revtype editmypref[topicscore]";
         case "reviewers":
-            return "[sel selected] id title status [linkto assign]";
+            return "sel[selected] id title status linkto[assign]";
         case "reviewersSel":
-            return "sel id title status [linkto assign]";
+            return "sel id title status linkto[assign]";
         default:
             return "";
         }
@@ -435,8 +432,7 @@ class PaperList implements XtContext {
 
     /** @return MessageSet */
     function message_set() {
-        $this->_ms = $this->_ms ?? new MessageSet;
-        return $this->_ms;
+        return $this->search->message_set();
     }
 
     /** @param string $name */
@@ -495,11 +491,14 @@ class PaperList implements XtContext {
             $k = substr($k, 1, -1);
         }
         if ($k === "all") {
-            assert($v === false && $decorations === null);
+            assert($v === false && empty($decorations));
             $views = array_keys($this->_viewf);
             foreach ($views as $k) {
-                $this->set_view($k, $v, $origin, null);
+                if ($k !== "sel" && $k !== "statistics") {
+                    $this->set_view($k, $v, $origin, null);
+                }
             }
+            $this->_view_hide_all = max($origin, $this->_view_hide_all);
             return;
         }
         $k = self::$view_synonym[$k] ?? $k;
@@ -509,7 +508,8 @@ class PaperList implements XtContext {
         if ($origin === self::VIEWORIGIN_REPORT) {
             $flags = ($flags & ~self::VIEW_REPORTSHOW) | ($v ? self::VIEW_REPORTSHOW : 0);
         }
-        if (($flags & self::VIEWORIGIN_MASK) <= $origin) {
+        if (($flags & self::VIEWORIGIN_MASK) <= $origin
+            && (!$v || $this->_view_hide_all <= $origin)) {
             $flags = ($flags & self::VIEW_REPORTSHOW)
                 | $origin
                 | ($v ? self::VIEW_SHOW : 0);
@@ -542,14 +542,17 @@ class PaperList implements XtContext {
 
     /** @param string $name
      * @param ?list<string> $decorations
-     * @param int $sort_subset */
-    private function _add_sorter($name, $decorations, $sort_subset) {
+     * @param int $sort_subset
+     * @param ?int $pos1
+     * @param ?int $pos2 */
+    private function _add_sorter($name, $decorations, $sort_subset, $pos1, $pos2) {
         assert(!$this->_sortcol_fixed);
         // Do not use ensure_columns_by_name(), because decorations for sorters
         // might differ.
         $old_context = $this->conf->xt_swap_context($this);
         $fs = $this->conf->paper_columns($name, $this->user);
         $this->conf->xt_swap_context($old_context);
+        $mi = null;
         if (count($fs) === 1) {
             $col = PaperColumn::make($this->conf, $fs[0], $decorations);
             if ($col->prepare($this, PaperColumn::PREP_SORT)
@@ -557,7 +560,7 @@ class PaperList implements XtContext {
                 $col->sort_subset = $sort_subset;
                 $this->_sortcol[] = $col;
             } else {
-                $this->search->warning("“" . htmlspecialchars($name) . "” cannot be sorted.");
+                $mi = $this->search->warning("<0>‘{$name}’ cannot be sorted");
             }
         } else if (empty($fs)) {
             if ($this->user->can_view_tags(null)
@@ -565,16 +568,21 @@ class PaperList implements XtContext {
                 && ($tag = $tagger->check($name))
                 && ($ps = new PaperSearch($this->user, ["q" => "#$tag", "t" => "vis"]))
                 && $ps->paper_ids()) {
-                $this->search->warning("“" . htmlspecialchars($name) . "” cannot be sorted. Did you mean “sort:#" . htmlspecialchars($name) . "”?");
+                $mi = $this->search->warning("<0>‘{$name}’ cannot be sorted; did you mean “sort:#{$name}”?");
             } else {
-                $this->search->warning("“" . htmlspecialchars($name) . "” cannot be sorted.");
+                $mi = $this->search->warning("<0>‘{$name}’ cannot be sorted");
             }
         } else {
-            $this->search->warning("Sort “" . htmlspecialchars($name) . "” matches more than one field, ignoring.");
+            $mi = $this->search->warning("<0>Sort ‘{$name}’ is ambiguous");
+        }
+        if ($mi) {
+            $mi->pos1 = $pos1;
+            $mi->pos2 = $pos2;
+            $mi->context = $this->search->q;
         }
     }
 
-    /** @param list<string> $groups
+    /** @param list<string>|list<array{string,?int,?int,?int}> $groups
      * @param ?int $origin
      * @param int $sort_subset */
     private function set_view_list($groups, $origin, $sort_subset) {
@@ -585,7 +593,7 @@ class PaperList implements XtContext {
             }
             if (str_ends_with($akd[0], "sort")
                 && ($akd[1] !== "id" || !empty($akd[1]) || $this->_sortcol)) {
-                $this->_add_sorter($akd[1], $akd[2], $sort_subset);
+                $this->_add_sorter($akd[1], $akd[2], $sort_subset, $akd[3], $akd[4]);
             }
         }
     }
@@ -593,7 +601,7 @@ class PaperList implements XtContext {
     /** @param ?string $str
      * @param ?int $origin */
     function parse_view($str, $origin = null) {
-        if (($str ?? "") !== "") {
+        if ($str !== null && $str !== "") {
             $this->set_view_list(SearchSplitter::split_balanced_parens($str), $origin, -1);
         }
     }
@@ -601,7 +609,7 @@ class PaperList implements XtContext {
     /** @param int $sort_subset */
     private function apply_view_search(SearchTerm $qe, $sort_subset) {
         $nsort = count($this->_sortcol);
-        $this->set_view_list($qe->get_float("view") ?? [], null, $sort_subset);
+        $this->set_view_list($qe->view_anno(), null, $sort_subset);
         if ($nsort === count($this->_sortcol)
             && ($sortcol = $qe->default_sort_column(true, $this->search))
             && $sortcol->prepare($this, PaperColumn::PREP_SORT)) {
@@ -617,8 +625,10 @@ class PaperList implements XtContext {
             && !$no_settings) {
             $s = $this->conf->setting_data("{$this->_report_id}display_default");
         }
-        if ($this->_report_id === "pl") {
-            $s = $s ?? $this->conf->review_form()->view_default();
+        if ($this->_report_id === "pl"
+            && $s === null
+            && ($f = $this->conf->review_form()->default_highlighted_score())) {
+            $s = "show:" . $f->search_keyword();
         }
         $this->parse_view($s, self::VIEWORIGIN_DEFAULT_DISPLAY);
     }
@@ -647,17 +657,15 @@ class PaperList implements XtContext {
         $this->_prepare();
         $res = [];
         $nextpos = 1000000;
-        foreach ($this->_viewf as $k => $v) {
+        foreach ($this->_viewf as $name => $v) {
             if ($report_diff
                 ? ($v >= self::VIEW_SHOW) !== (($v & self::VIEW_REPORTSHOW) !== 0)
                 : $v >= self::VIEW_SHOW) {
-                $name = $k;
-                $pos = self::$view_fake[$k] ?? null;
+                $pos = self::$view_fake[$name] ?? null;
                 if ($pos === null) {
-                    list($name, $decorations) = self::parse_column($k);
                     $fs = $this->conf->paper_columns($name, $this->user);
-                    if (count($fs) && isset($fs[0]->position)) {
-                        $pos = $fs[0]->position;
+                    if (count($fs) && isset($fs[0]->order)) {
+                        $pos = $fs[0]->order;
                         $name = $fs[0]->name;
                     } else {
                         $pos = $nextpos++;
@@ -669,7 +677,7 @@ class PaperList implements XtContext {
                 } else {
                     $kw = "hide";
                 }
-                $res[$key] = PaperSearch::unparse_view($kw, $name, $this->_view_decorations[$k] ?? null);
+                $res[$key] = PaperSearch::unparse_view($kw, $name, $this->_view_decorations[$name] ?? null);
             }
         }
         if (((($this->_viewf["anonau"] ?? 0) >= self::VIEW_SHOW && $this->conf->submission_blindness() == Conf::BLIND_OPTIONAL)
@@ -696,10 +704,6 @@ class PaperList implements XtContext {
     /** @return PaperInfoSet|Iterable<PaperInfo> */
     function rowset() {
         if ($this->_rowset === null) {
-            $this->qopts["scores"] = array_keys($this->qopts["scores"]);
-            if (empty($this->qopts["scores"])) {
-                unset($this->qopts["scores"]);
-            }
             $result = $this->conf->paper_result($this->qopts, $this->user);
             $this->_rowset = new PaperInfoSet;
             while (($row = PaperInfo::fetch($result, $this->user))) {
@@ -1014,38 +1018,41 @@ class PaperList implements XtContext {
     }
 
 
-    /** @param string $text
-     * @param bool $is_default */
-    function column_error($text, $is_default = false) {
-        if (($name = $this->_current_find_column)
-            && (!$is_default || empty($this->_column_errors_by_name[$name]))) {
-            $this->_column_errors_by_name[$name][] = $text;
+    /** @param string|MessageItem $message */
+    function column_error($message) {
+        if (($name = $this->_finding_column)
+            && $this->view_origin($name) >= self::VIEWORIGIN_EXPLICIT) {
+            if (is_string($message)) {
+                $mi = new MessageItem($name, $message, MessageSet::WARNING);
+            } else {
+                $mi = $message;
+            }
+            if (($pos = $this->search->term()->view_anno_pos($name))
+                && ($mi->status !== MessageSet::INFORM || empty($this->_finding_column_errors))) {
+                if ($mi->pos1 !== null) {
+                    $mi->pos1 += $pos[1];
+                    $mi->pos2 += $pos[1];
+                } else {
+                    $mi->pos1 = $pos[0];
+                    $mi->pos2 = $pos[2];
+                }
+                $mi->context = $this->search->q;
+            } else {
+                $mi->pos1 = $mi->pos2 = null;
+            }
+            $this->_finding_column_errors[] = $mi;
         }
     }
 
-    /** @param string $str
-     * @return array{string,?list<string>} */
-    static private function parse_column($str) {
-        if (str_starts_with($str, "[")) {
-            $ws = SearchSplitter::split_balanced_parens(substr($str, 1, strlen($str) - (str_ends_with($str, "]") ? 2 : 1)));
-            return [$ws[0] ?? "?", count($ws) > 1 ? array_slice($ws, 1) : null];
-        } else {
-            return [$str, null];
-        }
-    }
-
-    /** @param string $str
+    /** @param string $name
      * @return list<PaperColumn> */
-    private function ensure_columns_by_name($str) {
-        list($name, $viewdecorations) = self::parse_column($str);
+    private function ensure_columns_by_name($name) {
         if (!array_key_exists($name, $this->_columns_by_name)) {
-            $this->_current_find_column = $name;
+            $this->_finding_column = $name;
             $nfs = [];
             foreach ($this->conf->paper_columns($name, $this->user) as $fdef) {
-                $decorations = $viewdecorations
-                    ?? $this->_view_decorations[$fdef->name]
-                    ?? $this->_view_decorations[$name]
-                    ?? [];
+                $decorations = $this->_view_decorations[$fdef->name]
+                    ?? $this->_view_decorations[$name] ?? [];
                 if ($fdef->name === $name) {
                     $nfs[] = PaperColumn::make($this->conf, $fdef, $decorations);
                 } else {
@@ -1055,6 +1062,15 @@ class PaperList implements XtContext {
                     $nfs = array_merge($nfs, $this->_columns_by_name[$fdef->name]);
                 }
             }
+            if (empty($nfs) && $this->view_origin($name) >= self::VIEWORIGIN_EXPLICIT) {
+                if (empty($this->_finding_column_errors)) {
+                    $this->column_error("<0>Field ‘{$name}’ not found");
+                }
+                foreach ($this->_finding_column_errors as $mi) {
+                    $this->message_set()->append_item($mi);
+                }
+            }
+            $this->_finding_column = $this->_finding_column_errors = null;
             $this->_columns_by_name[$name] = $nfs;
         }
         return $this->_columns_by_name[$name];
@@ -1065,13 +1081,7 @@ class PaperList implements XtContext {
     private function _expand_view_column($k) {
         if (!isset(self::$view_fake[$k])
             && ($this->_viewf[$k] ?? 0) >= self::VIEW_SHOW) {
-            $fs = $this->ensure_columns_by_name($k);
-            if (!$fs && $this->view_origin($k) >= self::VIEWORIGIN_EXPLICIT) {
-                foreach ($this->_column_errors_by_name[$k] ?? [] as $err) {
-                    $this->message_set()->error_at($k, "Can’t show " . htmlspecialchars($k) . ": " . $err);
-                }
-            }
-            return $fs;
+            return $this->ensure_columns_by_name($k);
         } else {
             return [];
         }
@@ -1113,13 +1123,20 @@ class PaperList implements XtContext {
             $this->_viewf[$k] = $viewf[$k];
             $f->is_visible = true;
             $f->has_content = false;
+            $this->_finding_column = $k;
             if ($f->prepare($this, PaperColumn::PREP_VISIBLE | $prep)) {
                 $this->_vcolumns[] = $f;
             }
         }
 
-        // sort by position
-        usort($this->_vcolumns, "Conf::xt_position_compare");
+        // report `prepare` errors
+        foreach ($this->_finding_column_errors ?? [] as $mi) {
+            $this->message_set()->append_item($mi);
+        }
+        $this->_finding_column_errors = null;
+
+        // sort by order
+        usort($this->_vcolumns, "Conf::xt_order_compare");
 
         // analyze rows and return
         foreach ($this->_vcolumns as $f) {
@@ -1131,7 +1148,7 @@ class PaperList implements XtContext {
     /** @param PaperInfo $row
      * @return string */
     function _contentDownload($row) {
-        if ($row->size !== 0
+        if ($row->paperStorageId > 1
             && $this->user->can_view_pdf($row)
             && ($doc = $row->primary_document())) {
             return "&nbsp;" . $doc->link_html("", DocumentInfo::L_SMALL | DocumentInfo::L_NOSIZE | DocumentInfo::L_FINALTITLE);
@@ -1405,7 +1422,8 @@ class PaperList implements XtContext {
         if (!$cc || !$rstate->hascolors) {
             $trclass[] = "k" . $rstate->colorindex;
         }
-        if (($highlightclass = $this->_highlight_map[$row->paperId] ?? null)) {
+        if ($this->_highlight_map !== null
+            && ($highlightclass = $this->_highlight_map[$row->paperId])) {
             $trclass[] = $highlightclass[0] . "highlightmark";
         }
         $want_plx = $tt !== "" || $this->table_id();
@@ -1819,7 +1837,7 @@ class PaperList implements XtContext {
                 if (substr($url, 0, 5) == "search") {
                     $altqh = "<a href=\"" . htmlspecialchars(Navigation::siteurl() . $url) . "\">" . $altqh . "</a>";
                 }
-                return PaperListTableRender::make_error("No matches. Did you mean “{$altqh}”?");
+                return PaperListTableRender::make_error("No matches. Did you mean ‘{$altqh}’?");
             } else {
                 return PaperListTableRender::make_error("No matches");
             }
@@ -1847,7 +1865,7 @@ class PaperList implements XtContext {
         $skipcallout = 0;
         foreach ($this->_vcolumns as $fdef) {
             if (!$fdef->as_row) {
-                if ($fdef->position === null || $fdef->position >= 100) {
+                if ($fdef->order === null || $fdef->order >= 100) {
                     break;
                 } else {
                     ++$skipcallout;
@@ -2020,26 +2038,32 @@ class PaperList implements XtContext {
         return $rstate;
     }
 
-    function echo_table_html() {
+    function print_table_html() {
         $render = $this->table_render();
         if (!$render->error) {
             echo $render->table_start,
                 self::$include_stash ? Ht::unstash() : "",
                 $render->thead ?? "",
                 $render->tbody_start();
-            $render->echo_tbody_rows();
+            $render->print_tbody_rows();
             echo $render->tbody_end(),
                 $render->tfoot ?? "",
                 "</table>";
         } else {
-            echo $render->error;
+            if (strpos($this->_table_class, 'remargin') !== false) {
+                echo '<div class="msg demargined remargin-left remargin-right"><div class="mx-auto">',
+                    '<ul class="inline"><li>', $render->error, '</li></ul>',
+                    '</div></div>';
+            } else {
+                echo $render->error;
+            }
         }
     }
 
     /** @return string */
     function table_html() {
         ob_start();
-        $this->echo_table_html();
+        $this->print_table_html();
         return ob_get_clean();
     }
 

@@ -1,6 +1,6 @@
 <?php
 // search/st_tag.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Tag_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -33,11 +33,11 @@ class Tag_SearchTerm extends SearchTerm {
 
         // check value matchers
         $value = new TagSearchMatcher($srch->user);
-        if (preg_match('/\A([^#=!<>\x80-\xFF]+)(?:#|=)(-?(?:\.\d+|\d+\.?\d*))(?:\.\.\.?|-|–|—)(-?(?:\.\d+|\d+\.?\d*))\z/', $word, $m)) {
+        if (preg_match('/\A([^#=!<>\x80-\xFF]+)(?:#|=)(-?(?:\.\d+|\d+\.?\d*))(?:\.\.\.?|-|–|—)(-?(?:\.\d+|\d+\.?\d*))\z/s', $word, $m)) {
             $tagword = $m[1];
             $value->add_value_matcher(new CountMatcher(">=$m[2]"));
             $value->add_value_matcher(new CountMatcher("<=$m[3]"));
-        } else if (preg_match('/\A([^#=!<>\x80-\xFF]+)(#?)([=!<>]=?|≠|≤|≥|)(-?(?:\.\d+|\d+\.?\d*))\z/', $word, $m)
+        } else if (preg_match('/\A([^#=!<>\x80-\xFF]+)(#?)([=!<>]=?|≠|≤|≥|)(-?(?:\.\d+|\d+\.?\d*))\z/s', $word, $m)
                    && $m[1] !== "any"
                    && $m[1] !== "none"
                    && ($m[2] !== "" || $m[3] !== "")) {
@@ -76,7 +76,8 @@ class Tag_SearchTerm extends SearchTerm {
             if (!$negated && ($tagpat = $value->tag_patterns())) {
                 $term->set_float("tags", $tagpat);
                 if ($sword->kwdef->sorting) {
-                    $term->set_float("view", ["sort:" . ($revsort ? "-#" : "#") . $tagpat[0]]);
+                    $revanno = $revsort ? "-" : "";
+                    $term->add_view_anno("sort:{$revanno}#{$tagpat[0]}", $sword);
                 }
             }
             if (!$negated && $sword->kwdef->is_hash && $value->single_tag()) {
@@ -87,7 +88,7 @@ class Tag_SearchTerm extends SearchTerm {
 
         // return
         foreach ($value->error_texts() as $e) {
-            $srch->warning($e);
+            $srch->lwarning($sword, "<5>$e");
         }
         return SearchTerm::combine("or", $allterms)->negate_if($negated);
     }

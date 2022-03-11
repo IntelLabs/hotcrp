@@ -1,6 +1,6 @@
 <?php
 // assignmentcountset.php -- HotCRP helper classes for assignments
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class AssignmentCount {
     /** @var int */
@@ -40,7 +40,7 @@ class AssignmentCount {
             return $t;
         } else {
             $url = $pc->conf->hoturl("search", "q=" . urlencode("$prefix:{$pc->email}"));
-            return "<a class=\"qq\" href=\"{$url}\">{$t}</a>";
+            return "<a class=\"q\" href=\"{$url}\">{$t}</a>";
         }
     }
     /** @param Contact $pc

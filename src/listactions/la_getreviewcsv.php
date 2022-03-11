@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getreviewcsv.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class GetReviewCSV_ListAction extends ListAction {
     private $include_paper;
@@ -44,7 +44,7 @@ class GetReviewCSV_ListAction extends ListAction {
                     }
                     foreach ($rrow->viewable_fields($viewer) as $f) {
                         $fields[$f->id] = true;
-                        $text[$f->name] = $f->unparse_value($rrow->{$f->id}, ReviewField::VALUE_TRIM);
+                        $text[$f->name] = $f->unparse_value($rrow->fields[$f->order], ReviewField::VALUE_TRIM);
                     }
                     $items[] = $text;
                     $pids[$prow->paperId] = true;
@@ -58,8 +58,8 @@ class GetReviewCSV_ListAction extends ListAction {
         if ($has_id) {
             array_push($selection, "reviewername", "email");
         }
-        foreach ($rf->all_fields() as $fid => $f) {
-            if (isset($fields[$fid]))
+        foreach ($rf->all_fields() as $f) {
+            if (isset($fields[$f->id]))
                 $selection[] = $f->name;
         }
         if (!empty($pids)) {

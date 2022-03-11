@@ -1,25 +1,25 @@
 <?php
 // siteloader.php -- HotCRP autoloader
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class SiteLoader {
     static $map = [
         "AbbreviationEntry" => "lib/abbreviationmatcher.php",
+        "Assignable" => "src/assignmentset.php",
         "AssignmentParser" => "src/assignmentset.php",
         "AutoassignerCosts" => "src/autoassigner.php",
-        "BanalSettings" => "src/settings/s_subform.php",
         "Collator" => "lib/collatorshim.php",
         "CsvGenerator" => "lib/csv.php",
         "CsvParser" => "lib/csv.php",
         "Fexpr" => "src/formula.php",
         "FormulaCall" => "src/formula.php",
         "FormatChecker" => "src/formatspec.php",
+        "GroupedExtensions" => "src/componentset.php", /* XXX backward compat */
         "HashAnalysis" => "lib/filer.php",
         "JsonSerializable" => "lib/json.php",
+        "LogEntryGenerator" => "src/logentry.php",
         "LoginHelper" => "lib/login.php",
-        "MailPreparation" => "lib/mailer.php",
         "MessageItem" => "lib/messageset.php",
-        "MimeText" => "lib/mailer.php",
         "PaperInfoSet" => "src/paperinfo.php",
         "PaperOptionList" => "src/paperoption.php",
         "PaperValue" => "src/paperoption.php",
@@ -30,8 +30,8 @@ class SiteLoader {
         "ReviewValues" => "src/review.php",
         "SearchTerm" => "src/papersearch.php",
         "SearchWord" => "src/papersearch.php",
+        "SettingInfoSet" => "src/si.php",
         "SettingParser" => "src/settingvalues.php",
-        "Si" => "src/settingvalues.php",
         "StreamS3Result" => "lib/s3result.php",
         "TagAnno" => "lib/tagger.php",
         "TagInfo" => "lib/tagger.php",
@@ -42,41 +42,38 @@ class SiteLoader {
     ];
 
     static $suffix_map = [
-        "_api.php" => ["api_", "api"],
-        "_assignable.php" => ["a_", "assigners"],
-        "_assigner.php" => ["a_", "assigners"],
-        "_assignmentparser.php" => ["a_", "assigners"],
-        "_capability.php" => ["cap_", "capabilities"],
-        "_fexpr.php" =>  ["f_", "formulas"],
-        "_helptopic.php" => ["h_", "help"],
-        "_listaction.php" => ["la_", "listactions"],
-        "_papercolumn.php" => ["pc_", "papercolumns"],
-        "_papercolumnfactory.php" => ["pc_", "papercolumns"],
-        "_paperoption.php" => ["o_", "options"],
-        "_partial.php" => ["p_", "partials"],
-        "_searchterm.php" => ["st_", "search"],
-        "_settingrenderer.php" => ["s_", "settings"],
-        "_settingparser.php" => ["s_", "settings"],
-        "_userinfo.php" => ["u_", "userinfo"]
+        "_api.php" => ["api_", "src/api"],
+        "_assignable.php" => ["a_", "src/assigners"],
+        "_assigner.php" => ["a_", "src/assigners"],
+        "_assignmentparser.php" => ["a_", "src/assigners"],
+        "_capability.php" => ["cap_", "src/capabilities"],
+        "_fexpr.php" =>  ["f_", "src/formulas"],
+        "_helptopic.php" => ["h_", "src/help"],
+        "_listaction.php" => ["la_", "src/listactions"],
+        "_papercolumn.php" => ["pc_", "src/papercolumns"],
+        "_papercolumnfactory.php" => ["pc_", "src/papercolumns"],
+        "_paperoption.php" => ["o_", "src/options"],
+        "_page.php" => ["p_", "src/pages"],
+        "_partial.php" => ["p_", "src/pages"],
+        "_searchterm.php" => ["st_", "src/search"],
+        "_settingrenderer.php" => ["s_", "src/settings"],
+        "_settingparser.php" => ["s_", "src/settings"],
+        "_sitype.php" => ["s_", "src/settings"],
+        "_tester.php" => ["t_", "test"],
+        "_userinfo.php" => ["u_", "src/userinfo"]
     ];
 
     /** @var string */
     static public $root;
 
     static function set_root() {
-        global $ConfSitePATH;
-        if (isset($ConfSitePATH)) {
-            self::$root = $ConfSitePATH;
-        } else {
-            self::$root = substr(__FILE__, 0, strrpos(__FILE__, "/"));
-            while (self::$root !== ""
-                   && !file_exists(self::$root . "/src/init.php")) {
-                self::$root = substr(self::$root, 0, strrpos(self::$root, "/"));
-            }
-            if (self::$root === "") {
-                self::$root = "/var/www/html";
-            }
-            $ConfSitePATH = self::$root;
+        self::$root = __DIR__;
+        while (self::$root !== ""
+               && !file_exists(self::$root . "/src/init.php")) {
+            self::$root = substr(self::$root, 0, strrpos(self::$root, "/"));
+        }
+        if (self::$root === "") {
+            self::$root = "/var/www/html";
         }
     }
 
@@ -87,21 +84,6 @@ class SiteLoader {
             return self::$root . $suffix;
         } else {
             return self::$root . "/" . $suffix;
-        }
-    }
-
-    static function read_main_options() {
-        global $Opt;
-        if (defined("HOTCRP_OPTIONS")) {
-            $files = [HOTCRP_OPTIONS];
-        } else  {
-            $files = [self::$root."/conf/options.php", self::$root."/conf/options.inc"];
-        }
-        foreach ($files as $f) {
-            if ((@include $f) !== false) {
-                $Opt["loaded"][] = $f;
-                break;
-            }
         }
     }
 
@@ -174,7 +156,7 @@ class SiteLoader {
                 && isset($expansions["autoload"])
                 && ($underscore = strrpos($f, "_"))
                 && ($f2 = SiteLoader::$suffix_map[substr($f, $underscore)] ?? null)) {
-                $xincludepath = array_merge($f2[1] ? ["{$root}/src/{$f2[1]}/"] : [], $includepath);
+                $xincludepath = array_merge($f2[1] ? ["{$root}/{$f2[1]}/"] : [], $includepath);
                 $matches = self::expand_includes_once($f2[0] . substr($f, 0, $underscore) . ".php", $xincludepath, $globby);
             }
             $results = array_merge($results, $matches);
@@ -185,14 +167,38 @@ class SiteLoader {
         return $results;
     }
 
+    /** @param string $file */
+    static function read_options_file($file) {
+        global $Opt;
+        if ((@include $file) !== false) {
+            $Opt["loaded"][] = $file;
+        } else {
+            $Opt["missing"][] = $file;
+        }
+    }
+
+    static function read_main_options() {
+        $file = defined("HOTCRP_OPTIONS") ? HOTCRP_OPTIONS : self::$root . "/conf/options.php";
+        self::read_options_file($file);
+    }
+
+    static function read_included_options() {
+        global $Opt;
+        '@phan-var array<string,mixed> $Opt';
+        if (is_string($Opt["include"])) {
+            $Opt["include"] = [$Opt["include"]];
+        }
+        for ($i = 0; $i !== count($Opt["include"]); ++$i) {
+            foreach (self::expand_includes($Opt["include"][$i]) as $f) {
+                if (!in_array($f, $Opt["loaded"])) {
+                    self::read_options_file($f);
+                }
+            }
+        }
+    }
+
     static function autoloader($class_name) {
-        $f = null;
-        if (isset(self::$map[$class_name])) {
-            $f = self::$map[$class_name];
-        }
-        if (!$f) {
-            $f = strtolower($class_name) . ".php";
-        }
+        $f = self::$map[$class_name] ?? strtolower($class_name) . ".php";
         foreach (self::expand_includes($f, ["autoload" => true]) as $fx) {
             require_once($fx);
         }

@@ -1,8 +1,8 @@
 <?php
 // paperjson.php -- HotCRP paper export script
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 
 $arg = Getopt::rest($argv, "hn:t:N1", ["help", "name:", "type:", "sitename", "single"]);
 if (isset($arg["h"]) || isset($arg["help"])) {
@@ -21,16 +21,15 @@ require_once(SiteLoader::find("src/init.php"));
 
 $user = $Conf->root_user();
 $t = $arg["t"] ?? "s";
-$searchtypes = PaperSearch::viewable_limits($user, $t);
-if (!isset($searchtypes[$t])) {
+if (!in_array($t, PaperSearch::viewable_limits($user, $t))) {
     fwrite(STDERR, "batch/paperjson.php: No search collection ‘{$t}’.\n");
     exit(1);
 }
 
 $q = join(" ", $arg["_"]);
 $search = new PaperSearch($user, ["q" => $q, "t" => $t]);
-foreach ($search->problem_texts() as $w) {
-    fwrite(STDERR, "$w\n");
+if ($search->has_problem()) {
+    fwrite(STDERR, $search->full_feedback_text());
 }
 
 $pj_first = [];

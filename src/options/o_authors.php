@@ -1,6 +1,6 @@
 <?php
 // o_authors.php -- HotCRP helper class for authors intrinsic
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Authors_PaperOption extends PaperOption {
     function __construct(Conf $conf, $args) {
@@ -34,12 +34,12 @@ class Authors_PaperOption extends PaperOption {
             $nreal += $auth->is_empty() ? 0 : 1;
         }
         if ($nreal === 0 && !$ov->prow->allow_absent()) {
-            $ov->estop($this->conf->_("Entry required."));
-            $ov->msg_at("authors:1", false, MessageSet::ERROR);
+            $ov->estop($this->conf->_("<0>Entry required"));
+            $ov->msg_at("authors:1", null, MessageSet::ERROR);
         }
         $max_authors = $this->conf->opt("maxAuthors");
         if ($max_authors > 0 && $nreal > $max_authors) {
-            $ov->estop($this->conf->_("Each submission can have at most %d authors.", $max_authors));
+            $ov->estop($this->conf->_("<0>A submission may have at most %d authors", $max_authors));
         }
 
         $msg1 = $msg2 = false;
@@ -47,29 +47,29 @@ class Authors_PaperOption extends PaperOption {
             if (strpos($auth->email, "@") === false
                 && strpos($auth->affiliation, "@") !== false) {
                 $msg1 = true;
-                $ov->msg_at("authors:" . ($n + 1), false, MessageSet::WARNING);
+                $ov->msg_at("authors:" . ($n + 1), null, MessageSet::WARNING);
             } else if ($auth->firstName === "" && $auth->lastName === ""
                        && $auth->email === "" && $auth->affiliation !== "") {
                 $msg2 = true;
-                $ov->msg_at("authors:" . ($n + 1), false, MessageSet::WARNING);
+                $ov->msg_at("authors:" . ($n + 1), null, MessageSet::WARNING);
             } else if ($auth->email !== "" && !validate_email($auth->email)
                        && !$ov->prow->author_by_email($auth->email)) {
                 $ov->estop(null);
-                $ov->msg_at("authors:" . ($n + 1), $this->conf->_("“%s” is not a valid email address.", htmlspecialchars($auth->email)), MessageSet::ESTOP);
+                $ov->msg_at("authors:" . ($n + 1), "<0>Invalid email address ‘{$auth->email}’", MessageSet::ESTOP);
             }
         }
         if ($msg1) {
-            $ov->warning("You may have entered an email address in the wrong place. The first author field is for email, the second for name, and the third for affiliation.");
+            $ov->warning("<0>You may have entered an email address in the wrong place. The first author field is for email, the second for name, and the third for affiliation");
         }
         if ($msg2) {
-            $ov->warning("Please enter a name and optional email address for every author.");
+            $ov->warning("<0>Please enter a name and optional email address for every author");
         }
 
         if ($ov->value_count() === 2) {
             foreach (explode("\n", $ov->data_by_index(1)) as $email) {
                 if (!validate_email($email)
                     && $ov->prow->conflict_type_by_email($email) < CONFLICT_AUTHOR) {
-                    $ov->estop($this->conf->_("“%s” is not a valid email address.", htmlspecialchars($email)));
+                    $ov->estop("<0>Invalid email address ‘{$email}’");
                 }
             }
         }
@@ -82,7 +82,7 @@ class Authors_PaperOption extends PaperOption {
                 $v .= ($v === "" ? "" : "\n") . $auth->unparse_tabbed();
         }
         if ($v !== $ov->prow->authorInformation) {
-            $ps->mark_diff("authors");
+            $ps->change_at($this);
             $ps->save_paperf("authorInformation", $v);
             $ps->clear_conflict_values(CONFLICT_AUTHOR);
             foreach ($authlist as $auth) {
@@ -120,7 +120,7 @@ class Authors_PaperOption extends PaperOption {
             }
         }
     }
-    function parse_web(PaperInfo $prow, Qrequest $qreq) {
+    function parse_qreq(PaperInfo $prow, Qrequest $qreq) {
         if (isset($qreq["auemail1"]) && !isset($qreq["authors:email_1"])) {
             self::translate_qreq($qreq);
         }
@@ -160,7 +160,7 @@ class Authors_PaperOption extends PaperOption {
     }
     function parse_json(PaperInfo $prow, $j) {
         if (!is_array($j) || is_associative_array($j)) {
-            return PaperValue::make_estop($prow, $this, "Validation error.");
+            return PaperValue::make_estop($prow, $this, "<0>Validation error");
         }
         $v = $contact_lemail = [];
         foreach ($j as $i => $auj) {
@@ -171,7 +171,7 @@ class Authors_PaperOption extends PaperOption {
                 $auth = Author::make_string($auj);
                 $contact = null;
             } else {
-                return PaperValue::make_estop($prow, $this, "Validation error on author #" . ($i + 1) . ".");
+                return PaperValue::make_estop($prow, $this, "<0>Validation error on author #" . ($i + 1));
             }
             self::expand_author($auth, $prow);
             $v[] = $auth->unparse_tabbed();
@@ -235,11 +235,11 @@ class Authors_PaperOption extends PaperOption {
             . $this->editable_author_component_entry($pt, $n, "name", $au, $reqau, $ignore_diff, $readonly) . ' '
             . $this->editable_author_component_entry($pt, $n, "affiliation", $au, $reqau, $ignore_diff,$readonly);
         if (!$readonly) {
-            $t .= ' <span class="nb btnbox aumovebox"><button type="button" class="ui qx need-tooltip row-order-ui moveup" aria-label="Move up" tabindex="-1">'
+            $t .= ' <span class="nb btnbox aumovebox"><button type="button" class="ui need-tooltip row-order-ui moveup" aria-label="Move up" tabindex="-1">'
                 . Icons::ui_triangle(0)
-                . '</button><button type="button" class="ui qx need-tooltip row-order-ui movedown" aria-label="Move down" tabindex="-1">'
+                . '</button><button type="button" class="ui need-tooltip row-order-ui movedown" aria-label="Move down" tabindex="-1">'
                 . Icons::ui_triangle(2)
-                . '</button><button type="button" class="ui qx need-tooltip row-order-ui delete" aria-label="Delete" tabindex="-1">✖</button></span>';
+                . '</button><button type="button" class="ui need-tooltip row-order-ui delete" aria-label="Delete" tabindex="-1">✖</button></span>';
         }
         return $t . $pt->messages_at("authors:$n")
             . $pt->messages_at("authors:email_$n")
@@ -247,7 +247,7 @@ class Authors_PaperOption extends PaperOption {
             . $pt->messages_at("authors:affiliation_$n")
             . '</td></tr>';
     }
-    function echo_web_edit(PaperTable $pt, $ov, $reqov) {
+    function print_web_edit(PaperTable $pt, $ov, $reqov) {
         $sb = $this->conf->submission_blindness();
         $title = $pt->edit_title_html($this);
         if ($sb === Conf::BLIND_ALWAYS) {
@@ -255,7 +255,7 @@ class Authors_PaperOption extends PaperOption {
         } else if ($sb === Conf::BLIND_UNTILREVIEW) {
             $title .= ' <span class="n">(blind until review)</span>';
         }
-        $pt->echo_editable_option_papt($this, $title, ["id" => "authors"]);
+        $pt->print_editable_option_papt($this, $title, ["id" => "authors"]);
         $readonly = !$this->test_editable($ov->prow);
 
         $max_authors = (int) $this->conf->opt("maxAuthors");
@@ -284,6 +284,8 @@ class Authors_PaperOption extends PaperOption {
     }
 
     function render(FieldRender $fr, PaperValue $ov) {
-        $fr->table->render_authors($fr, $this);
+        if ($fr->table) {
+            $fr->table->render_authors($fr, $this);
+        }
     }
 }

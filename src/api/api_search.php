@@ -1,18 +1,15 @@
 <?php
 // api_search.php -- HotCRP search-related API calls
-// Copyright (c) 2008-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2022 Eddie Kohler; see LICENSE.
 
 class Search_API {
     static function search(Contact $user, Qrequest $qreq) {
         $q = $qreq->q;
-        if ($qreq->urlbase) {
-            error_log("{$user->conf->dbname}: api/search with urlbase"); // XXX
-        }
-
         if (isset($q)) {
             $q = trim($q);
-            if ($q === "(All)")
+            if ($q === "(All)") {
                 $q = "";
+            }
         } else if (isset($qreq->qa) || isset($qreq->qo) || isset($qreq->qx)) {
             $q = PaperSearch::canonical_query((string) $qreq->qa, (string) $qreq->qo, (string) $qreq->qx, $qreq->qt, $user->conf);
         } else {
@@ -51,10 +48,10 @@ class Search_API {
         $pl->parse_view($qreq->f, null);
         $response = $pl->table_html_json();
 
-        $j = ["ok" => !empty($response["fields"])] + $response;
-        foreach ($pl->message_set()->message_texts() as $m) {
-            $j["errors"][] = $m;
-        }
+        $j = [
+            "ok" => !empty($response["fields"]),
+            "message_list" => $pl->message_set()->message_list()
+        ] + $response;
         if ($j["ok"] && $qreq->session && $qreq->valid_token() && !$qreq->is_head()) {
             Session_API::setsession($user, $qreq->session);
         }
@@ -76,11 +73,10 @@ class Search_API {
         $pl = new PaperList("empty", $search);
         $pl->parse_view($qreq->f, null);
         $response = $pl->text_json();
-
-        $j = ["ok" => !empty($response), "data" => $response];
-        foreach ($pl->message_set()->message_texts() as $m) {
-            $j["errors"][] = $m;
-        }
-        return $j;
+        return [
+            "ok" => !empty($response),
+            "message_list" => $pl->message_set()->message_list(),
+            "data" => $response
+        ];
     }
 }

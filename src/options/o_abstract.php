@@ -1,6 +1,6 @@
 <?php
 // o_abstract.php -- HotCRP helper class for abstract intrinsic
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Abstract_PaperOption extends PaperOption {
     function __construct($conf, $args) {
@@ -21,7 +21,7 @@ class Abstract_PaperOption extends PaperOption {
         return (string) $ov->data();
     }
     function value_save(PaperValue $ov, PaperStatus $ps) {
-        $ps->mark_diff("abstract");
+        $ps->change_at($this);
         $ab = $ov->data();
         if ($ab === null || strlen($ab) < 16383) {
             $ps->save_paperf("abstract", $ab === "" ? null : $ab);
@@ -32,15 +32,15 @@ class Abstract_PaperOption extends PaperOption {
         }
         return true;
     }
-    function parse_web(PaperInfo $prow, Qrequest $qreq) {
+    function parse_qreq(PaperInfo $prow, Qrequest $qreq) {
         return $this->parse_json_string($prow, $qreq->abstract, PaperOption::PARSE_STRING_CONVERT | PaperOption::PARSE_STRING_TRIM);
     }
     function parse_json(PaperInfo $prow, $j) {
         return $this->parse_json_string($prow, $j, PaperOption::PARSE_STRING_TRIM);
     }
-    function echo_web_edit(PaperTable $pt, $ov, $reqov) {
+    function print_web_edit(PaperTable $pt, $ov, $reqov) {
         if ((int) $this->conf->opt("noAbstract") !== 1) {
-            $this->echo_web_edit_text($pt, $ov, $reqov, ["rows" => 5]);
+            $this->print_web_edit_text($pt, $ov, $reqov, ["rows" => 5]);
         }
     }
     function render(FieldRender $fr, PaperValue $ov) {
@@ -48,7 +48,7 @@ class Abstract_PaperOption extends PaperOption {
             $fr->table->render_abstract($fr, $this);
         } else {
             $text = $ov->prow->abstract_text();
-            if (trim($text) !== "") {
+            if ($text !== "") {
                 $fr->value = $text;
                 $fr->value_format = $ov->prow->abstract_format();
             } else if (!$this->conf->opt("noAbstract")

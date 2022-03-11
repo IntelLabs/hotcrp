@@ -1,6 +1,6 @@
 <?php
 // reviewinfo.php -- HotCRP class representing reviews
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ReviewInfo implements JsonSerializable {
     /** @var Conf */
@@ -62,56 +62,36 @@ class ReviewInfo implements JsonSerializable {
     /** @var ?int */
     public $reviewFormat;
     /** @var ?string */
-    public $tfields;
+    private $tfields;
     /** @var ?string */
-    public $sfields;
+    private $sfields;
+    /** @var ?array */
+    private $_tfields;
+    /** @var ?array */
+    private $_sfields;
     /** @var ?string */
     private $data;
+    /** @var ?object */
     private $_data;
 
+    /** @var list<null|int|string> */
+    public $fields;
+    /** @var ?list<null|false|string> */
+    private $_deaccent_fields;
+
     // scores
-    /** @var ?int */
-    public $overAllMerit;
-    /** @var ?int */
-    public $reviewerQualification;
-    /** @var ?int */
-    public $novelty;
-    /** @var ?int */
-    public $technicalMerit;
-    /** @var ?int */
-    public $interestToCommunity;
-    /** @var ?int */
-    public $longevity;
-    /** @var ?int */
-    public $grammar;
-    /** @var ?int */
-    public $likelyPresentation;
-    /** @var ?int */
-    public $suitableForShort;
-    /** @var ?int */
-    public $potential;
-    /** @var ?int */
-    public $fixability;
-    /** @var ?string */
-    public $t01;
-    /** @var ?string */
-    public $t02;
-    /** @var ?string */
-    public $t03;
-    /** @var ?string */
-    public $t04;
-    /** @var ?string */
-    public $t05;
-    /** @var ?string */
-    public $t06;
-    /** @var ?string */
-    public $t07;
-    /** @var ?string */
-    public $t08;
-    /** @var ?string */
-    public $t09;
-    /** @var ?string */
-    public $t10;
+    // These scores are loaded from the database, but exposed only in `fields`
+    private $overAllMerit;
+    private $reviewerQualification;
+    private $novelty;
+    private $technicalMerit;
+    private $interestToCommunity;
+    private $longevity;
+    private $grammar;
+    private $likelyPresentation;
+    private $suitableForShort;
+    private $potential;
+    private $fixability;
 
     // sometimes joined
     /** @var ?string */
@@ -128,6 +108,8 @@ class ReviewInfo implements JsonSerializable {
     public $roles;
     /** @var ?string */
     public $contactTags;
+    /** @var ?int */
+    public $disablement;
     /** @var ?int */
     public $lastLogin;
     /** @var ?string */
@@ -146,20 +128,16 @@ class ReviewInfo implements JsonSerializable {
     const RS_ADOPTED = 4;
     const RS_COMPLETED = 5;
 
-    /** @var array<non-empty-string,non-empty-string> */
+    /** @var array<non-empty-string,non-empty-string>
+     * @readonly */
     static public $text_field_map = [
         "paperSummary" => "t01", "commentsToAuthor" => "t02",
         "commentsToPC" => "t03", "commentsToAddress" => "t04",
         "weaknessOfPaper" => "t05", "strengthOfPaper" => "t06",
         "textField7" => "t07", "textField8" => "t08"
     ];
-    /** @var list<?non-empty-string> */
-    static private $new_text_fields = [
-        null, "paperSummary", "commentsToAuthor", "commentsToPC",
-        "commentsToAddress", "weaknessOfPaper", "strengthOfPaper",
-        "textField7", "textField8"
-    ];
-    /** @var array<non-empty-string,non-empty-string> */
+    /** @var array<non-empty-string,non-empty-string>
+     * @readonly */
     static private $score_field_map = [
         "overAllMerit" => "s01", "reviewerQualification" => "s02",
         "novelty" => "s03", "technicalMerit" => "s04",
@@ -168,7 +146,8 @@ class ReviewInfo implements JsonSerializable {
         "potential" => "s10", "fixability" => "s11"
     ];
     // see also Signature properties in PaperInfo
-    /** @var list<?non-empty-string> */
+    /** @var list<?non-empty-string>
+     * @readonly */
     static private $new_score_fields = [
         null, "overAllMerit", "reviewerQualification", "novelty",
         "technicalMerit", "interestToCommunity", "longevity", "grammar",
@@ -220,22 +199,32 @@ class ReviewInfo implements JsonSerializable {
         "external" => REVIEW_EXTERNAL, "ext" => REVIEW_EXTERNAL
     ];
     static private $type_revmap = [
-        REVIEW_EXTERNAL => "review", REVIEW_PC => "pcreview",
+        REVIEW_EXTERNAL => "review", REVIEW_PC => "optional",
         REVIEW_SECONDARY => "secondary", REVIEW_PRIMARY => "primary",
         REVIEW_META => "metareview"
     ];
 
     /** @param string $str
+     * @param bool $required
      * @return null|int|false */
-    static function parse_type($str) {
+    static function parse_type($str, $required) {
         $str = strtolower($str);
         if ($str === "review" || $str === "" || $str === "all" || $str === "any") {
             return null;
         }
-        if (str_ends_with($str, "review")) {
-            $str = substr($str, 0, $str[strlen($str) - 7] === "-" ? -7 : -6);
+        if (!$required && $str === "pc") {
+            return false;
+        }
+        if (($l = strlen($str)) > 6 && str_ends_with($str, "review")) {
+            $str = substr($str, 0, $l - ($str[$l - 6] === "-" ? 7 : 6));
         }
         return self::$type_map[$str] ?? false;
+    }
+
+    /** @param int $type
+     * @return string */
+    static function unparse_type($type) {
+        return self::$type_revmap[$type];
     }
 
     /** @param int $type
@@ -265,10 +254,11 @@ class ReviewInfo implements JsonSerializable {
         $rrow->reviewNeedsSubmit = 0;
         $rrow->reviewViewScore = -3;
         $rrow->reviewStatus = self::RS_EMPTY;
+        $rrow->fields = $user->conf->review_form()->order_array(null);
         return $rrow;
     }
 
-    private function merge(PaperInfo $prow = null, Conf $conf = null) {
+    private function incorporate(PaperInfo $prow = null, Conf $conf = null) {
         $this->conf = $conf ?? $prow->conf;
         $this->prow = $prow;
         $this->paperId = (int) $this->paperId;
@@ -319,63 +309,24 @@ class ReviewInfo implements JsonSerializable {
             $this->reviewFormat = (int) $this->reviewFormat;
         }
 
-        if ($this->overAllMerit !== null) {
-            $this->overAllMerit = (int) $this->overAllMerit;
-        }
-        if ($this->reviewerQualification !== null) {
-            $this->reviewerQualification = (int) $this->reviewerQualification;
-        }
-        if ($this->novelty !== null) {
-            $this->novelty = (int) $this->novelty;
-        }
-        if ($this->technicalMerit !== null) {
-            $this->technicalMerit = (int) $this->technicalMerit;
-        }
-        if ($this->interestToCommunity !== null) {
-            $this->interestToCommunity = (int) $this->interestToCommunity;
-        }
-        if ($this->longevity !== null) {
-            $this->longevity = (int) $this->longevity;
-        }
-        if ($this->grammar !== null) {
-            $this->grammar = (int) $this->grammar;
-        }
-        if ($this->likelyPresentation !== null) {
-            $this->likelyPresentation = (int) $this->likelyPresentation;
-        }
-        if ($this->suitableForShort !== null) {
-            $this->suitableForShort = (int) $this->suitableForShort;
-        }
-        if ($this->potential !== null) {
-            $this->potential = (int) $this->potential;
-        }
-        if ($this->fixability !== null) {
-            $this->fixability = (int) $this->fixability;
-        }
-        if (isset($this->tfields) && ($x = json_decode($this->tfields, true))) {
-            foreach ($x as $k => $v) {
-                $this->$k = $v;
-            }
-        }
-        if (isset($this->sfields) && ($x = json_decode($this->sfields, true))) {
-            foreach ($x as $k => $v) {
-                $this->$k = $v;
+        $rform = $this->conf->review_form();
+        $this->fields = $rform->order_array(null);
+        $sfields = isset($this->sfields) ? json_decode($this->sfields, true) : null;
+        $tfields = isset($this->tfields) ? json_decode($this->tfields, true) : null;
+        foreach ($rform->all_fields() as $f) {
+            if ($f->main_storage) {
+                $x = $this->{$f->main_storage};
+                if ($x !== null) {
+                    $this->fields[$f->order] = $f->has_options ? (int) $x : $x;
+                }
+            } else {
+                $xfields = $f->json_storage[0] === "s" ? $sfields : $tfields;
+                $this->fields[$f->order] = $xfields[$f->json_storage] ?? null;
             }
         }
 
         if ($this->roles !== null) {
             $this->roles = (int) $this->roles;
-        }
-    }
-
-    function upgrade_sversion() {
-        if ($this->conf->sversion < 175) {
-            foreach (self::$text_field_map as $kmain => $kjson) {
-                if (property_exists($this, $kmain) && !isset($this->$kjson)) {
-                    $this->$kjson = $this->$kmain;
-                    unset($this->$kmain);
-                }
-            }
         }
     }
 
@@ -386,23 +337,28 @@ class ReviewInfo implements JsonSerializable {
         '@phan-var ?ReviewInfo $rrow';
         if ($rrow) {
             $prow = $prowx instanceof PaperInfoSet ? $prowx->get((int) $rrow->paperId) : $prowx;
-            $rrow->merge($prow, $conf);
+            $rrow->incorporate($prow, $conf);
         }
         return $rrow;
     }
 
+    /** @param ?list<ReviewField> $scores
+     * @return string */
     static function review_signature_sql(Conf $conf, $scores = null) {
         $t = "r.reviewId, ' ', r.contactId, ' ', r.reviewToken, ' ', r.reviewType, ' ', r.reviewRound, ' ', r.requestedBy, ' ', r.reviewBlind, ' ', r.reviewModified, ' ', coalesce(r.reviewSubmitted,0), ' ', coalesce(r.reviewAuthorSeen,0), ' ', r.reviewOrdinal, ' ', r.timeDisplayed, ' ', r.timeApprovalRequested, ' ', r.reviewNeedsSubmit, ' ', r.reviewViewScore";
-        foreach ($scores ?? [] as $fid) {
-            if (($f = $conf->review_field($fid)) && $f->main_storage)
-                $t .= ", ' " . $f->short_id . "=', " . $f->id;
+        foreach ($scores ?? [] as $f) {
+            if ($f->order && $f->main_storage)
+                $t .= ", ' {$f->order}=', {$f->main_storage}";
         }
         return "group_concat($t order by r.reviewId)";
     }
 
-    /** @return ReviewInfo */
+    /** @param string $signature
+     * @return ReviewInfo */
     static function make_signature(PaperInfo $prow, $signature) {
         $rrow = new ReviewInfo;
+        $rrow->conf = $prow->conf;
+        $rrow->prow = $prow;
         $rrow->paperId = $prow->paperId;
         $vals = explode(" ", $signature);
         $rrow->reviewId = (int) $vals[0];
@@ -420,14 +376,16 @@ class ReviewInfo implements JsonSerializable {
         $rrow->timeApprovalRequested = (int) $vals[12];
         $rrow->reviewNeedsSubmit = (int) $vals[13];
         $rrow->reviewViewScore = (int) $vals[14];
-        for ($i = 15; isset($vals[$i]); ++$i) {
-            $eq = strpos($vals[$i], "=");
-            $f = self::field_info(substr($vals[$i], 0, $eq));
-            $fid = $f->id;
-            $rrow->$fid = (int) substr($vals[$i], $eq + 1);
-            $prow->_mark_has_score($fid);
+        $rrow->reviewStatus = $rrow->compute_review_status();
+        if (isset($vals[15])) {
+            $rrow->fields = $prow->conf->review_form()->order_array(null);
+            for ($i = 15; isset($vals[$i]); ++$i) {
+                $eq = strpos($vals[$i], "=");
+                $order = intval(substr($vals[$i], 0, $eq));
+                $rrow->fields[$order] = (int) substr($vals[$i], $eq + 1);
+                $prow->_mark_has_review_field_order($order);
+            }
         }
-        $rrow->merge($prow, $prow->conf);
         return $rrow;
     }
 
@@ -576,19 +534,74 @@ class ReviewInfo implements JsonSerializable {
     /** @return int */
     function view_score() {
         if ($this->reviewViewScore === self::VIEWSCORE_RECOMPUTE) {
-            assert($this->prow);
+            assert(!!$this->prow);
             $this->reviewViewScore = $this->prow->conf->review_form()->nonempty_view_score($this);
         }
         return $this->reviewViewScore;
     }
 
 
+    /** @param bool $has_options
+     * @return array */
+    function fstorage($has_options) {
+        if ($has_options && $this->_sfields === null) {
+            $this->_sfields = json_decode($this->sfields ?? "{}", true) ?? [];
+        } else if (!$has_options && $this->_tfields === null) {
+            $this->_tfields = json_decode($this->tfields ?? "{}", true) ?? [];
+        }
+        return $has_options ? $this->_sfields : $this->_tfields;
+    }
+
+
     /** @return bool */
     function has_nonempty_field(ReviewField $f) {
         return $f->test_exists($this)
-            && ($x = $this->{$f->id} ?? null) !== null
+            && ($x = $this->fields[$f->order]) !== null
             && $x !== ""
-            && (!$f->has_options || (int) $x !== 0);
+            && (!$f->has_options || $x !== 0);
+    }
+
+    /** @param string|ReviewField $field
+     * @return null|int|string */
+    function fval($field) {
+        $f = is_string($field) ? $this->conf->review_field($field) : $field;
+        return $f && $f->order ? $this->fields[$f->order] : null;
+    }
+
+    /** @param ReviewFieldInfo $finfo
+     * @return null|int|string */
+    function finfoval($finfo) {
+        if ($finfo->main_storage) {
+            $v = $this->{$finfo->main_storage};
+            if ($finfo->has_options && $v !== null) {
+                $v = intval($v);
+            }
+            return $v;
+        } else {
+            return ($this->fstorage($finfo->has_options))[$finfo->json_storage] ?? null;
+        }
+    }
+
+    /** @param ReviewFieldInfo $finfo
+     * @param null|int|string $v */
+    function set_finfoval($finfo, $v) {
+        if ($finfo->main_storage) {
+            $this->{$finfo->main_storage} = $v;
+        }
+        if ($finfo->json_storage) {
+            $this->fstorage($finfo->has_options);
+            $k = $finfo->has_options ? "_sfields" : "_tfields";
+            if ($v === null) {
+                unset($this->$k[$finfo->json_storage]);
+            } else {
+                $this->$k[$finfo->json_storage] = $v;
+            }
+        }
+        if ($this->fields !== null
+            && ($f = $this->conf->review_form()->field($finfo->short_id))
+            && $f->order) {
+            $this->fields[$f->order] = $v;
+        }
     }
 
     /** @return array<string,ReviewField> */
@@ -613,6 +626,7 @@ class ReviewInfo implements JsonSerializable {
         $this->email = $c->email;
         $this->roles = $c->roles;
         $this->contactTags = $c->contactTags;
+        $this->disablement = $c->disablement;
         $this->nameAmbiguous = false;
         foreach ($assigned as $pc) {
             if ($pc->firstName === $c->firstName && $pc->lastName === $c->lastName) {
@@ -641,55 +655,31 @@ class ReviewInfo implements JsonSerializable {
             } else if (($short_id = self::$score_field_map[$id] ?? null)) {
                 $m = new ReviewFieldInfo($id, $short_id, true, $id, null);
             }
-            self::$field_info_map[$id] = $m;
+            if ($m) {
+                self::$field_info_map[$m->id] = self::$field_info_map[$m->short_id] = $m;
+            } else {
+                self::$field_info_map[$id] = $m;
+            }
         }
         return $m;
     }
 
-    /** @return bool */
-    function field_match_pregexes($reg, $field) {
-        $data = $this->$field;
-        $field_deaccent = $field . "_deaccent";
-        if (!isset($this->$field_deaccent)) {
+    /** @param ?TextPregexes $reg
+     * @param int $order
+     * @return bool */
+    function field_match_pregexes($reg, $order) {
+        $data = $this->fields[$order];
+        if (!isset($this->_deaccent_fields[$order])) {
+            if (!isset($this->_deaccent_fields)) {
+                $this->_deaccent_fields = $this->conf->review_form()->order_array(null);
+            }
             if (is_usascii($data)) {
-                $this->$field_deaccent = false;
+                $this->_deaccent_fields[$order] = false;
             } else {
-                $this->$field_deaccent = UnicodeHelper::deaccent($data);
+                $this->_deaccent_fields[$order] = UnicodeHelper::deaccent($data);
             }
         }
-        return Text::match_pregexes($reg, $data, $this->$field_deaccent);
-    }
-
-    function unparse_sfields() {
-        $data = [];
-        foreach (get_object_vars($this) as $k => $v) {
-            if (strlen($k) === 3
-                && $k[0] === "s"
-                && (int) $v !== 0
-                && ($n = cvtint(substr($k, 1))) >= self::MIN_SFIELD)
-                $data[$k] = (int) $v;
-        }
-        return empty($data) ? null : json_encode_db($data);
-    }
-
-    function unparse_tfields() {
-        $data = [];
-        foreach (get_object_vars($this) as $k => $v) {
-            if (strlen($k) === 3
-                && $k[0] === "t"
-                && $v !== null
-                && $v !== "")
-                $data[$k] = $v;
-        }
-        if (empty($data)) {
-            return null;
-        } else {
-            $json = json_encode_db($data);
-            if ($json === null) {
-                error_log("{$this->conf->dbname}: review #{$this->paperId}/{$this->reviewId}: text fields cannot be converted to JSON");
-            }
-            return $json;
-        }
+        return Text::match_pregexes($reg, $data, $this->_deaccent_fields[$order]);
     }
 
 
@@ -745,13 +735,6 @@ class ReviewInfo implements JsonSerializable {
         } else {
             return null;
         }
-    }
-
-    /** @param int|Contact $user
-     * @return ?int
-     * @deprecated */
-    function rating_of_user($user) {
-        return $this->rating_by_rater($user);
     }
 
     /** @param int $rating
@@ -840,41 +823,21 @@ class ReviewInfo implements JsonSerializable {
         return $s === "{}" ? null : $s;
     }
 
-    function acceptor() {
-        if ($this->_data === null) {
-            $this->_load_data();
-        }
-        if (!isset($this->_data->acceptor)) {
-            $text = base48_encode(random_bytes(10));
-            $this->_data->acceptor = (object) ["text" => $text, "at" => Conf::$now];
-            $this->_save_data();
-        }
-        return $this->_data->acceptor;
-    }
-
-    function acceptor_is($text) {
-        if ($this->_data === null) {
-            $this->_load_data();
-        }
-        return isset($this->_data->acceptor)
-            && $this->_data->acceptor->text === $text;
-    }
-
-    function delete_acceptor() {
-        if ($this->_data === null) {
-            $this->_load_data();
-        }
-        if (isset($this->_data->acceptor) && $this->_data->acceptor->at) {
-            $this->_data->acceptor->at = 0;
-            $this->_save_data();
-        }
-    }
-
+    #[\ReturnTypeWillChange]
     function jsonSerialize() {
-        $j = ["confid" => $this->conf->dbname];
+        $j = ["confid" => $this->conf->dbname, ];
         foreach (get_object_vars($this) as $k => $v) {
-            if ($k !== "conf" && $k !== "prow" && $k !== "_data") {
+            if ($k[0] !== "_"
+                && $v !== null
+                && !in_array($k, ["conf", "prow", "sfields", "tfields", "fields"])
+                && !isset(self::$score_field_map[$k])) {
                 $j[$k] = $v;
+            }
+        }
+        if ($this->fields !== null) {
+            foreach ($this->conf->all_review_fields() as $f) {
+                if ($this->fields[$f->order] !== null)
+                    $j[$f->uid()] = $this->fields[$f->order];
             }
         }
         return $j;

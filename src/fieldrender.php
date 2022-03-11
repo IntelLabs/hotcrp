@@ -1,6 +1,6 @@
 <?php
 // fieldrender.php -- HotCRP helper class for multi-format messages
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class FieldRender {
     /** @var ?Contact */
@@ -22,10 +22,11 @@ class FieldRender {
     const CFPAGE = 2;
     const CFLIST = 4;
     const CFCOLUMN = 8;
-    const CFLISTSUGGEST = 16;
+    const CFSUGGEST = 16;
     const CFCSV = 32;
     const CFMAIL = 64;
-    const CFVERBOSE = 128;
+    const CFFORM = 128;
+    const CFVERBOSE = 256;
 
     const CTEXT = 0;
     const CPAGE = 3;

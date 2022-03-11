@@ -1,8 +1,58 @@
 <?php
 // index.php -- HotCRP home page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 require_once("lib/navigation.php");
+
+/** @param Contact $user
+ * @param Qrequest $qreq
+ * @param string $group
+ * @param ComponentSet $pc */
+function pc_call_requests($user, $qreq, $group, $pc) {
+    $pc->add_xt_checker([$qreq, "xt_allow"]);
+    $reqgj = [];
+    $not_allowed = false;
+    foreach ($pc->members($group, "request_function") as $gj) {
+        if ($pc->allowed($gj->allow_request_if ?? null, $gj)) {
+            $reqgj[] = $gj;
+        } else {
+            $not_allowed = true;
+        }
+    }
+    if ($not_allowed && $qreq->is_post() && !$qreq->valid_token()) {
+        $user->conf->error_msg($user->conf->_i("badpost"));
+    }
+    foreach ($reqgj as $gj) {
+        if ($pc->call_function($gj, $gj->request_function, $gj) === false) {
+            break;
+        }
+    }
+}
+
+/** @param Contact $user
+ * @param Qrequest $qreq
+ * @param NavigationState $nav */
+function handle_request($user, $qreq, $nav) {
+    try {
+        $pc = $user->conf->page_components($user);
+        $pagej = $pc->get($nav->page);
+        if (!$pagej || str_starts_with($pagej->name, "__")) {
+            Multiconference::fail(404, "Page not found.");
+        } else if ($user->is_disabled() && !($pagej->allow_disabled ?? false)) {
+            Multiconference::fail(403, "Your account is disabled.");
+        } else {
+            $pc->set_root($pagej->group)->set_context_args([$user, $qreq, $pc]);
+            pc_call_requests($user, $qreq, $pagej->group, $pc);
+            $pc->print_group($pagej->group, true);
+        }
+    } catch (Redirection $redir) {
+        $user->conf->redirect($redir->url);
+    } catch (JsonCompletion $jc) {
+        $jc->result->emit($qreq->valid_token());
+    } catch (PageCompletion $pc) {
+    }
+}
+
 $nav = Navigation::get();
 
 // handle `/u/USERINDEX/`
@@ -11,54 +61,30 @@ if ($nav->page === "u") {
     if ($unum !== false && ctype_digit($unum)) {
         if (!$nav->shift_path_components(2)) {
             // redirect `/u/USERINDEX` => `/u/USERINDEX/`
-            Navigation::redirect($nav->server . $nav->base_path . "u/" . $unum . "/" . $nav->query);
+            Navigation::redirect_absolute("{$nav->server}{$nav->base_path}u/{$unum}/{$nav->query}");
         }
     } else {
         // redirect `/u/XXXX` => `/`
-        Navigation::redirect($nav->server . $nav->base_path . $nav->query);
-    }
-}
-
-function gx_call_requests(Conf $conf, Contact $user, Qrequest $qreq, $group, GroupedExtensions $gx) {
-    $gx->add_xt_checker([$qreq, "xt_allow"]);
-    $reqgj = [];
-    $not_allowed = false;
-    foreach ($gx->members($group, "request_function") as $gj) {
-        if ($gx->allowed($gj->allow_request_if ?? null, $gj)) {
-            $reqgj[] = $gj;
-        } else {
-            $not_allowed = true;
-        }
-    }
-    if ($not_allowed && $qreq->is_post() && !$qreq->valid_token()) {
-        $conf->msg($conf->_i("badpost"), 2);
-    }
-    foreach ($reqgj as $gj) {
-        if ($gx->call_function($gj->request_function, $gj) === false) {
-            break;
-        }
+        Navigation::redirect_absolute("{$nav->server}{$nav->base_path}{$nav->query}");
     }
 }
 
 // handle special pages
-if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "stylesheets") {
+if ($nav->page === "api") {
+    require_once("src/init.php");
+    API_Page::go_nav($nav, Conf::$main);
+} else if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "stylesheets") {
     $_GET["file"] = $nav->page . $nav->path;
-    include("cacheable.php");
-} else if ($nav->page === "api" || $nav->page === "cacheable" || $nav->page === "scorechart") {
-    include("{$nav->page}.php");
+    include("src/pages/p_cacheable.php");
+    Cacheable_Page::go_nav($nav);
+} else if ($nav->page === "cacheable") {
+    include("src/pages/p_cacheable.php");
+    Cacheable_Page::go_nav($nav);
+} else if ($nav->page === "scorechart") {
+    include("src/pages/p_scorechart.php");
+    Scorechart_Page::go_param($_GET);
 } else {
-    require_once("src/initweb.php");
-    $gx = $Conf->page_partials($Me);
-    $pagej = $gx->get($nav->page);
-    if (!$pagej || str_starts_with($pagej->name, "__")) {
-        header("HTTP/1.0 404 Not Found");
-    } else if ($Me->is_disabled() && !($pagej->allow_disabled ?? false)) {
-        header("HTTP/1.0 403 Forbidden");
-    } else if (isset($pagej->render_php)) {
-        include($pagej->render_php);
-    } else {
-        $gx->set_root($pagej->group)->set_context_args([$Me, $Qreq, $gx]);
-        gx_call_requests($Conf, $Me, $Qreq, $pagej->group, $gx);
-        $gx->render_group($pagej->group, true);
-    }
+    require_once("src/init.php");
+    initialize_request();
+    handle_request(Contact::$main_user, Qrequest::$main_request, $nav);
 }

@@ -1,10 +1,10 @@
 <?php
 // formulas/f_reviewround.php -- HotCRP helper class for formula expressions
-// Copyright (c) 2009-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class ReviewRound_Fexpr extends Fexpr {
     function __construct() {
-        $this->_format = self::FROUND;
+        $this->set_format(Fexpr::FROUND);
     }
     function inferred_index() {
         return Fexpr::IDX_PC;

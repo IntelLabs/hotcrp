@@ -2,7 +2,7 @@
 // Systematically downgrade a current HotCRP database
 // into a version at schema version 11 (commit b0054f80185d624597d5bbbec0f2eafc73afe69b)
 
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/init.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/init.php");
 
 $arg = getopt("hn:", array("help", "name:"));
 if (isset($arg["h"]) || isset($arg["help"])) {
@@ -89,10 +89,10 @@ $Conf->qe("alter table PaperComment change `comment` `comment` mediumtext");
 $Conf->qe("alter table PaperComment add `forReviewers` tinyint(1) NOT NULL DEFAULT '0'");
 $Conf->qe("alter table PaperComment add `forAuthors` tinyint(1) NOT NULL DEFAULT '0'");
 $Conf->qe("alter table PaperComment add `blind` tinyint(1) NOT NULL DEFAULT '1'");
-$Conf->qe("update PaperComment set forAuthors=1 where (commentType&" . COMMENTTYPE_VISIBILITY . ")=" . COMMENTTYPE_AUTHOR);
-$Conf->qe("update PaperComment set forAuthors=2 where (commentType&" . COMMENTTYPE_VISIBILITY . ")=" . COMMENTTYPE_AUTHOR . " and (commentType&" . COMMENTTYPE_RESPONSE . ")!=0");
-$Conf->qe("update PaperComment set blind=0 where (commentType&" . COMMENTTYPE_BLIND . ")=0");
-$Conf->qe("update PaperComment set forReviewers=1 where (commentType&" . COMMENTTYPE_DRAFT . ")=0 and (commentType&" . COMMENTTYPE_VISIBILITY . ")>" . COMMENTTYPE_PCONLY);
+$Conf->qe("update PaperComment set forAuthors=1 where (commentType&" . CommentInfo::CT_VISIBILITY . ")=" . CommentInfo::CT_AUTHOR);
+$Conf->qe("update PaperComment set forAuthors=2 where (commentType&" . CommentInfo::CT_VISIBILITY . ")=" . CommentInfo::CT_AUTHOR . " and (commentType&" . CommentInfo::CT_RESPONSE . ")!=0");
+$Conf->qe("update PaperComment set blind=0 where (commentType&" . CommentInfo::CT_BLIND . ")=0");
+$Conf->qe("update PaperComment set forReviewers=1 where (commentType&" . CommentInfo::CT_DRAFT . ")=0 and (commentType&" . CommentInfo::CT_VISIBILITY . ")>" . CommentInfo::CT_PCONLY);
 $Conf->qe("alter table PaperComment drop column `commentType`");
 $Conf->qe("alter table PaperComment drop column `replyTo`");
 $Conf->qe("alter table PaperComment drop column `paperStorageId`");
@@ -266,7 +266,7 @@ $Conf->qe("CREATE TABLE `ReviewFormOptions` (
 $got_fields = [];
 foreach ($Conf->review_form()->all_fields() as $f) {
     $Conf->qe("insert into ReviewFormField values (?,?,?,?,?,?,?)",
-              $f->id, $f->name, $f->description, $f->display_order,
+              $f->id, $f->name, $f->description, $f->order,
               (int) $f->display_space,
               $f->view_score >= VIEWSCORE_AUTHORDEC ? 1 : 0,
               $f->option_letter ? : 0);

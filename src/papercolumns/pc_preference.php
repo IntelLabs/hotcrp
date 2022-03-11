@@ -1,21 +1,29 @@
 <?php
 // pc_preference.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Preference_PaperColumn extends PaperColumn {
-    private $editable;
+    /** @var bool */
+    private $editable = false;
     /** @var Contact */
     private $viewer;
     /** @var Contact */
     private $user;
+    /** @var bool */
     private $not_me;
+    /** @var bool */
     private $show_conflict;
+    /** @var string */
     private $prefix;
+    /** @var bool */
     private $secondary_sort_topic_score = false;
+    /** @var ScoreInfo */
     private $statistics;
+    /** @var ?ScoreInfo */
     private $override_statistics;
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
+        $this->override = PaperColumn::OVERRIDE_IFEMPTY;
         if (isset($cj->user)) {
             $this->user = $conf->pc_member_by_email($cj->user);
         }
@@ -25,7 +33,7 @@ class Preference_PaperColumn extends PaperColumn {
         $this->statistics = new ScoreInfo;
     }
     function add_decoration($decor) {
-        if ($decor === "topicsort") {
+        if ($decor === "topicscore" || $decor === "topicsort") {
             $this->secondary_sort_topic_score = true;
             return $this->__add_decoration($decor);
         } else if ($decor === "edit") {
@@ -37,6 +45,7 @@ class Preference_PaperColumn extends PaperColumn {
     }
     function mark_editable() {
         $this->editable = true;
+        $this->override = PaperColumn::OVERRIDE_BOTH;
         $this->className = "pl_editrevpref";
     }
     function prepare(PaperList $pl, $visible) {
@@ -133,9 +142,8 @@ class Preference_PaperColumn extends PaperColumn {
             if ($this->not_me) {
                 $iname .= "u" . $this->user->contactId;
             }
-            $t = '<input name="' . $iname . '" class="uikd uich revpref" value="'
-                . ($pv_exists ? unparse_preference($pv) : "")
-                . '" type="text" size="4" tabindex="2" placeholder="0" inputmode="numeric">';
+            $pvt = $pv_exists ? unparse_preference($pv) : "";
+            $t = "<input name=\"{$iname}\" class=\"uikd uich revpref\" value=\"{$pvt}\" type=\"text\" size=\"4\" tabindex=\"2\" placeholder=\"0\">";
             if ($has_conflict && $this->show_conflict) {
                 $t .= " " . review_type_icon(-1);
             }
@@ -151,7 +159,7 @@ class Preference_PaperColumn extends PaperColumn {
             && !$pl->user->can_view_preference($row)
             && $t !== "") {
             $tag = $this->as_row ? "div" : "span";
-            $t = "<$tag class=\"fx5\">" . $t . "</$tag>";
+            $t = "<{$tag} class=\"fx5\">{$t}</{$tag}>";
             if (!$this->override_statistics) {
                 $this->override_statistics = clone $this->statistics;
             }
@@ -194,7 +202,7 @@ class Preference_PaperColumn extends PaperColumn {
         if ($this->override_statistics) {
             $tt = $this->unparse_statistic($this->override_statistics, $stat);
             if ($t !== $tt) {
-                $t = '<span class="fn5">' . $t . '</span><span class="fx5">' . $tt . '</span>';
+                $t = "<span class=\"fn5\">{$t}</span><span class=\"fx5\">{$tt}</span>";
             }
         }
         return $t;
@@ -207,14 +215,22 @@ class Preference_PaperColumn extends PaperColumn {
         $rs = [];
         foreach (ContactSearch::make_pc($m[1], $user)->users() as $u) {
             if ($u->roles & Contact::ROLE_PC) {
-                $fj["name"] = "pref:" . $u->email;
+                $fj["name"] = "pref:{$u->email}";
                 $fj["user"] = $u->email;
                 $rs[] = (object) $fj;
             }
         }
         if (empty($rs)) {
-            PaperColumn::column_error($user, "No PC member matches “" . htmlspecialchars($m[1]) . "”.");
+            PaperColumn::column_error($user, "<0>PC member ‘{$m[1]}’ not found");
         }
         return $rs;
+    }
+
+    static function completions(Contact $user, $xfj) {
+        if ($user->isPC && $user->can_view_preference(null)) {
+            return ["pref:<user>"];
+        } else {
+            return [];
+        }
     }
 }
