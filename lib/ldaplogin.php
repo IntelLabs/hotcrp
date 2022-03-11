@@ -52,7 +52,7 @@ class LDAPLogin {
         $qemail = addcslashes((string) $qreq->email, ',=+<>#;\"');
         $dn = $m[1] . $qemail . $m[2];
 
-		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', $dn, array("dn", "name", "mail"), 0, 1);
+		$result = ldap_search($ldapc, 'DC=corp,DC=intel,DC=com', $dn, array("dn", "cn", "mail"), 0, 1);
 
 		$entries = ldap_get_entries($ldapc, $result);
 		if ($entries['count'] == 1) {
@@ -70,9 +70,6 @@ class LDAPLogin {
 				}
 				if (isset($e["mail"]) && $e["mail"]["count"] == 1) {
 					$qreq->preferredEmail = $e["mail"][0];
-				}
-				if (isset($e["telephonenumber"]) && $e["telephonenumber"]["count"] == 1) {
-					$qreq->phone = $e["telephonenumber"][0];
 				}
 
 				ldap_close($ldapc);
