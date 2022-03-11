@@ -73,7 +73,12 @@ class LDAPLogin {
 				}
 
 				ldap_close($ldapc);
-				return ["ok" => true];
+				// return ["ok" => true];
+				return [
+					"ok" => false, "ldap" => true, "internal" => true, "email" => true,
+					"detail_html" => "First Name: " . $qreq->firstName . " Last Name: " . $qreq->lastName
+				];
+	
 			}
 			else {
 				return [
