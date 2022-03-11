@@ -1,15 +1,15 @@
 <?php
-// src/settings/s_decisionvisibility.php -- HotCRP settings > decisions page
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// settings/s_decisionvisibility.php -- HotCRP settings > decisions page
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class DecisionVisibility_SettingParser extends SettingParser {
-    static function render(SettingValues $sv) {
-        $extrev_view = $sv->curv("extrev_view");
+    static function print(SettingValues $sv) {
+        $extrev_view = $sv->vstr("extrev_view");
         $Rtext = $extrev_view ? "Reviewers" : "PC reviewers";
         $rtext = $extrev_view ? "reviewers" : "PC reviewers";
-        $accept_auview = !$sv->curv("seedec_hideau")
-            && $sv->curv("sub_blind") != Conf::BLIND_NEVER;
-        $sv->echo_radio_table("seedec", [Conf::SEEDEC_ADMIN => "Only administrators",
+        $accept_auview = !$sv->vstr("seedec_hideau")
+            && $sv->vstr("sub_blind") != Conf::BLIND_NEVER;
+        $sv->print_radio_table("seedec", [Conf::SEEDEC_ADMIN => "Only administrators",
                 Conf::SEEDEC_NCREV => "$Rtext and non-conflicted PC members",
                 Conf::SEEDEC_REV => "$Rtext and <em>all</em> PC members",
                 Conf::SEEDEC_ALL => "<b>Authors</b>, $rtext, and all PC members<span class=\"fx fn2\"> (and reviewers can see accepted submissions’ author lists)</span>"
@@ -20,44 +20,45 @@ class DecisionVisibility_SettingParser extends SettingParser {
     }
 
     static function crosscheck(SettingValues $sv) {
+        $conf = $sv->conf;
         if ($sv->has_interest("seedec")
-            && $sv->newv("seedec") == Conf::SEEDEC_ALL
-            && $sv->newv("au_seerev") == Conf::AUSEEREV_NO) {
-            $sv->warning_at(null, "Authors can see decisions, but not reviews. This is sometimes unintentional.");
+            && $conf->setting("seedec") === Conf::SEEDEC_ALL
+            && $conf->setting("au_seerev") === Conf::AUSEEREV_NO) {
+            $sv->warning_at(null, "<5>Authors can " . $sv->setting_link("see decisions", "seedec") . ", but " . $sv->setting_link("not reviews", "au_seerev") . ". This is sometimes unintentional.");
         }
 
         if (($sv->has_interest("seedec") || $sv->has_interest("sub_sub"))
-            && $sv->newv("sub_open")
-            && $sv->newv("sub_sub") > Conf::$now
-            && $sv->newv("seedec") != Conf::SEEDEC_ALL
-            && $sv->conf->fetch_value("select paperId from Paper where outcome<0 limit 1") > 0) {
-            $sv->warning_at(null, "Updates will not be allowed for rejected submissions. As a result, authors can discover information about decisions that would otherwise be hidden.");
+            && $conf->setting("sub_open")
+            && $conf->setting("sub_sub") > Conf::$now
+            && $conf->setting("seedec") !== Conf::SEEDEC_ALL
+            && $conf->fetch_value("select paperId from Paper where outcome<0 limit 1") > 0) {
+            $sv->warning_at(null, "<0>Updates will not be allowed for rejected submissions. As a result, authors can discover information about decisions that would otherwise be hidden.");
         }
 
         if ($sv->has_interest("au_seerev")
-            && $sv->newv("au_seerev") != Conf::AUSEEREV_NO
-            && !array_filter($sv->conf->review_form()->all_fields(), function ($f) {
+            && $conf->setting("au_seerev") !== Conf::AUSEEREV_NO
+            && !array_filter($conf->review_form()->all_fields(), function ($f) {
                 return $f->view_score >= VIEWSCORE_AUTHORDEC;
             })) {
-            $sv->warning_at(null, $sv->setting_link("Authors can see reviews", "au_seerev")
+            $sv->warning_at(null, "<5>" . $sv->setting_link("Authors can see reviews", "au_seerev")
                 . ", but the reviews have no author-visible fields. This is sometimes unintentional; you may want to update "
                 . $sv->setting_link("the review form", "review_form") . ".");
-            $sv->warning_at("au_seerev", false);
+            $sv->warning_at("au_seerev");
         } else if ($sv->has_interest("au_seerev")
-                   && $sv->newv("au_seerev") != Conf::AUSEEREV_NO
-                   && $sv->newv("seedec") != Conf::SEEDEC_ALL
-                   && !array_filter($sv->conf->review_form()->all_fields(), function ($f) {
+                   && $conf->setting("au_seerev") !== Conf::AUSEEREV_NO
+                   && $conf->setting("seedec") !== Conf::SEEDEC_ALL
+                   && !array_filter($conf->review_form()->all_fields(), function ($f) {
                        return $f->view_score >= VIEWSCORE_AUTHOR;
                    })
-                   && array_filter($sv->conf->review_form()->all_fields(), function ($f) {
+                   && array_filter($conf->review_form()->all_fields(), function ($f) {
                        return $f->view_score >= VIEWSCORE_AUTHORDEC;
                    })) {
-            $sv->warning_at(null, $sv->setting_link("Authors can see reviews", "au_seerev")
+            $sv->warning_at(null, "<5>" . $sv->setting_link("Authors can see reviews", "au_seerev")
                 . ", but since " . $sv->setting_link("they cannot see decisions", "seedec")
                 . ", the reviews have no author-visible fields. This is sometimes unintentional; you may want to update "
                 . $sv->setting_link("the review form", "review_form") . ".");
-            $sv->warning_at("au_seerev", false);
-            $sv->warning_at("seedec", false);
+            $sv->warning_at("au_seerev");
+            $sv->warning_at("seedec");
         }
     }
 }

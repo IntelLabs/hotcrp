@@ -1,6 +1,6 @@
 <?php
 // base.php -- HotCRP base helper functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 /** @phan-file-suppress PhanRedefineFunction */
 
 // type helpers
@@ -92,7 +92,7 @@ function cleannl($text) {
     }
     if (strpos($text, "\r") !== false) {
         $text = str_replace("\r\n", "\n", $text);
-        $text = strtr($text, "\r", "\n");
+        $text = str_replace("\r", "\n", $text);
     }
     if ($text !== "" && $text[strlen($text) - 1] !== "\n") {
         $text .= "\n";
@@ -100,19 +100,29 @@ function cleannl($text) {
     return $text;
 }
 
-function space_join(/* $str_or_array, ... */) {
-    $t = "";
-    foreach (func_get_args() as $arg) {
-        if (is_array($arg)) {
-            foreach ($arg as $x) {
-                if ($x !== "" && $x !== false && $x !== null)
-                    $t .= ($t === "" ? "" : " ") . $x;
+/** @param array $what
+ * @param string $joinword
+ * @return string */
+function commajoin($what, $joinword = "and") {
+    $what = array_values($what);
+    $c = count($what);
+    if ($c === 0) {
+        return "";
+    } else if ($c === 1) {
+        return $what[0];
+    } else if ($c === 2) {
+        return "{$what[0]} {$joinword} {$what[1]}";
+    } else {
+        $last = array_pop($what);
+        foreach ($what as &$w) {
+            if (str_ends_with($w, "</span>")) {
+                $w = substr($w, 0, -7) . ",</span>";
+            } else {
+                $w .= ",";
             }
-        } else if ($arg !== "" && $arg !== false && $arg !== null) {
-            $t .= ($t === "" ? "" : " ") . $arg;
         }
+        return join(" ", $what) . " {$joinword} {$last}";
     }
-    return $t;
 }
 
 /** @param string $str
@@ -150,7 +160,8 @@ if (!function_exists("mac_os_roman_to_utf8")) {
     }
 }
 
-/** @param string $str */
+/** @param string $str
+ * @return string */
 function convert_to_utf8($str) {
     if (substr($str, 0, 3) === "\xEF\xBB\xBF") {
         $str = substr($str, 3);
@@ -167,11 +178,31 @@ function convert_to_utf8($str) {
     }
 }
 
-/** @param string $str */
+/** @param string $str
+ * @return string */
 function simplify_whitespace($str) {
     // Replace invisible Unicode space-type characters with true spaces,
     // including control characters and DEL.
     return trim(preg_replace('/(?:[\x00-\x20\x7F]|\xC2[\x80-\xA0]|\xE2\x80[\x80-\x8A\xA8\xA9\xAF]|\xE2\x81\x9F|\xE3\x80\x80)+/', " ", $str));
+}
+
+/** @param string $text
+ * @param bool $all
+ * @return int */
+function tab_width($text, $all) {
+    $len = 0;
+    for ($i = 0; $i < strlen($text); ++$i) {
+        if ($text[$i] === ' ') {
+            ++$len;
+        } else if ($text[$i] === '\t') {
+            $len += 8 - ($len % 8);
+        } else if (!$all) {
+            break;
+        } else {
+            ++$len;
+        }
+    }
+    return $len;
 }
 
 /** @param string $prefix
@@ -181,7 +212,6 @@ function simplify_whitespace($str) {
  * @param bool $flowed
  * @return string */
 function prefix_word_wrap($prefix, $text, $indent = 18, $width = 75, $flowed = false) {
-    assert($prefix !== false); // XXX backward compat
     if (is_int($indent)) {
         $indentlen = $indent;
         $indent = str_repeat(" ", $indent);
@@ -190,17 +220,31 @@ function prefix_word_wrap($prefix, $text, $indent = 18, $width = 75, $flowed = f
     }
     $width = $width ?? 75;
 
-    $prefixlen = strlen($prefix);
-    $out = $prefixlen > $indentlen ? "$prefix\n" : $prefix;
-    $wx = $width - min($prefixlen, $indentlen);
+    $out = $prefix;
+    $wx = max($width - strlen($prefix), 0);
+    $first = true;
+    $itext = $text;
 
     while (($line = UnicodeHelper::utf8_line_break($text, $wx, $flowed)) !== false) {
-        if (strlen($out) === $prefixlen) {
+        if ($first
+            && $wx < $width - $indentlen
+            && strlen($line) > $wx
+            && strlen($line) < $width - $indentlen
+            && $out !== ""
+            && !ctype_space($out)
+            && (!$flowed || strlen(rtrim($line)) > $wx)) {
+            // `$prefix` too long for even one word: add a line break and restart
+            $out = ($flowed ? $out : rtrim($out)) . "\n";
+            $text = $itext;
+            $wx = $width - $indentlen;
+        } else if ($first) {
+            // finish first line
             $out .= $line . "\n";
             $wx = $width - $indentlen;
         } else {
             $out .= $indent . preg_replace('/\A\pZ+/u', '', $line) . "\n";
         }
+        $first = false;
     }
 
     if (!str_ends_with($out, "\n")) {
@@ -209,53 +253,76 @@ function prefix_word_wrap($prefix, $text, $indent = 18, $width = 75, $flowed = f
     return $out;
 }
 
-/** @param string $text */
+/** @param string $text
+ * @return int */
 function count_words($text) {
     return preg_match_all('/[^-\s.,;:<>!?*_~`#|]\S*/', $text);
 }
 
+/** @param mixed $x
+ * @return ?bool */
 function friendly_boolean($x) {
     if (is_bool($x)) {
         return $x;
     } else if (is_string($x) || is_int($x)) {
+        // 0, false, off, no: false; 1, true, on, yes: true
         return filter_var($x, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     } else {
         return null;
     }
 }
 
+/** @param string $varname
+ * @return int */
+function ini_get_bytes($varname, $value = null) {
+    $val = trim($value !== null ? $value : ini_get($varname));
+    $last = strlen($val) ? strtolower($val[strlen($val) - 1]) : ".";
+    /** @phan-suppress-next-line PhanParamSuspiciousOrder */
+    return (int) ceil(floatval($val) * (1 << (+strpos(".kmg", $last) * 10)));
+}
+
 
 // email and MIME helpers
 
-/** @param string $email */
+/** @param string $email
+ * @return bool */
 function validate_email($email) {
     // Allow @_.com email addresses.  Simpler than RFC822 validation.
-    if (!preg_match(':\A[-!#$%&\'*+./0-9=?A-Z^_`a-z{|}~]+@(.+)\z:', $email, $m)) {
-        return false;
-    } else if ($m[1][0] === "_") {
-        return preg_match(':\A_\.[0-9A-Za-z]+\z:', $m[1]);
+    return preg_match('/\A[-!#$%&\'*+.\/0-9=?A-Z^_`a-z{|}~]+@(?:_\.|(?:[-0-9A-Za-z]+\.)+)[0-9A-Za-z]+\z/', $email);
+}
+
+/** @param string $s
+ * @param int $pos
+ * @return ?string */
+function validate_email_at($s, $pos) {
+    // Allow @_.com email addresses.  Simpler than RFC822 validation.
+    if (preg_match('/\G[-!#$%&\'*+.\/0-9=?A-Z^_`a-z{|}~]+@(?:_\.|(?:[-0-9A-Za-z]+\.)+)[0-9A-Za-z]+(?=\z|[-,.;:()\[\]{}\s]|–|—)/', $s, $m, 0, $pos)) {
+        return $m[0];
     } else {
-        return preg_match(':\A([-0-9A-Za-z]+\.)+[0-9A-Za-z]+\z:', $m[1]);
+        return null;
     }
 }
 
-/** @param string $word */
+/** @param string $word
+ * @return string */
 function mime_quote_string($word) {
-    return '"' . preg_replace('_(?=[\x00-\x1F\\"])_', '\\', $word) . '"';
+    return '"' . preg_replace('/(?=[\x00-\x1F\\"])/', '\\', $word) . '"';
 }
 
-/** @param string $word */
+/** @param string $word
+ * @return string */
 function mime_token_quote($word) {
-    if (preg_match('_\A[^][\x00-\x20\x80-\xFF()<>@,;:\\"/?=]+\z_', $word)) {
+    if (preg_match('/\A[^][\x00-\x20\x80-\xFF()<>@,;:\\"\/?=]+\z/', $word)) {
         return $word;
     } else {
         return mime_quote_string($word);
     }
 }
 
-/** @param string $words */
+/** @param string $words
+ * @return string */
 function rfc2822_words_quote($words) {
-    if (preg_match(':\A[-A-Za-z0-9!#$%&\'*+/=?^_`{|}~ \t]*\z:', $words)) {
+    if (preg_match('/\A[-A-Za-z0-9!#$%&\'*+\/=?^_`{|}~ \t]*\z/', $words)) {
         return $words;
     } else {
         return mime_quote_string($words);
@@ -288,14 +355,20 @@ function html_id_decode($text) {
 /** @param string $text
  * @return string */
 function base64url_encode($text) {
-    return rtrim(strtr(base64_encode($text), '+/', '-_'), '=');
+    return rtrim(str_replace(["+", "/"], ["-", "_"], base64_encode($text)), "=");
 }
 
 /** @param string $text
  * @return string */
 function base64url_decode($text) {
-    return base64_decode(strtr($text, '-_', '+/'));
+    return base64_decode(str_replace(["-", "_"], ["+", "/"], $text));
 }
+
+/** @param string $text
+ * @return bool */
+ function is_base64url_string($text) {
+    return preg_match('/\A[-_A-Za-z0-9]*\z/', $text);
+ }
 
 
 // JSON encoding helpers
@@ -303,14 +376,17 @@ function base64url_decode($text) {
 if (defined("JSON_UNESCAPED_LINE_TERMINATORS")) {
     // JSON_UNESCAPED_UNICODE is only safe to send to the browser if
     // JSON_UNESCAPED_LINE_TERMINATORS is defined.
+    /** @return string */
     function json_encode_browser($x, $flags = 0) {
         return json_encode($x, $flags | JSON_UNESCAPED_UNICODE);
     }
 } else {
+    /** @return string */
     function json_encode_browser($x, $flags = 0) {
         return json_encode($x, $flags);
     }
 }
+/** @return string */
 function json_encode_db($x, $flags = 0) {
     return json_encode($x, $flags | JSON_UNESCAPED_UNICODE);
 }
@@ -419,6 +495,7 @@ function assert_callback() {
 }
 //assert_options(ASSERT_CALLBACK, "assert_callback");
 
+/** @return string */
 function debug_string_backtrace() {
     $s = preg_replace_callback('/^\#(\d+)/m', function ($m) {
         return "#" . ($m[1] - 1);
@@ -443,13 +520,45 @@ if (!function_exists("zlib_get_coding_type")) {
 // pcntl helpers
 
 if (function_exists("pcntl_wifexited") && pcntl_wifexited(0) !== null) {
+    /** @param int $status
+     * @param int $exitstatus
+     * @return bool */
     function pcntl_wifexitedwith($status, $exitstatus = 0) {
         return pcntl_wifexited($status) && pcntl_wexitstatus($status) == $exitstatus;
     }
 } else {
+    /** @param int $status
+     * @param int $exitstatus
+     * @return bool */
     function pcntl_wifexitedwith($status, $exitstatus = 0) {
         return ($status & 0xff7f) == ($exitstatus << 8);
     }
+}
+
+
+// tempdir helper
+
+/** @param string $tempdir */
+function rm_rf_tempdir($tempdir) {
+    assert(str_starts_with($tempdir, "/"));
+    exec("/bin/rm -rf " . escapeshellarg($tempdir));
+}
+
+/** @param int $mode
+ * @return string|false */
+function tempdir($mode = 0700) {
+    $dir = sys_get_temp_dir() ? : "/";
+    while (substr($dir, -1) === "/") {
+        $dir = substr($dir, 0, -1);
+    }
+    for ($i = 0; $i !== 100; $i++) {
+        $path = $dir . "/hotcrptmp" . mt_rand(0, 9999999);
+        if (mkdir($path, $mode)) {
+            register_shutdown_function("rm_rf_tempdir", $path);
+            return $path;
+        }
+    }
+    return false;
 }
 
 

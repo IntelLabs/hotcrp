@@ -1,6 +1,6 @@
 <?php
 // login.php -- HotCRP login helpers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class LoginHelper {
     /** @var bool */
@@ -29,8 +29,12 @@ class LoginHelper {
 
         // check HTTP auth
         if (!isset($_SERVER["REMOTE_USER"]) || !$_SERVER["REMOTE_USER"]) {
+            header("HTTP/1.0 401 Unauthorized");
             $conf->header("Error", "home");
-            Conf::msg_error("This site is using HTTP authentication to manage its users, but you have not provided authentication data. This usually indicates a server configuration error.");
+            $conf->feedback_msg([
+                MessageItem::error("<0>Authentication required"),
+                MessageItem::inform("<0>This site is using HTTP authentication to manage its users, but you have not provided authentication data. This usually indicates a server configuration error.")
+            ]);
             $conf->footer();
             exit;
         }
@@ -44,10 +48,14 @@ class LoginHelper {
 
         $info = self::login_info($conf, $qreq); // XXX
         if ($info["ok"]) {
-            Navigation::redirect($info["redirect"] ?? "");
+            $conf->redirect($info["redirect"] ?? "");
         } else {
+            header("HTTP/1.0 401 Unauthorized");
             $conf->header("Error", "home");
-            Conf::msg_error("This site is using HTTP authentication to manage its users, and you have provided incorrect authentication data.");
+            $conf->feedback_msg([
+                MessageItem::error("<0>Authentication error"),
+                MessageItem::inform("<0>This site is using HTTP authentication to manage its users. You have provided incorrect authentication data.")
+            ]);
             $conf->footer();
             exit;
         }
@@ -57,8 +65,10 @@ class LoginHelper {
     static private function user_lookup(Conf $conf, Qrequest $qreq) {
         // Look up the account information
         // to determine if the user is registered
-        if (!isset($qreq->email)
-            || ($qreq->email = trim($qreq->email)) === "") {
+        if (isset($qreq->email)) {
+            $qreq->email = simplify_whitespace($qreq->email);
+        }
+        if (!isset($qreq->email) || $qreq->email === "") {
             return ["ok" => false, "email" => true, "noemail" => true];
         }
         if (strpos($qreq->email, "@") === false
@@ -68,7 +78,9 @@ class LoginHelper {
             }
         }
         return $conf->user_by_email($qreq->email)
-            ?? new Contact(["email" => $qreq->email], $conf);
+            ?? Contact::make_keyed($conf, $qreq->subset_as_array(
+                "firstName", "first", "lastName", "last", "name", "email", "affiliation"
+            ));
     }
 
     static function login_info(Conf $conf, Qrequest $qreq) {
@@ -104,16 +116,14 @@ class LoginHelper {
         }
 
         // auto-create account if external login
-        if (!$user->contactId) {
-            $user = Contact::create($conf, null, $qreq->as_array(), Contact::SAVE_ANY_EMAIL);
-            if (!$user) {
-                return ["ok" => false, "internal" => true, "email" => true];
-            }
+        if (!$user->contactId
+            && !$user->store(Contact::SAVE_ANY_EMAIL)) {
+            return ["ok" => false, "internal" => true, "email" => true];
         }
 
         // if user disabled, then fail
         if (($user && $user->is_disabled())
-            || (($cdbuser = $user->contactdb_user()) && $cdbuser->is_disabled())) {
+            || (($cdbuser = $user->cdb_user()) && $cdbuser->is_disabled())) {
             return ["ok" => false, "disabled" => true, "email" => true];
         } else {
             return ["ok" => true, "user" => $user];
@@ -125,7 +135,7 @@ class LoginHelper {
         $luser = $info["user"];
 
         // mark activity
-        $xuser = $luser->contactId ? $luser : $luser->contactdb_user();
+        $xuser = $luser->contactId ? $luser : $luser->cdb_user();
         $xuser->mark_login();
 
         // store authentication
@@ -180,6 +190,7 @@ class LoginHelper {
         }
     }
 
+    /** @return bool */
     static private function check_setup_phase(Contact $user) {
         if ($user->conf->setting("setupPhase")) {
             $user->save_roles(Contact::ROLE_ADMIN, null);
@@ -193,7 +204,11 @@ class LoginHelper {
     static function check_postlogin(Contact $user, Qrequest $qreq) {
         // Check for the cookie
         if (!isset($_SESSION["testsession"]) || !$_SESSION["testsession"]) {
-            return $user->conf->msg("You appear to have disabled cookies in your browser. This site requires cookies to function.", "xmerror");
+            $user->conf->feedback_msg([
+                MessageItem::error("<0>Cookies required"),
+                MessageItem::inform("<0>You appear to have disabled cookies in your browser. This site requires cookies to function.")
+            ]);
+            return;
         }
         unset($_SESSION["testsession"]);
 
@@ -205,9 +220,9 @@ class LoginHelper {
             $where = $_SESSION["login_bounce"][1];
         } else {
             $user->save_session("freshlogin", true);
-            $where = $user->conf->hoturl("index");
+            $where = $user->conf->hoturl_raw("index");
         }
-        Navigation::redirect($where);
+        $user->conf->redirect($where);
         exit;
     }
 
@@ -221,7 +236,7 @@ class LoginHelper {
             return $user;
         }
 
-        $cdbu = $user->contactdb_user();
+        $cdbu = $user->cdb_user();
         if ($cdbu && !$cdbu->password_unset()) {
             return ["ok" => false, "email" => true, "userexists" => true, "contactdb" => true];
         } else if (!$user->password_unset()) {
@@ -229,8 +244,7 @@ class LoginHelper {
         } else if (!validate_email($qreq->email)) {
             return ["ok" => false, "email" => true, "invalidemail" => true];
         } else {
-            if (!$user->has_account_here()
-                && !($user = Contact::create($conf, null, $qreq->as_array()))) {
+            if (!$user->has_account_here() && !$user->store()) {
                 return ["ok" => false, "email" => true, "internal" => true];
             }
             $info = self::forgot_password_info($conf, $qreq, true);
@@ -256,7 +270,7 @@ class LoginHelper {
         }
 
         // ignore reset request from disabled user
-        $cdbu = $user->contactdb_user();
+        $cdbu = $user->cdb_user();
         if (!$user->has_account_here() && !$cdbu && !$create) {
             return ["ok" => false, "email" => true, "unset" => true];
         } else if (!$user->can_reset_password()) {
@@ -283,7 +297,7 @@ class LoginHelper {
         } else if ($explicit) {
             kill_session();
         }
-        $user = new Contact(null, $user->conf);
+        $user = Contact::make($user->conf);
         return $user->activate(null);
     }
 

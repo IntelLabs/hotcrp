@@ -1,6 +1,6 @@
 <?php
 // countmatcher.php -- HotCRP helper class for textual comparators
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class CountMatcher {
     /** @var int */
@@ -205,15 +205,10 @@ class CountMatcher {
             return ($this->op & 2 ? ">=" : ">") . $this->value;
         }
     }
-    /** @param string $str
-     * @return string */
-    static function flip_comparator($str) {
-        $t = new CountMatcher($str);
-        if ($t->op & 5) {
-            return self::$oparray[$t->op ^ 5] . $t->value;
-        } else {
-            return $str;
-        }
+    /** @param int $relation
+     * @return int */
+    static function flip_relation($relation) {
+        return $relation & 5 ? $relation ^ 5 : $relation;
     }
     /** @param string $str
      * @return ?int */

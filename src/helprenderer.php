@@ -1,6 +1,6 @@
 <?php
-// src/helprenderer.php -- HotCRP help renderer class
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// helprenderer.php -- HotCRP help renderer class
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class HelpRenderer extends Ht {
     /** @var Conf */
@@ -9,12 +9,12 @@ class HelpRenderer extends Ht {
     public $user;
     private $_tabletype;
     private $_rowidx;
-    /** @var GroupedExtensions */
+    /** @var ComponentSet */
     private $_help_topics;
     private $_renderers = [];
     private $_sv;
     private $_h3ids;
-    function __construct(GroupedExtensions $help_topics, Contact $user) {
+    function __construct(ComponentSet $help_topics, Contact $user) {
         $this->conf = $user->conf;
         $this->user = $user;
         $this->_help_topics = $help_topics;
@@ -81,15 +81,25 @@ class HelpRenderer extends Ht {
         $this->_rowidx = 1 - $this->_rowidx;
         return $t;
     }
+    /** @return string */
     function end_table() {
         return $this->_tabletype ? "" : "</tbody></table>\n";
     }
+    /** @param string $html
+     * @param string $page
+     * @param null|string|array $options
+     * @param array $js
+     * @return string */
     function hotlink($html, $page, $options = null, $js = []) {
         if (!isset($js["rel"])) {
             $js["rel"] = "nofollow";
         }
         return $this->conf->hotlink($html, $page, $options, $js);
     }
+    /** @param string $html
+     * @param string|array{q:string} $q
+     * @param array $js
+     * @return string */
     function search_link($html, $q = null, $js = []) {
         if ($q === null) {
             $q = $html;
@@ -99,6 +109,9 @@ class HelpRenderer extends Ht {
         }
         return $this->hotlink($html ? : htmlspecialchars($q["q"]), "search", $q, $js);
     }
+    /** @param string $html
+     * @param ?string $topic
+     * @return string */
     function help_link($html, $topic = null) {
         if ($topic === null) {
             $topic = $html;
@@ -114,6 +127,9 @@ class HelpRenderer extends Ht {
         }
         return $this->hotlink($html, "help", $topic);
     }
+    /** @param string $html
+     * @param ?string $siname
+     * @return string */
     function setting_link($html, $siname = null) {
         if ($this->user->privChair || $siname !== null) {
             $pre = $post = "";
@@ -126,8 +142,8 @@ class HelpRenderer extends Ht {
                 $pre = " (";
                 $post = ")";
             }
-            if (($si = Si::get($this->conf, $siname))) {
-                $param = $si->hoturl_param($this->conf);
+            if (($si = $this->conf->si($siname))) {
+                $param = $si->hoturl_param();
             } else if (($g = $this->_sv->canonical_group($siname))) {
                 $param = ["group" => $g];
             } else {
@@ -136,14 +152,15 @@ class HelpRenderer extends Ht {
             }
             $t = $pre . '<a href="' . $this->conf->hoturl("settings", $param);
             if (!$this->user->privChair) {
-                $t .= '" class="u need-tooltip" aria-label="This link to a settings page only works for administrators.';
+                $t .= '" class="noq need-tooltip" aria-label="This link to a settings page only works for administrators.';
             }
             return $t . '" rel="nofollow">' . $html . '</a>' . $post;
         } else {
             return '';
         }
     }
-    /** @param string|array<string,string> $q */
+    /** @param string|array<string,string> $q
+     * @return string */
     function search_form($q, $size = 20) {
         if (is_string($q)) {
             $q = ["q" => $q];
@@ -183,24 +200,28 @@ class HelpRenderer extends Ht {
     }
     /** @param string $topic
      * @param bool $top */
-    function render_group($topic, $top = false) {
-        $this->_help_topics->render_group($topic, $top);
+    function print_group($topic, $top = false) {
+        $this->_help_topics->print_group($topic, $top);
     }
+    /** @return list<object> */
     function groups() {
         return $this->_help_topics->groups();
     }
+    /** @param string $name
+     * @return ?object */
     function member($name) {
         return $this->_help_topics->get($name);
     }
 
-
+    /** @return ?string */
     function meaningful_pc_tag() {
         foreach ($this->conf->viewable_user_tags($this->user) as $tag) {
             if ($tag !== "pc")
                 return $tag;
         }
-        return false;
+        return null;
     }
+    /** @return ?string */
     function meaningful_review_round_name() {
         if ($this->user->isPC) {
             $rounds = $this->conf->round_list();
@@ -209,6 +230,6 @@ class HelpRenderer extends Ht {
                     return $rounds[$i];
             }
         }
-        return false;
+        return null;
     }
 }

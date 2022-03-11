@@ -1,53 +1,95 @@
 <?php
 // test/setup.php -- HotCRP helper file to initialize tests
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-require_once(preg_replace('/\/test\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 define("HOTCRP_OPTIONS", SiteLoader::find("test/options.php"));
 define("HOTCRP_TESTHARNESS", true);
 ini_set("error_log", "");
 ini_set("log_errors", "0");
 ini_set("display_errors", "stderr");
 ini_set("assert.exception", "1");
-require_once(SiteLoader::find("src/init.php"));
-$Conf->set_opt("disablePrintEmail", true);
-$Conf->set_opt("postfixEOL", "\n");
 
-function die_hard($message) {
-    fwrite(STDERR, $message);
-    exit(1);
-}
+require_once(SiteLoader::find("src/init.php"));
+
 
 // Record mail in MailChecker.
 class MailChecker {
+    /** @var int */
+    static public $disabled = 0;
+    /** @var bool */
     static public $print = false;
+    /** @var list<MailPreparation> */
     static public $preps = [];
+    /** @var array<string,list<array{string,string}>> */
     static public $messagedb = [];
+
+    /** @param MailPreparation $prep */
     static function send_hook($fh, $prep) {
-        $prep->landmark = "";
-        foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $trace) {
-            if (isset($trace["file"]) && preg_match(',/test\d,', $trace["file"])) {
-                if (str_starts_with($trace["file"], SiteLoader::$root)) {
-                    $trace["file"] = substr($trace["file"], strlen(SiteLoader::$root) + 1);
+        if (self::$disabled === 0) {
+            $prep->landmark = "";
+            foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $trace) {
+                if (isset($trace["file"]) && preg_match('/\/test\d/', $trace["file"])) {
+                    if (str_starts_with($trace["file"], SiteLoader::$root)) {
+                        $trace["file"] = substr($trace["file"], strlen(SiteLoader::$root) + 1);
+                    }
+                    $prep->landmark = $trace["file"] . ":" . $trace["line"];
+                    break;
                 }
-                $prep->landmark = $trace["file"] . ":" . $trace["line"];
-                break;
             }
-        }
-        self::$preps[] = $prep;
-        if (self::$print) {
-            fwrite(STDOUT, "********\n"
-                   . "To: " . join(", ", $prep->to) . "\n"
-                   . "Subject: " . str_replace("\r", "", $prep->subject) . "\n"
-                   . ($prep->landmark ? "X-Landmark: $prep->landmark\n" : "") . "\n"
-                   . $prep->body);
+            self::$preps[] = $prep;
+            if (self::$print) {
+                fwrite(STDOUT, "********\n"
+                       . "To: " . join(", ", $prep->to) . "\n"
+                       . "Subject: " . str_replace("\r", "", $prep->subject) . "\n"
+                       . ($prep->landmark ? "X-Landmark: $prep->landmark\n" : "") . "\n"
+                       . $prep->body);
+            }
         }
         return false;
     }
+
     static function check0() {
-        xassert_eqq(count(self::$preps), 0);
-        self::$preps = [];
+        self::check_match([]);
     }
+
+    /** @param string $want
+     * @param list<string> $haves */
+    static function find_best_mail_match($want, $haves) {
+        $len0 = strlen($want);
+        $best = [false, false, false];
+        $best_nbad = 1000000;
+        foreach ($haves as $i => $have) {
+            $len1 = strlen($have);
+            $pos0 = $pos1 = $line = $nbad = 0;
+            $badline = null;
+            while ($pos0 !== $len0 || $pos1 !== $len1) {
+                ++$line;
+                $epos0 = strpos($want, "\n", $pos0);
+                $epos0 = $epos0 !== false ? $epos0 + 1 : $len0;
+                $epos1 = strpos($have, "\n", $pos1);
+                $epos1 = $epos1 !== false ? $epos1 + 1 : $len1;
+                $line0 = substr($want, $pos0, $epos0 - $pos0);
+                $line1 = substr($have, $pos1, $epos1 - $pos1);
+                if (strpos($line0, "{{}}") !== false
+                    ? !preg_match('{\A' . str_replace('\\{\\{\\}\\}', ".*", preg_quote($line0)) . '\z}', $line1)
+                    : $line0 !== $line1) {
+                    $badline = $badline ?? $line;
+                    ++$nbad;
+                }
+                $pos0 = $epos0;
+                $pos1 = $epos1;
+            }
+            if ($nbad === 0) {
+                return [true, $i, false];
+            } else if ($nbad < $best_nbad && $nbad < 12) {
+                $best = [false, $i, $badline];
+            }
+        }
+        return $best;
+    }
+
+    /** @param ?string $name */
     static function check_db($name = null) {
         if ($name) {
             xassert(isset(self::$messagedb[$name]));
@@ -76,6 +118,11 @@ class MailChecker {
                 }
             }
         }
+        self::check_match($mdb);
+    }
+
+    /** @param list<string> $mdb */
+    static function check_match($mdb) {
         $haves = [];
         foreach (self::$preps as $prep) {
             $haves[] = "To: " . join(", ", $prep->to) . "\n"
@@ -85,35 +132,43 @@ class MailChecker {
         sort($haves);
         $wants = [];
         foreach ($mdb as $m) {
-            $wants[] = preg_replace('/^X-Landmark:.*?\n/m', "", $m[0]) . $m[1];
+            if (is_string($m)) {
+                $wants[] = $m;
+            } else {
+                $wants[] = preg_replace('/^X-Landmark:.*?\n/m', "", $m[0]) . $m[1];
+            }
         }
         sort($wants);
-        foreach ($wants as $i => $want) {
+        foreach ($wants as $want) {
             ++Xassert::$n;
-            $have = isset($haves[$i]) ? $haves[$i] : "";
-            if ($have === $want
-                || preg_match("=\\A" . str_replace('\\{\\{\\}\\}', ".*", preg_quote($want)) . "\\z=", $have)) {
+            list($match, $index, $badline) = self::find_best_mail_match($want, $haves);
+            if ($match) {
                 ++Xassert::$nsuccess;
-            } else {
-                fwrite(STDERR, "Mail assertion failure: " . var_export($have, true) . " !== " . var_export($want, true) . "\n");
+            } else if ($index !== false) {
+                $have = $haves[$index];
+                error_log(assert_location() . ": Mail mismatch: " . var_export($have, true) . " !== " . var_export($want, true));
                 $havel = explode("\n", $have);
-                foreach (explode("\n", $want) as $j => $wantl) {
-                    if (!isset($havel[$j])
-                        || ($havel[$j] !== $wantl
-                            && !preg_match("=\\A" . str_replace('\\{\\{\\}\\}', ".*", preg_quote($wantl, "#\"")) . "\\z=", $havel[$j]))) {
-                        fwrite(STDERR, "... line " . ($j + 1) . " differs near " . $havel[$j] . "\n"
-                               . "... expected " . $wantl . "\n");
-                        break;
-                    }
-                }
-                trigger_error("Assertion failed at " . assert_location() . "\n", E_USER_WARNING);
+                $wantl = explode("\n", $want);
+                fwrite(STDERR, "... line {$badline} differs near {$havel[$badline-1]}\n... expected {$wantl[$badline-1]}\n");
+            } else {
+                error_log(assert_location() . ": Mail not found: " . var_export($want, true));
             }
+            if ($index !== false) {
+                array_splice($haves, $index, 1);
+            }
+        }
+        foreach ($haves as $have) {
+            ++Xassert::$n;
+            error_log(assert_location() . ": Unexpected mail: " . var_export($have, true));
         }
         self::$preps = [];
     }
+
     static function clear() {
         self::$preps = [];
     }
+
+    /** @param string $text */
     static function add_messagedb($text) {
         preg_match_all('/^\*\*\*\*\*\*\*\*(.*)\n([\s\S]*?\n)(?=^\*\*\*\*\*\*\*\*|\z)/m', $text, $ms, PREG_SET_ORDER);
         foreach ($ms as $m) {
@@ -137,107 +192,59 @@ class MailChecker {
         }
     }
 }
+
 MailChecker::add_messagedb(file_get_contents(SiteLoader::find("test/emails.txt")));
-$Conf->add_hook((object) ["event" => "send_mail", "function" => "MailChecker::send_hook", "priority" => 1000]);
+Conf::$main->add_hook((object) [
+    "event" => "send_mail",
+    "function" => "MailChecker::send_hook",
+    "priority" => 1000
+]);
 
-function setup_assignments($assignments, Contact $user) {
-    if (is_array($assignments)) {
-        $assignments = join("\n", $assignments);
+
+class ProfileTimer {
+    /** @var array<string,float> */
+    public $times = [];
+    /** @var float */
+    public $last_time;
+
+    function __construct() {
+        $this->last_time = microtime(true);
     }
-    $assignset = new AssignmentSet($user, true);
-    $assignset->parse($assignments);
-    if (!$assignset->execute()) {
-        die_hard("* Failed to run assignments:\n" . join("\n", $assignset->message_texts(true)) . "\n");
+
+    /** @param string $name */
+    function mark($name) {
+        assert(!isset($this->times[$name]));
+        $t = microtime(true);
+        $this->times[$name] = $t - $this->last_time;
+        $this->last_time = $t;
     }
 }
 
-function setup_initialize_database() {
-    global $Conf, $Admin;
-    // Initialize from an empty database.
-    if (!$Conf->dblink->multi_query(file_get_contents(SiteLoader::find("src/schema.sql")))) {
-        die_hard("* Can't reinitialize database.\n" . $Conf->dblink->error . "\n");
-    }
-    do {
-        if (($result = $Conf->dblink->store_result())) {
-            $result->free();
-        } else if ($Conf->dblink->errno) {
-            break;
-        }
-    } while ($Conf->dblink->more_results() && $Conf->dblink->next_result());
-    if ($Conf->dblink->errno) {
-        die_hard("* Error initializing database.\n" . $Conf->dblink->error . "\n");
-    }
-
-    // No setup phase.
-    $Conf->qe_raw("delete from Settings where name='setupPhase'");
-    $Conf->qe_raw("insert into Settings set name='options', value=1, data='[{\"id\":1,\"name\":\"Calories\",\"abbr\":\"calories\",\"type\":\"numeric\",\"position\":1,\"display\":\"default\"}]'");
-    $Conf->load_settings();
-
-    // Contactdb.
-    if (($cdb = $Conf->contactdb())) {
-        if (!$cdb->multi_query(file_get_contents(SiteLoader::find("test/cdb-schema.sql")))) {
-            die_hard("* Can't reinitialize contact database.\n" . $cdb->error);
-        }
-        while ($cdb->more_results()) {
-            $cdb->next_result();
-        }
-        $cdb->query("insert into Conferences set dbname='" . $cdb->real_escape_string($Conf->dbname) . "'");
-    }
-
-    // Create initial administrator user.
-    $Admin = Contact::create($Conf, null, ["email" => "chair@_.com", "name" => "Jane Chair"]);
-    $Admin->save_roles(Contact::ROLE_ADMIN | Contact::ROLE_CHAIR | Contact::ROLE_PC, $Admin);
-
-    // Load data.
-    $json = json_decode(file_get_contents(SiteLoader::find("test/db.json")));
-    if (!$json) {
-        die_hard("* test/testdb.json error: " . json_last_error_msg() . "\n");
-    }
-    $us = new UserStatus($Conf->root_user());
-    $ok = true;
-    foreach ($json->contacts as $c) {
-        $us->notify = in_array("pc", $c->roles ?? []);
-        $user = $us->save($c);
-        if ($user) {
-            MailChecker::check_db("create-{$c->email}");
-        } else {
-            fwrite(STDERR, "* failed to create user $c->email\n");
-            $ok = false;
-        }
-    }
-    foreach ($json->papers as $p) {
-        $ps = new PaperStatus($Conf);
-        if (!$ps->save_paper_json($p)) {
-            $t = join("", array_map(function ($mx) {
-                return "    {$mx->field}: {$mx->message}\n";
-            }, $ps->message_list()));
-            $id = isset($p->_id_) ? "#{$p->_id_} " : "";
-            fwrite(STDERR, "* failed to create paper {$id}{$p->title}:\n" . htmlspecialchars_decode($t) . "\n");
-            $ok = false;
-        }
-    }
-    if (!$ok) {
-        exit(1);
-    }
-
-    setup_assignments($json->assignments_1, $Admin);
-}
-
-setup_initialize_database();
 
 class Xassert {
+    /** @var int */
     static public $n = 0;
+    /** @var int */
     static public $nsuccess = 0;
+    /** @var int */
     static public $nerror = 0;
-    static public $emap = array(E_ERROR => "PHP Fatal Error",
-                                E_WARNING => "PHP Warning",
-                                E_NOTICE => "PHP Notice",
-                                E_USER_ERROR => "PHP Error",
-                                E_USER_WARNING => "PHP Warning",
-                                E_USER_NOTICE => "PHP Notice");
+    /** @var int */
     static public $disabled = 0;
+    /** @var array<int,string> */
+    static public $emap = [
+        E_ERROR => "PHP Fatal Error",
+        E_WARNING => "PHP Warning",
+        E_NOTICE => "PHP Notice",
+        E_USER_ERROR => "PHP Error",
+        E_USER_WARNING => "PHP Warning",
+        E_USER_NOTICE => "PHP Notice"
+    ];
 }
 
+/** @param int $errno
+ * @param string $emsg
+ * @param string $file
+ * @param int $line */
 function xassert_error_handler($errno, $emsg, $file, $line) {
     if ((error_reporting() || $errno != E_NOTICE) && Xassert::$disabled <= 0) {
         if (($e = Xassert::$emap[$errno] ?? null)) {
@@ -253,16 +260,18 @@ function xassert_error_handler($errno, $emsg, $file, $line) {
 set_error_handler("xassert_error_handler");
 
 function assert_location() {
-    return caller_landmark("{^(?:x?assert|MailChecker::check)}");
+    return caller_landmark('/^(?:x?assert|MailChecker::check)/');
 }
 
-/** @return bool */
+/** @param mixed $x
+ * @param string $description
+ * @return bool */
 function xassert($x, $description = "") {
     ++Xassert::$n;
     if ($x) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion" . ($description ? " " . $description : "") . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": " . ($description ? : "Assertion failed"));
     }
     return !!$x;
 }
@@ -287,8 +296,7 @@ function xassert_eqq($a, $b) {
     if ($ok) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion " . var_export($a, true) . " === " . var_export($b, true)
-                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Expected " . var_export($a, true) . " === " . var_export($b, true));
     }
     return $ok;
 }
@@ -300,34 +308,52 @@ function xassert_neqq($a, $b) {
     if ($ok) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion " . var_export($a, true) . " !== " . var_export($b, true)
-                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Expected " . var_export($a, true) . " !== " . var_export($b, true));
     }
     return $ok;
 }
 
-/** @return bool */
+/** @param null|int|float|string $a
+ * @param list<null|int|float|string> $b
+ * @return bool */
+function xassert_in_eqq($a, $b) {
+    ++Xassert::$n;
+    $ok = false;
+    foreach ($b as $bx) {
+        $ok = $ok || $a === $bx;
+    }
+    if ($ok) {
+        ++Xassert::$nsuccess;
+    } else {
+        error_log(assert_location() . ": Expected " . var_export($a, true) . " \\in " . var_export($b, true));
+    }
+    return $ok;
+}
+
+/** @param null|int|float|string $a
+ * @param null|int|float|string $b
+ * @return bool */
 function xassert_eq($a, $b) {
     ++Xassert::$n;
     $ok = $a == $b;
     if ($ok) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion " . var_export($a, true) . " == " . var_export($b, true)
-                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Expected " . var_export($a, true) . " == " . var_export($b, true));
     }
     return $ok;
 }
 
-/** @return bool */
+/** @param null|int|float|string $a
+ * @param null|int|float|string $b
+ * @return bool */
 function xassert_neq($a, $b) {
     ++Xassert::$n;
     $ok = $a != $b;
     if ($ok) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion " . var_export($a, true) . " != " . var_export($b, true)
-                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Expected " . var_export($a, true) . " != " . var_export($b, true));
     }
     return $ok;
 }
@@ -366,7 +392,7 @@ function xassert_array_eqq($a, $b, $sort = false) {
     if ($problem === "") {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Array assertion failed, $problem at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Array assertion failed, {$problem}");
         if ($sort) {
             $aj = json_encode(array_slice($a, 0, 10));
             if (count($a) > 10) {
@@ -389,8 +415,7 @@ function xassert_match($a, $b) {
     if ($ok) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion " . var_export($a, true) . " ~= " . $b
-                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Expected " . var_export($a, true) . " ~= {$b}");
     }
     return $ok;
 }
@@ -409,11 +434,11 @@ function xassert_int_list_eqq($a, $b) {
     if ($ok) {
         ++Xassert::$nsuccess;
     } else {
-        trigger_error("Assertion " . $x[0] . " === " . $x[1]
-                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+        error_log(assert_location() . ": Expected {$x[0]} === {$x[1]}");
     }
     return $ok;
 }
+
 
 /** @param Contact $user
  * @param string|array $query
@@ -502,9 +527,7 @@ function xassert_assign($who, $what, $override = false) {
     $ok = $assignset->execute();
     xassert($ok);
     if (!$ok) {
-        foreach ($assignset->message_texts() as $line) {
-            fwrite(STDERR, "  $line\n");
-        }
+        fwrite(STDERR, preg_replace('/^/m', "  ", $assignset->full_feedback_text()));
     }
     return $ok;
 }
@@ -517,6 +540,34 @@ function xassert_assign_fail($who, $what, $override = false) {
     return xassert(!$assignset->execute());
 }
 
+/** @param int $maxstatus */
+function xassert_paper_status(PaperStatus $ps, $maxstatus = MessageSet::PLAIN) {
+    if (!xassert($ps->problem_status() <= $maxstatus)) {
+        foreach ($ps->problem_list() as $mx) {
+            error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
+        }
+    }
+}
+
+/** @param int $maxstatus */
+function xassert_paper_status_saved_nonrequired(PaperStatus $ps, $maxstatus = MessageSet::PLAIN) {
+    xassert($ps->save_status() !== 0);
+    if ($ps->problem_status() > $maxstatus) {
+        $asserted = false;
+        foreach ($ps->problem_list() as $mx) {
+            if ($mx->message !== "<0>Entry required"
+                && $mx->message !== "<0>Entry required to complete submission") {
+                if (!$asserted) {
+                    xassert($ps->problem_status() <= $maxstatus);
+                    $asserted = true;
+                }
+                error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
+            }
+        }
+    }
+}
+
+
 /** @param Contact $user
  * @param ?PaperInfo $prow
  * @return array */
@@ -525,7 +576,8 @@ function call_api($fn, $user, $qreq, $prow) {
         $qreq = new Qrequest("POST", $qreq);
         $qreq->approve_token();
     }
-    $jr = $user->conf->call_api($fn, $user, $qreq, $prow);
+    $uf = $user->conf->api($fn, $user, $qreq->method());
+    $jr = $user->conf->call_api_on($uf, $fn, $user, $qreq, $prow);
     return $jr->content;
 }
 
@@ -546,7 +598,7 @@ function save_review($paper, $user, $revreq, $rrow = null) {
     $prow = $user->conf->checked_paper_by_id($pid, $user);
     $rf = Conf::$main->review_form();
     $tf = new ReviewValues($rf);
-    $tf->parse_web(new Qrequest("POST", $revreq), false);
+    $tf->parse_qreq(new Qrequest("POST", $revreq), false);
     $tf->check_and_save($user, $prow, $rrow ?? fetch_review($prow, $user));
     foreach ($tf->problem_list() as $mx) {
         error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
@@ -564,28 +616,188 @@ function maybe_user($email) {
     return Conf::$main->user_by_email($email);
 }
 
-function xassert_paper_status(PaperStatus $ps, $maxstatus = MessageSet::INFO) {
-    if (!xassert($ps->problem_status() <= $maxstatus)) {
-        foreach ($ps->problem_list() as $mx) {
-            error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
-        }
+/** @param string $email
+ * @param bool $iscdb
+ * @return ?string */
+function password($email, $iscdb = false) {
+    $dblink = $iscdb ? Conf::$main->contactdb() : Conf::$main->dblink;
+    $result = Dbl::qe($dblink, "select password from ContactInfo where email=?", $email);
+    $row = Dbl::fetch_first_row($result);
+    return $row[0] ?? null;
+}
+
+/** @param string $email
+ * @param ?string $encoded_password
+ * @param bool $iscdb */
+function save_password($email, $encoded_password, $iscdb = false) {
+    $dblink = $iscdb ? Conf::$main->contactdb() : Conf::$main->dblink;
+    Dbl::qe($dblink, "update ContactInfo set password=?, passwordTime=?, passwordUseTime=? where email=?", $encoded_password, Conf::$now + 1, Conf::$now + 1, $email);
+    Conf::advance_current_time(Conf::$now + 2);
+    if ($iscdb) {
+        Conf::$main->invalidate_cdb_user_by_email($email);
     }
 }
 
-function xassert_paper_status_saved_nonrequired(PaperStatus $ps, $maxstatus = MessageSet::INFO) {
-    xassert($ps->save_status() !== 0);
-    if ($ps->problem_status() > $maxstatus) {
-        $asserted = false;
-        foreach ($ps->problem_list() as $mx) {
-            if ($mx->message !== "Entry required.") {
-                if (!$asserted) {
-                    xassert($ps->problem_status() <= $maxstatus);
-                    $asserted = true;
+
+class TestRunner {
+    static public $original_opt;
+
+    static private function setup_assignments($assignments, Contact $user) {
+        if (is_array($assignments)) {
+            $assignments = join("\n", $assignments);
+        }
+        $assignset = new AssignmentSet($user, true);
+        $assignset->parse($assignments);
+        if (!$assignset->execute()) {
+            error_log("* Failed to run assignments:\n" . $assignset->full_feedback_text());
+            exit(1);
+        }
+    }
+
+    /** @param \mysqli $dblink
+     * @param string $filename
+     * @param bool $rebuild */
+    static private function reset_schema($dblink, $filename, $rebuild = false) {
+        $s0 = file_get_contents($filename);
+        assert($s0 !== false);
+
+        $s = preg_replace('/\s*(?:--|#).*/m', "", $s0);
+        $truncates = [];
+        while (!$rebuild && preg_match('/\A\s*((?:DROP|CREATE)\C*?;)$/mi', $s, $m)) {
+            $stmt = $m[1];
+            $s = substr($s, strlen($m[0]));
+            if (preg_match('/\ACREATE\s*TABLE\s*\`(.*?)\`/i', $stmt, $m)) {
+                $truncates[] = "TRUNCATE TABLE `{$m[1]}`;\n";
+                if (stripos($stmt, "auto_increment") !== false) {
+                    $truncates[] = "ALTER TABLE `{$m[1]}` AUTO_INCREMENT=0;\n";
                 }
-                error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
+            } else if (!preg_match('/\ADROP\s*TABLE\s*(?:IF\s*EXISTS\s*|)\`.*?\`;\z/', $stmt)) {
+                $rebuild = true;
+                break;
             }
         }
+
+        if ($rebuild
+            || !preg_match('/\A\s*insert into Settings[^;]*\(\'(allowPaperOption|sversion)\',\s*(\d+)\);/mi', $s, $m)
+            || Dbl::fetch_ivalue($dblink, "select value from Settings where name=?", $m[1]) !== intval($m[2])) {
+            $rebuild = true;
+        }
+
+        if ($rebuild) {
+            $query = $s0;
+        } else {
+            $query = join("", $truncates) . $s;
+        }
+
+        $mresult = Dbl::multi_q_raw($dblink, $query);
+        $mresult->free_all();
+        if ($dblink->errno) {
+            error_log("* Error initializing database.\n{$dblink->error}");
+            exit(1);
+        }
+    }
+
+    static function reset_options($first = false) {
+        Conf::$main->qe("insert into Settings set name='options', value=1, data='[{\"id\":1,\"name\":\"Calories\",\"abbr\":\"calories\",\"type\":\"numeric\",\"order\":1,\"display\":\"default\"}]' ?U on duplicate key update data=?U(data)");
+        Conf::$main->load_settings();
+    }
+
+    static function reset_db() {
+        $conf = Conf::$main;
+        $timer = new ProfileTimer;
+        MailChecker::clear();
+
+        // Initialize from an empty database.
+        self::reset_schema($conf->dblink, SiteLoader::find("src/schema.sql"));
+        $timer->mark("schema");
+
+        // No setup phase.
+        $conf->qe_raw("delete from Settings where name='setupPhase'");
+        self::reset_options(true);
+        $timer->mark("settings");
+
+        // Contactdb.
+        if (($cdb = $conf->contactdb())) {
+            self::reset_schema($cdb, SiteLoader::find("test/cdb-schema.sql"));
+            $cdb->query("insert into Conferences set dbname='" . $cdb->real_escape_string($conf->dbname) . "'");
+            Contact::$props["demoBirthday"] = Contact::PROP_CDB | Contact::PROP_NULL | Contact::PROP_INT | Contact::PROP_IMPORT;
+        }
+        $timer->mark("contactdb");
+
+        // Create initial administrator user.
+        $user_chair = Contact::make_keyed($conf, ["email" => "chair@_.com", "name" => "Jane Chair"])->store();
+        $user_chair->save_roles(Contact::ROLE_ADMIN | Contact::ROLE_CHAIR | Contact::ROLE_PC, $user_chair);
+
+        // Load data.
+        $json = json_decode(file_get_contents(SiteLoader::find("test/db.json")));
+        if (!$json) {
+            error_log("* test/testdb.json error: " . json_last_error_msg());
+            exit(1);
+        }
+        $us = new UserStatus($conf->root_user());
+        $ok = true;
+        foreach ($json->contacts as $c) {
+            $us->notify = in_array("pc", $c->roles ?? []);
+            $user = $us->save($c);
+            if ($user) {
+                MailChecker::check_db("create-{$c->email}");
+            } else {
+                fwrite(STDERR, "* failed to create user $c->email\n");
+                $ok = false;
+            }
+        }
+        $timer->mark("users");
+        foreach ($json->papers as $p) {
+            $ps = new PaperStatus($conf);
+            if (!$ps->save_paper_json($p)) {
+                $t = join("", array_map(function ($mx) {
+                    return "    {$mx->field}: {$mx->message}\n";
+                }, $ps->message_list()));
+                $id = isset($p->_id_) ? "#{$p->_id_} " : "";
+                fwrite(STDERR, "* failed to create paper {$id}{$p->title}:\n" . htmlspecialchars_decode($t) . "\n");
+                $ok = false;
+            }
+        }
+        if (!$ok) {
+            exit(1);
+        }
+        $timer->mark("papers");
+
+        self::setup_assignments($json->assignments_1, $user_chair);
+        $timer->mark("assignment");
+        MailChecker::clear();
+    }
+
+    /** @param object $testo */
+    static function go($testo) {
+        $ro = new ReflectionObject($testo);
+        foreach ($ro->getMethods() as $m) {
+            if (str_starts_with($m->name, "test_"))
+                $testo->{$m->name}();
+        }
+    }
+
+    /** @param string $url */
+    static function set_navigation_base($url) {
+        Navigation::analyze();
+        $nav = Navigation::get();
+        $urlp = parse_url($url);
+        $nav->protocol = ($urlp["scheme"] ?? "http") . "://";
+        $nav->host = $urlp["host"] ?? "example.com";
+        $nav->server = $nav->protocol . $nav->host;
+        if (($s = $urlp["pass"] ?? null)) {
+            $nav->server .= ":{$s}";
+        }
+        if (($s = $urlp["user"] ?? null)) {
+            $nav->server .= "@{$s}";
+        }
+        if (($s = $urlp["port"] ?? null)) {
+            $nav->server .= ":{$s}";
+        }
+        $nav->base_path = $nav->base_path_relative = $nav->site_path = $nav->site_path_relative =
+            $urlp["path"] ?? "/";
     }
 }
 
-MailChecker::clear();
+TestRunner::$original_opt = $Opt;
+TestRunner::set_navigation_base("/");

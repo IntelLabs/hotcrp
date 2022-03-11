@@ -1,16 +1,15 @@
 [
     {
-        "name": "conference_abbreviation", "storage": "opt.shortName", "group": "basics",
+        "name": "conference_abbreviation", "group": "basics",
         "title": "Conference abbreviation",
         "type": "simplestring", "size": 20, "autogrow": true,
-        "require": "src/settings/s_basics.php",
-        "validator_class": "Basics_SettingParser"
+        "storage": "opt.shortName", "parser_class": "Basics_SettingParser"
     },
     {
-        "name": "conference_name", "storage": "opt.longName", "group": "basics",
+        "name": "conference_name", "group": "basics",
         "title": "Conference name", "placeholder": "(same as abbreviation)",
         "type": "simplestring", "size": 70,
-        "validator_class": "Basics_SettingParser"
+        "storage": "opt.longName", "parser_class": "Basics_SettingParser"
     },
     {
         "name": "au_seerev", "group": "decisions",
@@ -38,10 +37,33 @@
         "title": "Anonymous PC discussion",
         "type": "checkbox"
     },
+
     {
-        "name": "decisions", "group": "decisions", "hashid": "decision-types",
-        "parser_class": "Decisions_SettingParser"
+        "name": "decisions", "group": "decisions",
+        "hashid": "decision-types", "storage": "none",
+        "type": "string", "parser_class": "Decisions_SettingParser"
     },
+    {
+        "name": "outcome_map", "internal": true, "group": "decisions",
+        "storage": "dat.outcome_map", "default_value": "{\"1\":\"Accepted\",\"-1\":\"Rejected\"}"
+    },
+    {
+        "name_pattern": "decision__$", "group": "decisions",
+        "type": "object", "storage": "none", "parser_class": "Decisions_SettingParser"
+    },
+    {   "name_pattern": "decision__$__id", "internal": true   },
+    {
+        "name_pattern": "decision__$__name", "group": "decisions",
+        "title": "Decision name",
+        "type": "simplestring", "size": 35, "placeholder": "Decision name",
+        "required": true, "storage": "member.name"
+    },
+    {
+        "name_pattern": "decision__$__category", "group": "decisions",
+        "title": "Decision category", "type": "radio", "values": ["a", "r"],
+        "storage": "member.category"
+    },
+
     {
         "name": "extrev_chairreq", "group": "reviews",
         "json_name": "review_external_request",
@@ -51,24 +73,24 @@
         "json_values": ["no", "yes", "approval-required", "approval-required-potential-conflicts"]
     },
     {
-        "name": "extrev_hard", "group": "reviews",
+        "name_pattern": "extrev_hard_$", "group": "reviews",
         "title": "External reviewer hard review deadline",
-        "type": "ndate", "placeholder": "same as PC",
-        "extensible": true, "parser_class": "ReviewDeadline_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 1.1
+        "type": "date", "subtype": "explicit_none", "placeholder": "same as PC",
+        "parser_class": "ReviewDeadline_SettingParser",
+        "require": "src/settings/s_reviews.php", "order": 1.1
     },
     {
         "name": "extrev_roundtag", "group": "reviews",
         "title": "External assignment review round",
-        "type": "tag", "parser_class": "RoundSelector_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 1
+        "type": "tagselect", "parser_class": "RoundSelector_SettingParser", "default_value": "default",
+        "require": "src/settings/s_reviews.php", "order": 1
     },
     {
-        "name": "extrev_soft", "group": "reviews",
+        "name_pattern": "extrev_soft_$", "group": "reviews",
         "title": "External reviewer soft review deadline",
-        "type": "date", "placeholder": "same as PC",
-        "extensible": true, "parser_class": "ReviewDeadline_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 1
+        "type": "date", "subtype": "explicit_none", "placeholder": "same as PC",
+        "parser_class": "ReviewDeadline_SettingParser",
+        "require": "src/settings/s_reviews.php", "order": 1
     },
     {
         "name": "extrev_view", "group": "reviews",
@@ -95,117 +117,179 @@
     {
         "name": "final_soft", "group": "final",
         "title": "Final version upload deadline",
-        "type": "date", "date_backup": "final_done"
+        "type": "date"
     },
     {
-        "name": "has_topics",
-        "internal": true, "type": "checkbox"
-    },
-    {
-        "name": "lead_seerev", "group": "reviews",
+        "name": "lead_seerev",
+        "group": "reviews",
         "title": "Lead gets special access to submitted reviews",
         "type": "checkbox", "storage": "negval.lead_noseerev"
     },
     {
-        "name": "mailbody_requestreview", "group": "reviews",
+        "name": "mailbody_requestreview",
+        "group": "reviews",
         "title": "Mail template for external review requests",
-        "type": "string"
+        "type": "longstring"
     },
     {
-        "name": "review_terms", "group": "messages",
+        "name": "review_terms",
+        "group": "messages",
         "title": "Clickthrough review terms",
         "type": "htmlstring", "size": 10, "storage": "msg.clickthrough_review",
         "ifnonempty": "review_terms_exist"
     },
     {
-        "name": "submission_terms", "group": "messages",
+        "name": "submission_terms",
+        "group": "messages",
         "title": "Clickthrough submission terms",
         "type": "htmlstring", "size": 10, "storage": "msg.clickthrough_submit",
         "ifnonempty": "submission_terms_exist"
     },
     {
-        "name": "conflict_description", "group": "messages",
+        "name": "conflict_description",
+        "group": "messages",
         "title": "Definition of conflict of interest",
         "type": "htmlstring", "size": 5, "storage": "msg.conflictdef"
     },
     {
-        "name": "final_edit_message", "group": "final",
+        "name": "final_edit_message",
+        "group": "final",
         "title": "Final version edit message",
         "type": "htmlstring", "storage": "msg.finalsubmit"
     },
     {
-        "name": "home_message", "group": "messages",
+        "name": "home_message",
+        "group": "messages",
         "title": "Home page message",
         "type": "htmlstring", "storage": "msg.home"
     },
     {
-        "name": "resp_instrux", "group": "responses",
-        "title": "Authors’ response instructions",
-        "type": "htmlstring", "size": 3, "storage": "msg.resp_instrux",
-        "message_context_setting": "+resp_words",
-        "extensible": true
-    },
-    {
-        "name": "preference_instructions", "group": "messages",
+        "name": "preference_instructions",
+        "group": "messages",
         "title": "Review preference instructions",
         "type": "htmlstring", "size": 20, "storage": "msg.revprefdescription",
-        "message_context_setting": "has_topics"
+        "default_message": ["revprefdescription", "has_topics"]
     },
     {
-        "name": "submission_edit_message", "group": "messages",
+        "name": "submission_edit_message",
+        "group": "messages",
         "title": "Submission edit message",
         "type": "htmlstring", "size": 5, "storage": "msg.submit"
     },
     {
-        "name": "next_optionid", "group": "subform",
-        "internal": true
+        "name": "next_optionid", "internal": true, "type": "nonnegint"
     },
     {
-        "name": "review_terms_exist",
-        "internal": true, "storage": "ova.clickthrough_review"
+        "name": "review_terms_exist", "internal": true, "type": "checkbox",
+        "storage": "ova.clickthrough_review"
     },
     {
-        "name": "submission_terms_exist",
-        "internal": true, "storage": "ova.clickthrough_submit"
+        "name": "submission_terms_exist", "internal": true, "type": "checkbox",
+        "storage": "ova.clickthrough_submit"
     },
     {
-        "name": "conference_url", "group": "basics",
+        "name": "conference_url",
+        "group": "basics",
         "title": "Conference URL", "storage": "opt.conferenceSite",
-        "type": "urlstring", "optional": true, "size": 70, "placeholder": "N/A"
+        "type": "url", "required": false, "size": 70, "placeholder": "N/A"
     },
     {
-        "name": "site_contact_email", "group": "basics",
+        "name": "site_contact_email",
+        "group": "basics",
         "title": "Email of site contact", "storage": "opt.contactEmail",
-        "type": "emailstring", "optional": true, "size": 40, "invalid_value": "you@example.com",
-        "validator_class": "Basics_SettingParser"
+        "type": "email", "required": false, "size": 40,
+        "parser_class": "SiteContact_SettingParser", "order": 1
     },
     {
-        "name": "site_contact_name", "group": "basics",
+        "name": "site_contact_name",
+        "group": "basics",
         "title": "Name of site contact", "storage": "opt.contactName",
-        "type": "simplestring", "size": 50, "invalid_value": "Your Name"
+        "type": "simplestring", "size": 50,
+        "parser_class": "SiteContact_SettingParser", "placeholder": "(none)"
     },
     {
-        "name": "email_default_cc", "group": "basics",
+        "name": "email_default_cc",
+        "group": "basics",
         "title": "Default Cc for mail tool", "storage": "opt.emailCc",
         "type": "emailheader", "size": 80, "placeholder": "(none)"
     },
     {
-        "name": "email_default_reply_to", "group": "basics",
+        "name": "email_default_reply_to",
+        "group": "basics",
         "title": "Default Reply-To for mail tool", "storage": "opt.emailReplyTo",
         "type": "emailheader", "size": 80, "placeholder": "(none)"
     },
     {
-        "name": "options", "group": "subform", "hashid": false,
+        "name": "options",
+        "group": "subform", "hashid": false,
         "parser_class": "Options_SettingParser",
-        "type": "string", "extensible": false, "storage": "dat.options"
+        "type": "string", "storage": "dat.options"
     },
     {
-        "name": "options:version", "internal": true, "storage": "val.options"
+        "name": "options_version", "internal": true,
+        "storage": "val.options"
+    },
+
+    {
+        "name_pattern": "sf__$", "group": "subform",
+        "type": "object", "storage": "none", "parser_class": "Options_SettingParser"
+    },
+    {   "name_pattern": "sf__$__id", "internal": true   },
+    {
+        "name_pattern": "sf__$__order", "group": "subform",
+        "title": "Submission field order", "title_pattern": "‘${sv sf__$__name}’ order",
+        "type": "float", "storage": "member.order"
     },
     {
-        "name": "outcome_map", "group": "decisions",
-        "internal": true, "type": "string"
+        "name_pattern": "sf__$__name", "group": "subform",
+        "title": "Submission field name",
+        "type": "simplestring", "required": true, "storage": "member.name",
+        "placeholder": "Field name", "size": 50, "parser_class": "Options_SettingParser"
     },
+    {
+        "name_pattern": "sf__$__type", "group": "subform",
+        "title": "Submission field type", "title_pattern": "‘${sv sf__$__name}’ type",
+        "type": "simplestring", "storage": "member.type", "parser_class": "Options_SettingParser"
+    },
+    {
+        "name_pattern": "sf__$__description", "group": "subform",
+        "title": "Submission field description", "title_pattern": "‘${sv sf__$__name}’ description",
+        "type": "htmlstring", "size": 2, "autogrow": true,
+        "storage": "member.description"
+    },
+    {
+        "name_pattern": "sf__$__choices", "group": "subform",
+        "title": "Submission field choices", "title_pattern": "‘${sv sf__$__name}’ choices",
+        "type": "longstring", "size": 3, "autogrow": true,
+        "storage": "member.selector", "parser_class": "Options_SettingParser"
+    },
+    {
+        "name_pattern": "sf__$__required", "group": "subform",
+        "title": "Submission field requirement", "title_pattern": "‘${sv sf__$__name}’ requirement",
+        "type": "radio", "values": [0, 1], "storage": "member.required"
+    },
+    {
+        "name_pattern": "sf__$__display", "group": "subform",
+        "title": "Submission field display", "title_pattern": "‘${sv sf__$__name}’ display",
+        "type": "radio", "values": ["prominent", "topics", "submission"], "storage": "member.display"
+    },
+    {
+        "name_pattern": "sf__$__visibility", "group": "subform",
+        "title": "Submission field visibility", "title_pattern": "‘${sv sf__$__name}’ visibility",
+        "type": "radio", "values": ["all", "nonblind", "conflict", "review", "admin"], "storage": "member.visibility"
+    },
+    {
+        "name_pattern": "sf__$__presence", "group": "subform",
+        "title": "Submission field presence", "title_pattern": "‘${sv sf__$__name}’ presence",
+        "type": "radio", "values": ["all", "final", "custom"], "storage": "member.presence"
+    },
+    {
+        "name_pattern": "sf__$__condition", "group": "subform",
+        "title": "Submission field presence condition", "title_pattern": "‘${sv sf__$__name}’ presence condition",
+        "type": "simplestring", "size": 30, "placeholder": "Search", "storage": "member.exists_if",
+        "parser_class": "SubFieldCondition_SettingParser"
+    },
+
     {
         "name": "pc_seeall", "group": "sub",
         "title": "PC can see incomplete submissions",
@@ -242,60 +326,86 @@
         "json_values": ["no", "yes", "approval-required", "approval-private"]
     },
     {
-        "name": "pcrev_hard", "group": "reviews",
+        "name_pattern": "pcrev_hard_$", "group": "reviews",
         "title": "PC review hard deadline",
-        "type": "ndate", "placeholder": "none",
-        "extensible": true, "parser_class": "ReviewDeadline_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 1.1
+        "type": "date", "placeholder": "none",
+        "parser_class": "ReviewDeadline_SettingParser",
+        "require": "src/settings/s_reviews.php", "order": 1.1
     },
     {
-        "name": "pcrev_soft", "group": "reviews",
+        "name_pattern": "pcrev_soft_$", "group": "reviews",
         "title": "PC review deadline",
         "type": "date", "placeholder": "none",
-        "extensible": true, "parser_class": "ReviewDeadline_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 1
+        "parser_class": "ReviewDeadline_SettingParser",
+        "require": "src/settings/s_reviews.php", "order": 1
     },
     {
-        "name": "resp_active", "group": "responses",
+        "name": "response_active", "group": "responses",
         "title": "Collect authors’ responses",
-        "type": "checkbox"
+        "type": "checkbox", "storage": "resp_active"
     },
+
     {
-        "name": "resp_done", "group": "responses",
-        "title": "Response hard deadline",
-        "type": "date", "extensible": true
-    },
-    {
-        "name": "resp_grace", "group": "responses",
-        "title": "Response grace period",
-        "type": "grace", "extensible": true
-    },
-    {
-        "name": "resp_open", "group": "responses",
-        "title": "Response start time",
-        "type": "date", "extensible": true
-    },
-    {
-        "name": "resp_rounds", "hashid": false, "group": "responses",
+        "name": "responses", "group": "responses",
         "parser_class": "Responses_SettingParser",
         "type": "string"
     },
     {
-        "name": "resp_roundname", "group": "responses",
-        "title": "Response name",
-        "type": "tag", "size": 20, "internal": true, "extensible": true
+        "name_pattern": "response__$", "group": "responses",
+        "type": "object", "storage": "none", "parser_class": "Responses_SettingParser"
+    },
+    {   "name_pattern": "response__$__id", "internal": true, "type": "string"   },
+    {
+        "name_pattern": "response__$__name", "group": "responses",
+        "title": "Response name", "placeholder": "Response name",
+        "type": "tag", "required": false, "size": 20,
+        "storage": "member.name", "parser_class": "Responses_SettingParser"
     },
     {
-        "name": "resp_search", "group": "responses",
-        "title": "Response search",
-        "type": "string", "size": 40, "placeholder": "(All)", "extensible": true
+        "name_pattern": "response__$__title", "group": "responses",
+        "internal": true, "parser_class": "Responses_SettingParser"
     },
     {
-        "name": "resp_words", "group": "responses",
+        "name_pattern": "response__$__open", "group": "responses",
+        "title": "Response start time", "type": "date",
+        "title_pattern": "${sv response__$__title} start time",
+        "storage": "member.open"
+    },
+    {
+        "name_pattern": "response__$__done", "group": "responses",
+        "title": "Response hard deadline", "type": "date",
+        "title_pattern": "${sv response__$__title} hard deadline",
+        "storage": "member.done"
+    },
+    {
+        "name_pattern": "response__$__grace", "group": "responses",
+        "title": "Response grace period", "type": "grace",
+        "title_pattern": "${sv response__$__title} grace period",
+        "storage": "member.grace"
+    },
+    {
+        "name_pattern": "response__$__condition", "group": "responses",
+        "title": "Response condition",
+        "type": "simplestring", "size": 40, "placeholder": "(All)",
+        "title_pattern": "${sv response__$__title} condition",
+        "storage": "member.condition", "parser_class": "Responses_SettingParser"
+    },
+    {
+        "name_pattern": "response__$__words", "group": "responses",
         "title": "Response word limit",
-        "type": "zint", "size": 5, "placeholder": "none", "default_value": 500,
-        "extensible": true
+        "type": "int", "size": 5, "placeholder": "none", "default_value": 0,
+        "title_pattern": "${sv response__$__title} word limit",
+        "storage": "member.words"
     },
+    {
+        "name_pattern": "response__$__instructions", "group": "responses",
+        "title": "Response instructions",
+        "type": "htmlstring", "size": 3,
+        "default_message": ["resp_instrux", "response__$__words"],
+        "title_pattern": "${sv response__$__title} instructions",
+        "storage": "member.instructions", "parser_class": "Responses_SettingParser"
+    },
+
     {
         "name": "rev_blind", "group": "reviews",
         "title": "Review anonymity",
@@ -319,64 +429,88 @@
     {
         "name": "rev_roundtag", "group": "reviews",
         "title": "Assignment review round",
-        "type": "tag", "parser_class": "RoundSelector_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 1
+        "type": "tagselect", "parser_class": "RoundSelector_SettingParser", "default": "",
+        "require": "src/settings/s_reviews.php", "order": 1
     },
+
     {
-        "name": "review_form", "group": "reviewform", "hashid": false,
+        "name": "review_form", "group": "reviewform",
+        "hashid": false,
         "parser_class": "ReviewForm_SettingParser",
         "type": "string"
     },
     {
-        "name": "rf_name", "group": "reviewform", "internal": true,
-        "extensible": "word", "title": "Field name"
+        "name_pattern": "rf__$", "group": "reviewform",
+        "type": "object", "storage": "none", "parser_class": "ReviewForm_SettingParser"
+    },
+    {   "name_pattern": "rf__$__id", "internal": true   },
+    {
+        "name_pattern": "rf__$__name", "group": "reviewform",
+        "title": "Review field name",
+        "type": "simplestring", "required": true, "storage": "member.name",
+        "placeholder": "Field name", "size": 50, "parser_class": "ReviewForm_SettingParser"
     },
     {
-        "name": "rf_description", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field description", "title_pattern": "${req.rf_name_$} description"
+        "name_pattern": "rf__$__description", "group": "reviewform",
+        "title": "Review field description", "title_pattern": "‘${sv rf__$__name}’ description",
+        "type": "htmlstring", "size": 2, "autogrow": true,
+        "storage": "member.description"
     },
     {
-        "name": "rf_options", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field choices", "title_pattern": "${req.rf_name_$} choices"
+        "name_pattern": "rf__$__choices", "group": "reviewform",
+        "title": "Review field choices", "title_pattern": "‘${sv rf__$__name}’ choices",
+        "type": "longstring", "size": 3, "autogrow": true,
+        "parser_class": "ReviewForm_SettingParser", "storage": "member.options"
     },
     {
-        "name": "rf_colors", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field colors", "title_pattern": "${req.rf_name_$} colors"
+        "name_pattern": "rf__$__option_letter", "group": "reviewform", "internal": true,
+        "storage": "member.option_letter"
     },
     {
-        "name": "rf_required", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field requirement", "title_pattern": "${req.rf_name_$} requirement"
+        "name_pattern": "rf__$__colors", "group": "reviewform",
+        "title": "Review field colors", "title_pattern": "‘${sv rf__$__name}’ colors",
+        "type": "radio", "values": ["sv", "svr", "blpu", "publ", "rdpk", "pkrd", "viridisr", "viridis", "orbu", "buor", "turbo", "turbor", "catx", "none"],
+        "storage": "member.scheme"
     },
     {
-        "name": "rf_visibility", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field visibility", "title_pattern": "${req.rf_name_$} visibility"
+        "name_pattern": "rf__$__order", "group": "reviewform",
+        "title": "Review field order", "title_pattern": "‘${sv rf__$__name}’ order",
+        "type": "float", "storage": "member.order"
     },
     {
-        "name": "rf_ec", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field presence", "title_pattern": "${req.rf_name_$} presence"
+        "name_pattern": "rf__$__required", "group": "reviewform",
+        "title": "Review field requirement", "title_pattern": "‘${sv rf__$__name}’ requirement",
+        "type": "radio", "values": [0, 1], "storage": "member.required"
     },
     {
-        "name": "rf_ecs", "group": "reviewform", "internal": true,
-        "extensible": "word",
-        "title": "Field presence condition", "title_pattern": "${req.rf_name_$} presence condition"
+        "name_pattern": "rf__$__visibility", "group": "reviewform",
+        "title": "Review field visibility", "title_pattern": "‘${sv rf__$__name}’ visibility",
+        "type": "radio", "values": ["au", "pc", "audec", "admin"],
+        "storage": "member.visibility"
     },
     {
-        "name": "roundname", "group": "reviews",
-        "title": "Review round name",
-        "type": "string", "size": 12, "internal": true, "placeholder": "unnamed",
-        "extensible": true
+        "name_pattern": "rf__$__presence", "group": "reviewform",
+        "title": "Review field presence", "title_pattern": "‘${sv rf__$__name}’ presence",
+        "type": "radio", "values": ["all", "custom"], "storage": "member.presence",
+        "parser_class": "ReviewForm_SettingParser"
+    },
+    {
+        "name_pattern": "rf__$__condition", "group": "reviewform",
+        "title": "Review field presence condition", "title_pattern": "‘${sv rf__$__name}’ presence condition",
+        "type": "simplestring", "size": 30, "placeholder": "Search", "storage": "member.exists_if",
+        "parser_class": "ReviewFieldCondition_SettingParser"
+    },
+
+    {
+        "name_pattern": "roundname_$", "internal": true, "group": "reviews",
+        "title": "Review round name", "hashid": "rounds",
+        "type": "tag", "size": 12, "placeholder": "unnamed"
     },
     {
         "name": "seedec", "group": "decisions",
         "title": "Decision visibility",
         "type": "radio",
-        "values": [0, 1, 2, 3],
+        "values": [0, 1, 2, 3], "default_value": 0,
         "json_values": ["no", "pc", "yes", "unconflicted-pc"],
         "require": "src/settings/s_decisions.php"
     },
@@ -386,70 +520,57 @@
         "type": "checkbox"
     },
     {
-        "name": "sub_banal", "group": "subform",
-        "type": "checkbox", "parser_class": "Banal_SettingParser",
-        "storage": "val.sub_banal", "extensible": true
+        "name_pattern": "sub_banal_$", "group": "subform",
+        "parser_class": "Banal_SettingParser"
     },
     {
-        "name": "sub_banal_data",
-        "internal": true, "type": "string",
-        "storage": "dat.sub_banal", "extensible": true
+        "name_pattern": "sub_banal_val_$", "internal": true,
+        "type": "checkbox", "storage": "val.sub_banal_$",
+        "title": "Format checker"
     },
     {
-        "name": "sub_banal_opt",
-        "internal": true, "type": "string",
-        "storage": "opt.sub_banal", "extensible": true
+        "name_pattern": "sub_banal_data_$", "internal": true,
+        "type": "string", "storage": "dat.sub_banal_$"
     },
     {
-        "name": "sub_banal_bodyfontsize", "group": "subform",
+        "name_pattern": "sub_banal_opt_$", "internal": true,
+        "type": "string", "storage": "opt.sub_banal_$"
+    },
+    {
+        "name_pattern": "sub_banal_bodyfontsize_$", "internal": true,
         "title": "PDF format checker minimum body font size",
-        "type": "string", "size": 5, "placeholder": "N/A",
-        "storage": false, "extensible": true
+        "type": "string", "size": 5, "placeholder": "any"
     },
     {
-        "name": "sub_banal_bodylineheight", "group": "subform",
+        "name_pattern": "sub_banal_bodylineheight_$", "internal": true,
         "title": "PDF format checker minimum body line height",
-        "type": "string", "size": 5, "placeholder": "N/A",
-        "storage": false, "extensible": true
+        "type": "string", "size": 5, "placeholder": "any"
     },
     {
-        "name": "sub_banal_columns", "group": "subform",
+        "name_pattern": "sub_banal_columns_$", "internal": true,
         "title": "PDF format checker column count",
-        "type": "string", "size": 5, "placeholder": "N/A",
-        "storage": false, "extensible": true
+        "type": "string", "size": 5, "placeholder": "any"
     },
     {
-        "name": "sub_banal_pagelimit", "group": "subform",
+        "name_pattern": "sub_banal_pagelimit_$", "internal": true,
         "title": "PDF format checker page limit",
-        "type": "string", "size": 5, "placeholder": "N/A",
-        "storage": false, "extensible": true
+        "type": "string", "size": 5, "placeholder": "any"
     },
     {
-        "name": "sub_banal_papersize", "group": "subform",
+        "name_pattern": "sub_banal_papersize_$", "internal": true,
         "title": "PDF format checker paper size",
-        "type": "string", "size": 18, "placeholder": "N/A",
-        "storage": false, "extensible": true
+        "type": "string", "size": 18, "placeholder": "any"
     },
     {
-        "name": "sub_banal_textblock", "group": "subform",
+        "name_pattern": "sub_banal_textblock_$", "internal": true,
         "title": "PDF format checker text block size",
-        "type": "string", "size": 18, "placeholder": "N/A",
-        "storage": false, "extensible": true
+        "type": "string", "size": 18, "placeholder": "any"
     },
     {
-        "name": "sub_banal_unlimitedref", "group": "subform",
+        "name_pattern": "sub_banal_unlimitedref_$", "internal": true,
         "title": "PDF format checker unlimited references",
-        "type": "checkbox",
-        "storage": false, "extensible": true
+        "type": "checkbox"
     },
-    {   "name": "sub_banal_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_bodyfontsize_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_bodylineheight_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_columns_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_pagelimit_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_papersize_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_textblock_m1", "group": "final", "extensible": "override"   },
-    {   "name": "sub_banal_unlimitedref_m1", "group": "final", "extensible": "override"   },
     {
         "name": "sub_blind", "group": "submissions",
         "title": "Submission anonymity",
@@ -466,7 +587,7 @@
         "name": "sub_freeze", "group": "submissions",
         "title": "Submitters can update until the deadline",
         "type": "radio",
-        "values": [0, 1],
+        "values": [0, 1], "default_value": 0,
         "json_values": [true, false]
     },
     {
@@ -488,14 +609,12 @@
         "type": "radio",
         "values": [0, 1, 2], "default_value": 0,
         "json_values": ["required", "optional", "none"],
-        "storage": "ova.noPapers",
-        "require": "src/settings/s_subform.php"
+        "storage": "ova.noPapers"
     },
     {
         "name": "sub_open", "group": "submissions",
         "title": "Open site for submissions",
-        "type": "cdate",
-        "require": "src/settings/s_submissions.php"
+        "type": "cdate"
     },
     {
         "name": "sub_pcconf", "group": "subform",
@@ -517,37 +636,41 @@
     {
         "name": "sub_reg", "group": "submissions",
         "title": "Submission registration deadline",
-        "type": "date", "date_backup": "sub_sub", "position": 0
+        "type": "date", "order": 0
     },
     {
         "name": "sub_sub", "group": "submissions",
         "title": "Submission deadline",
-        "type": "date", "validator_class": "Submissions_SettingParser", "position": 1
+        "type": "date", "order": 1,
+        "parser_class": "Submissions_SettingParser"
     },
     {
-        "name": "sub_update",
-        "internal": true
+        "name": "sub_update", "internal": true
     },
     {
-        "name": "tag_approval", "group": "tags",
-        "title": "Approval voting tags",
-        "type": "taglist", "parser_class": "Tags_SettingParser", "size": 50, "autogrow": true
+        "name": "tag_approval", "group": "tags", "title": "Approval voting tags",
+        "type": "taglist", "size": 50, "autogrow": true,
+        "parser_class": "Tags_SettingParser"
     },
     {
-        "name": "tag_au_seerev", "group": "decisions",
-        "title": "Review visibility tags",
-        "type": "taglist", "parser_class": "Tags_SettingParser", "size": 24
+        "name": "tag_au_seerev", "group": "decisions", "title": "Review visibility tags",
+        "type": "taglist", "size": 24,
+        "parser_class": "Tags_SettingParser"
     },
     {
-        "name": "tag_chair", "group": "tags",
-        "title": "Read-only tags",
-        "type": "taglist", "parser_class": "Tags_SettingParser", "size": 50, "autogrow": true
+        "name": "tag_chair", "group": "tags", "title": "Read-only tags",
+        "type": "taglist", "subtype": "wildcard", "size": 50, "autogrow": true,
+        "parser_class": "Tags_SettingParser"
     },
     {
         "name": "tag_color", "group": "tags", "hashid": "colors-and-styles",
-        "title": "Tag colors", "title_pattern": "${capsuffix} tag colors",
-        "type": "taglist", "parser_class": "Tags_SettingParser", "size": 40, "autogrow": true,
-        "extensible": "word"
+        "title": "Tag colors",
+        "type": "taglist", "parser_class": "Tags_SettingParser"
+    },
+    {
+        "name_pattern": "tag_color_$", "group": "tags", "internal": true,
+        "title": "Tag colors", "title_pattern": "${uc $} tags",
+        "type": "taglist", "subtype": "wildcard_chair", "size": 40, "autogrow": true
     },
     {
         "name": "tag_rank", "group": "tags",
@@ -557,7 +680,7 @@
     {
         "name": "tag_rounds", "group": "reviews",
         "type": "taglist", "parser_class": "Round_SettingParser",
-        "require": "src/settings/s_reviews.php", "position": 0
+        "require": "src/settings/s_reviews.php", "order": 0
     },
     {
         "name": "tag_seeall", "group": "tags",
@@ -565,31 +688,92 @@
         "type": "checkbox"
     },
     {
-        "name": "tag_sitewide", "group": "tags",
-        "title": "Site-wide tags",
-        "type": "taglist", "parser_class": "Tags_SettingParser", "size": 50, "autogrow": true
+        "name": "tag_sitewide", "group": "tags", "title": "Site-wide tags",
+        "type": "taglist", "subtype": "wildcard", "size": 50, "autogrow": true,
+        "parser_class": "Tags_SettingParser"
     },
     {
-        "name": "tag_vote", "group": "tags",
-        "title": "Allotment voting tags",
-        "type": "taglist", "parser_class": "Tags_SettingParser", "size": 50, "autogrow": true
+        "name": "tag_vote", "group": "tags", "title": "Allotment voting tags",
+        "type": "taglist", "subtype": "allotment", "size": 50, "autogrow": true,
+        "parser_class": "Tags_SettingParser"
     },
+
     {
         "name": "topics", "group": "subform",
-        "parser_class": "Topics_SettingParser",
-        "require": "src/settings/s_topics.php"
+        "type": "string", "parser_class": "Topics_SettingParser"
     },
+    {   "name": "has_topics", "internal": true, "type": "checkbox"   },
+    {
+        "name_pattern": "topic__$", "group": "subform",
+        "type": "object", "storage": "none", "parser_class": "Topics_SettingParser"
+    },
+    {   "name_pattern": "topic__$__id", "internal": true   },
+    {
+        "name_pattern": "topic__$__name", "group": "subform",
+        "title": "Topic name",
+        "type": "simplestring", "size": 80, "autogrow": true, "storage": "member.name"
+    },
+    {
+        "name": "topic__newlist", "title": "New topics", "group": "subform",
+        "type": "longstring", "order": -1, "parser_class": "Topics_SettingParser"
+    },
+
     {
         "name": "tracks", "group": "tracks",
         "parser_class": "Tracks_SettingParser",
         "type": "string"
     },
-    {   "name": "paperacc", "group": "none"   },
-    {   "name": "paperlead", "group": "none"   },
-    {   "name": "tracker", "group": "none"   },
-    {   "name": "allowPaperOption", "group": "none"   },
-    {   "name": "pcrev_assigntime", "group": "none"   },
-    {   "name": "pcrev_informtime", "group": "none"   },
-    {   "name": "has_colontag", "group": "none"   },
-    {   "name": "no_papersub", "group": "none"   }
+    {
+        "name_pattern": "track__$", "group": "tracks",
+        "type": "object", "storage": "none", "parser_class": "Tracks_SettingParser"
+    },
+    {   "name_pattern": "track__$__id", "internal": true, "type": "string"   },
+    {
+        "name_pattern": "track__$__tag", "group": "tracks",
+        "title": "Track tag",
+        "type": "tag", "size": 20, "autogrow": true, "storage": "member.tag"
+    },
+    {
+        "name_pattern": "track__$__title", "group": "tracks",
+        "internal": true, "parser_class": "Tracks_SettingParser"
+    },
+    {
+        "name_pattern": "track__$__perm__$$", "group": "tracks",
+        "type": "object", "storage": "none", "parser_class": "Tracks_SettingParser"
+    },
+    {
+        "name_pattern": "track__$__perm__$$__type", "group": "tracks",
+        "title_pattern": "${sv track__$__title} ${sv track__$__perm__$$__title} permission",
+        "type": "radio", "values": ["", "+", "-", "none"], "storage": "member.type",
+        "parser_class": "Tracks_SettingParser"
+    },
+    {
+        "name_pattern": "track__$__perm__$$__tag", "group": "tracks",
+        "title_pattern": "${sv track__$__title} ${sv track__$__perm__$$__title} permission",
+        "type": "tag", "storage": "member.tag",
+        "parser_class": "Tracks_SettingParser"
+    },
+    {
+        "name_pattern": "track__$__perm__$$__title", "group": "tracks",
+        "internal": true, "parser_class": "Tracks_SettingParser"
+    },
+
+    {   "name": "extrev_hard_0", "merge": true, "storage": "extrev_hard"   },
+    {   "name": "extrev_soft_0", "merge": true, "storage": "extrev_soft"   },
+    {   "name": "pcrev_hard_0", "merge": true, "storage": "pcrev_hard"   },
+    {   "name": "pcrev_soft_0", "merge": true, "storage": "pcrev_soft"   },
+    {   "name": "sub_banal_val_0", "merge": true, "storage": "val.sub_banal", "group": "subform"   },
+    {   "name": "sub_banal_data_0", "merge": true, "storage": "dat.sub_banal"   },
+    {   "name": "sub_banal_opt_0", "merge": true, "storage": "opt.sub_banal"   },
+    {   "name": "sub_banal_m1", "merge": true, "group": "final"   },
+    {   "name": "sub_banal_val_m1", "merge": true, "group": "final"   },
+
+    {   "name": "paperacc", "internal": true, "group": "none"   },
+    {   "name": "paperlead", "internal": true, "group": "none"   },
+    {   "name": "tracker", "internal": true, "group": "none"   },
+    {   "name": "allowPaperOption", "internal": true, "group": "none"   },
+    {   "name": "pcrev_assigntime", "internal": true, "group": "none"   },
+    {   "name": "pcrev_informtime", "internal": true, "group": "none"   },
+    {   "name": "has_colontag", "internal": true, "group": "none"   },
+    {   "name": "no_papersub", "internal": true, "group": "none"   }
 ]

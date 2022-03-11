@@ -1,6 +1,6 @@
 <?php
 // text.php -- HotCRP text helper functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class TextPregexes {
     /** @var ?string */
@@ -33,12 +33,12 @@ class TextPregexes {
      * @param string|false $deaccented_text
      * @return bool */
     function match($text, $deaccented_text) {
-        if (!isset($this->preg_raw)) {
-            return !!preg_match('{' . $this->preg_utf8 . '}ui', $text);
+        if ($this->preg_raw === null) {
+            return !!preg_match("{{$this->preg_utf8}}ui", $text);
         } else if ($deaccented_text && $deaccented_text !== $text) {
-            return !!preg_match('{' . $this->preg_utf8 . '}ui', $deaccented_text);
+            return !!preg_match("{{$this->preg_utf8}}ui", $deaccented_text);
         } else {
-            return !!preg_match('{' . $this->preg_raw . '}i', $text);
+            return !!preg_match("{{$this->preg_raw}}i", $text);
         }
     }
 
@@ -52,23 +52,6 @@ class TextPregexes {
                 $this->preg_raw = null;
             } else if ($this->preg_raw !== null) {
                 $this->preg_raw .= "|{$r->preg_raw}";
-            }
-        }
-    }
-
-    /** @return TextPregexes
-     * @deprecated */
-    function merge(TextPregexes $r = null) {
-        if (!$r || $r->is_empty()) {
-            return $this;
-        } else if ($this->is_empty()) {
-            return $r;
-        } else {
-            $t = "{$r->preg_utf8}|{$this->preg_utf8}";
-            if ($this->preg_raw !== null && $r->preg_raw !== null) {
-                return new TextPregexes("{$r->preg_raw}|{$this->preg_raw}", $t);
-            } else {
-                return new TextPregexes(null, $t);
             }
         }
     }
@@ -101,9 +84,9 @@ class Text {
                 $firstName = $initial;
             }
             if (($flags & NAME_L) !== 0) {
-                $name = $lastName . ", " . $firstName;
+                $name = "{$lastName}, {$firstName}";
             } else {
-                $name = $firstName . " " . $lastName;
+                $name = "{$firstName} {$lastName}";
             }
         } else if ($lastName !== "") {
             $name = $lastName;
@@ -113,7 +96,7 @@ class Text {
             return "";
         } else if ($email !== "") {
             if (($flags & NAME_B) !== 0) {
-                return "<" . $email . ">";
+                return "<{$email}>";
             } else {
                 return $email;
             }
@@ -128,7 +111,11 @@ class Text {
             $name = "\"" . addcslashes($name, '"\\') . "\"";
         }
         if ($email !== "" && ($flags & NAME_E) !== 0) {
-            $name .= " <" . $email . ">";
+            if ($name !== "") {
+                $name = "{$name} <{$email}>";
+            } else {
+                $name = "<{$email}>";
+            }
         }
         return $name;
     }
@@ -297,7 +284,8 @@ class Text {
         }
     }
 
-    /** @return string */
+    /** @param ?string $s
+     * @return string */
     static function initial($s) {
         $x = "";
         if ((string) $s !== "") {
@@ -316,16 +304,19 @@ class Text {
 
 
     /** @param string $word
+     * @param bool $literal
      * @return string */
-    static function word_regex($word) {
-        if ($word === "") {
+    static function word_regex($word, $literal = false) {
+        if ($word !== "") {
+            $aw = ctype_alnum($word[0]);
+            $zw = ctype_alnum($word[strlen($word) - 1]);
+            $sp = $literal ? '\s+' : '(?=\s).*\s';
+            return ($aw ? '\b' : '')
+                . str_replace(" ", $sp, preg_quote($word))
+                . ($zw ? '\b' : '');
+        } else {
             return "";
         }
-        $aw = ctype_alnum($word[0]);
-        $zw = ctype_alnum($word[strlen($word) - 1]);
-        return ($aw ? '\b' : '')
-            . str_replace(" ", '\s+', preg_quote($word))
-            . ($zw ? '\b' : '');
     }
 
     const UTF8_INITIAL_NONLETTERDIGIT = '(?:\A|(?!\pL|\pN)\X)';
@@ -334,25 +325,30 @@ class Text {
     const UTF8_FINAL_NONLETTER = '(?:\z|(?!\pL)(?=\PM))';
 
     /** @param string $word
+     * @param bool $literal
      * @return string */
-    static function utf8_word_regex($word) {
-        if ($word === "") {
+    static function utf8_word_regex($word, $literal = false) {
+        if ($word !== "") {
+            $aw = preg_match('/\A(?:\pL|\pN)/u', $word);
+            $zw = preg_match('/(?:\pL|\pN)\z/u', $word);
+            // Maybe `$word` is not valid UTF-8. Avoid warnings later.
+            if ($aw || $zw || is_valid_utf8($word)) {
+                $sp = $literal ? '(?:\s|\p{Zs})+' : '(?=\s|\p{Zs}).*(?:\s|\p{Zs})';
+                return ($aw ? self::UTF8_INITIAL_NONLETTERDIGIT : '')
+                    . str_replace(" ", $sp, preg_quote($word))
+                    . ($zw ? self::UTF8_FINAL_NONLETTERDIGIT : '');
+            } else {
+                return self::utf8_word_regex(convert_to_utf8($word));
+            }
+        } else {
             return "";
         }
-        list($aw, $zw) = array(preg_match('/\A(?:\pL|\pN)/u', $word),
-                               preg_match('/(?:\pL|\pN)\z/u', $word));
-        // Maybe `$word` is not valid UTF-8. Avoid warnings later.
-        if (!$aw && !$zw && !is_valid_utf8($word)) {
-            return self::utf8_word_regex(convert_to_utf8($word));
-        }
-        return ($aw ? self::UTF8_INITIAL_NONLETTERDIGIT : '')
-            . str_replace(" ", '(?:\s|\p{Zs})+', preg_quote($word))
-            . ($zw ? self::UTF8_FINAL_NONLETTERDIGIT : '');
     }
 
     /** @param string $word
+     * @param bool $literal
      * @return TextPregexes */
-    static function star_text_pregexes($word, $literal_star = false) {
+    static function star_text_pregexes($word, $literal = false) {
         if (is_object($word)) {
             $reg = $word;
         } else {
@@ -362,12 +358,12 @@ class Text {
 
         $word = preg_replace('/\s+/', " ", $reg->value);
         if (is_usascii($word)) {
-            $reg->preg_raw = Text::word_regex($word);
+            $reg->preg_raw = Text::word_regex($word, $literal);
         }
-        $reg->preg_utf8 = Text::utf8_word_regex($word);
+        $reg->preg_utf8 = Text::utf8_word_regex($word, $literal);
 
-        if (!$literal_star && strpos($word, "*") !== false) {
-            if ($reg->preg_raw) {
+        if (!$literal && strpos($word, "*") !== false) {
+            if ($reg->preg_raw !== null) {
                 $reg->preg_raw = str_replace('\\\\\S*', '\*', str_replace('\*', '\S*', $reg->preg_raw));
             }
             $reg->preg_utf8 = str_replace('\\\\\S*', '\*', str_replace('\*', '\S*', $reg->preg_utf8));
@@ -376,12 +372,19 @@ class Text {
         return $reg;
     }
 
-    /** @param ?TextPregexes $reg */
+    /** @param ?TextPregexes $reg
+     * @param string $text
+     * @param string|false $deaccented_text
+     * @return bool */
     static function match_pregexes($reg, $text, $deaccented_text) {
         return $reg && $reg->match($text, $deaccented_text);
     }
 
 
+    /** @param string $text
+     * @param null|string|TextPregexes $match
+     * @param ?int &$n
+     * @return string */
     static function highlight($text, $match, &$n = null) {
         $n = 0;
         if ($match === null || $match === false || $match === "" || $text == "") {
@@ -392,7 +395,7 @@ class Text {
         $offsetmap = null;
         $flags = "";
         if (is_object($match)) {
-            if (!isset($match->preg_raw)) {
+            if ($match->preg_raw === null) {
                 $match = $match->preg_utf8;
                 $flags = "u";
             } else if (is_usascii($text)) {
@@ -484,10 +487,14 @@ class Text {
         return [];
     }
 
+    /** @param string $word
+     * @return bool */
     static function is_boring_word($word) {
         return isset(self::$boring_words[strtolower($word)]);
     }
 
+    /** @param string $text
+     * @return string */
     static function single_line_paragraphs($text) {
         $lines = preg_split('/((?:\r\n?|\n)(?:[-+*][ \t]|\d+\.)?)/', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
         $n = count($lines);
@@ -502,6 +509,8 @@ class Text {
         return join("", $lines);
     }
 
+    /** @param string $x
+     * @return string */
     static function html_to_text($x) {
         if (strpos($x, "<") !== false) {
             $x = preg_replace('/\s*<\s*p\s*>\s*(.*?)\s*<\s*\/\s*p\s*>/si', "\n\n\$1\n\n", $x);

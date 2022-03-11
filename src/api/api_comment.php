@@ -1,6 +1,6 @@
 <?php
 // api_comment.php -- HotCRP comment API call
-// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2022 Eddie Kohler; see LICENSE.
 
 class Comment_API {
     /** @return ?CommentInfo */
@@ -9,54 +9,59 @@ class Comment_API {
         reset($cmts);
         return empty($cmts) ? null : current($cmts);
     }
-    /** @return ?CommentInfo */
+    /** @param int $round
+     * @return ?CommentInfo */
     static private function find_response($round, PaperInfo $prow) {
-        return $round === false ? null : self::find_comment("(commentType&" . COMMENTTYPE_RESPONSE . ")!=0 and commentRound=" . (int) $round, $prow);
+        return self::find_comment("(commentType&" . CommentInfo::CT_RESPONSE . ")!=0 and commentRound={$round}", $prow);
     }
+    /** @return MessageItem */
     static private function save_success_message(CommentInfo $xcrow) {
-        $what = $xcrow->commentId ? "saved" : "deleted";
-        if (!$xcrow->is_response()) {
-            return Ht::msg("Comment $what.", "confirm");
-        } else {
-            $rname = $xcrow->conf->resp_round_text($xcrow->commentRound);
-            $rname = $rname ? "$rname response" : "Response";
-            if ($xcrow->commentId && !($xcrow->commentType & COMMENTTYPE_DRAFT)) {
-                return Ht::msg("$rname submitted.", "confirm");
-            } else {
-                return Ht::msg("$rname $what.", "confirm");
+        $action = $xcrow->commentId ? "saved" : "deleted";
+        if (($rrd = $xcrow->response_round())) {
+            $cname = $rrd->unnamed ? "Response" : "{$rrd->name} response";
+            if ($xcrow->commentId && !($xcrow->commentType & CommentInfo::CT_DRAFT)) {
+                $action = "submitted";
             }
+        } else {
+            $cname = "Comment";
         }
+        return MessageItem::success("<0>{$cname} {$action}");
     }
-    /** @param ?CommentInfo $crow */
-    static function run_post(Contact $user, Qrequest $qreq, PaperInfo $prow, $crow) {
+    /** @param ?CommentInfo $crow
+     * @param list<MessageItem> &$mis
+     * @return array{?CommentInfo,int} */
+    static function run_post(Contact $user, Qrequest $qreq, PaperInfo $prow, $crow, &$mis) {
         // check response
-        $round = false;
+        $rrd = null;
         if ($qreq->response) {
-            $round = $prow->conf->resp_round_number($qreq->response);
-            if ($round === false) {
-                return [null, 404, "No such response round."];
-            } else if ($crow && (!$crow->is_response() || $crow->commentRound != $round)) {
-                return [null, 400, "Improper response."];
+            $rrd = $prow->conf->response_round($qreq->response);
+            if (!$rrd) {
+                $mis[] = MessageItem::error("<0>No such response round");
+                return [null, 404];
+            } else if ($crow && (!$crow->is_response() || $crow->commentRound != $rrd->number)) {
+                $mis[] = MessageItem::error("<0>Improper response");
+                return [null, 400];
             }
         } else if ($crow && $crow->is_response()) {
-            return [null, 400, "Improper response."];
+            $mis[] = MessageItem::error("<0>Improper response");
+            return [null, 400];
         }
 
         // create skeleton
         if ($crow) {
             $xcrow = $crow;
-        } else if ($round === false) {
-            $xcrow = new CommentInfo(null, $prow);
+        } else if (!$rrd) {
+            $xcrow = CommentInfo::make_new_template($user, $prow);
         } else {
-            $xcrow = CommentInfo::make_response_template($round, $prow);
+            $xcrow = CommentInfo::make_response_template($rrd, $prow);
         }
 
         // request skeleton
         $ok = true;
-        $msg = false;
         $response = $xcrow->is_response();
         $req = [
             "visibility" => $qreq->visibility,
+            "topic" => $qreq->topic,
             "submit" => $response && !$qreq->draft,
             "text" => rtrim(cleannl((string) $qreq->text)),
             "blind" => $qreq->blind,
@@ -66,7 +71,7 @@ class Comment_API {
         // check if response changed
         $changed = true;
         if ($response
-            && $req["text"] === rtrim(cleannl((string) ($xcrow->commentOverflow ? : $xcrow->comment)))) {
+            && $req["text"] === rtrim(cleannl((string) ($xcrow->commentOverflow ?? $xcrow->comment)))) {
             $changed = false;
         }
 
@@ -88,7 +93,7 @@ class Comment_API {
                     $req["docs"][] = $doc;
                     $changed = true;
                 } else {
-                    $msg = Ht::msg("Error uploading attachment.", 2);
+                    $mis[] = MessageItem::error("<0>Error uploading attachment");
                     $ok = false;
                     break;
                 }
@@ -100,7 +105,7 @@ class Comment_API {
             && $req["text"] === ""
             && empty($req["docs"])) {
             if (!$qreq->delete && (!$xcrow->commentId || !isset($qreq->text))) {
-                $msg = Ht::msg("Empty comment.", 2);
+                $mis[] = MessageItem::error("<0>Comment text required");
                 $ok = false;
             } else {
                 $qreq->delete = true;
@@ -109,9 +114,11 @@ class Comment_API {
         }
 
         // check permission, other errors
-        $whyNot = $user->perm_comment($prow, $xcrow, true);
-        if ($whyNot && ($changed || !$user->can_finalize_comment($prow, $xcrow))) {
-            return [null, 403, $whyNot->unparse_html()];
+        $newctype = $xcrow->requested_type($req);
+        $whyNot = $user->perm_edit_comment($prow, $xcrow, $newctype);
+        if ($whyNot) {
+            $mis[] = MessageItem::error("<5>" . $whyNot->unparse_html());
+            return [null, 403];
         }
 
         // save
@@ -132,7 +139,7 @@ class Comment_API {
             }
 
             // save
-            $ok = $xcrow->save($req, $suser);
+            $ok = $xcrow->save_comment($req, $suser);
 
             // check for response simultaneity
             if (!$ok
@@ -143,21 +150,37 @@ class Comment_API {
                     $xcrow = $ocrow;
                     $ok = true;
                 } else {
-                    $msg = Ht::msg("A response was entered concurrently by another user. Reload to see it.", 2);
+                    $mis[] = MessageItem::error("A response was entered concurrently by another user; reload to see it");
                 }
             }
 
             // generate save response
             if ($ok) {
-                $msg = self::save_success_message($xcrow);
+                $mis[] = self::save_success_message($xcrow);
+                if ($xcrow
+                    && $xcrow->notified_authors
+                    && !$prow->has_author($suser)) {
+                    if ($user->allow_view_authors($prow)) {
+                        $mis[] = MessageItem::success($user->conf->_("<0>Notified submission authors", count($prow->author_list())));
+                    } else {
+                        $mis[] = MessageItem::success($user->conf->_("<0>Notified submission author(s)"));
+                    }
+                }
+                if ($xcrow && $xcrow->saved_mentions) {
+                    $mis[] = MessageItem::success($user->conf->_("<5>Notified mentioned users %#s", array_values($xcrow->saved_mentions)));
+                }
+                if ($xcrow && $xcrow->saved_mentions_missing) {
+                    $mis[] = new MessageItem(null, $user->conf->_("<0>Some users mentioned in the comment cannot see the comment yet, so they were not notified."), MessageSet::WARNING_NOTE);
+                }
             }
         }
 
-        return [$xcrow, $ok, $msg];
+        return [$xcrow, $ok ? 200 : 400];
     }
 
-    /** @return array{?CommentInfo,string|array<string,mixed>} */
-    static private function lookup(Contact $user, Qrequest $qreq, PaperInfo $prow) {
+    /** @param list<MessageItem> &$mis
+     * @return ?CommentInfo */
+    static private function lookup(Contact $user, Qrequest $qreq, PaperInfo $prow, &$mis) {
         if (str_ends_with($qreq->c, "response")) {
             $rname = substr($qreq->c, 0, -8);
         } else if (str_starts_with($qreq->c, "response")) {
@@ -167,69 +190,72 @@ class Comment_API {
         } else {
             $rname = false;
         }
-        $round = $rname === false ? false : $prow->conf->resp_round_number($rname);
-        if ($rname !== false && $round === false) {
-            return [null, "No such response round."];
+        $rrd = $rname === false ? null : $prow->conf->response_round($rname);
+        if ($rname !== false && !$rrd) {
+            $mis[] = new MessageItem(null, "<0>No such response round", MessageSet::ERROR);
+            return null;
         }
-        $rcrow = self::find_response($round, $prow);
+        $rcrow = $rrd ? self::find_response($rrd->number, $prow) : null;
 
         if (ctype_digit($qreq->c)) {
             $crow = self::find_comment("commentId=" . intval($qreq->c), $prow);
             if ($crow && $user->can_view_comment($prow, $crow, true)) {
-                return [$crow, null];
+                return $crow;
             } else if ($crow || $rname === false || $qreq->is_get()) {
-                return [null, "No such comment."];
+                $mis[] = new MessageItem(null, "<0>No such comment", MessageSet::ERROR);
             } else if ($rcrow && $user->can_view_comment($prow, $rcrow)) {
-                return [null, "The response you were editing has been deleted and a new response has been entered. Reload to see it."];
+                $mis[] = new MessageItem(null, "<0>The response you were editing has been deleted and a new response has been entered; reload to see it", MessageSet::ERROR);
             } else {
-                return [null, ["error" => "The response you were editing has been deleted. Submit again to create a new response.", "deleted" => true]];
+                $mis[] = new MessageItem("deleted", "<0>The response you were editing has been deleted. Submit again to create a new response", MessageSet::ERROR);
             }
-        } else if ($round !== false) {
+        } else if ($rrd) {
             if ($rcrow && $user->can_view_comment($prow, $rcrow, true)) {
-                return [$rcrow, null];
+                return $rcrow;
             } else {
-                return [null, "No such response."];
+                $mis[] = new MessageItem(null, "<0>No such response", MessageSet::ERROR);
             }
         } else {
-            return [null, "No such comment."];
+            $mis[] = new MessageItem(null, "<0>No such comment", MessageSet::ERROR);
         }
+        return null;
     }
 
     static function run(Contact $user, Qrequest $qreq, PaperInfo $prow) {
         // check parameters
         if ((!isset($qreq->text) && !isset($qreq->delete) && $qreq->is_post())
-            || ($qreq->c === "new" && !$qreq->is_get())) {
+            || ($qreq->c === "new" && !$qreq->is_post())) {
             return new JsonResult(400, "Bad request.");
         }
 
         // find comment
-        $crow = $msg = $response_name = null;
+        $crow = $response_name = null;
+        $mis = [];
         if (!$qreq->c && $qreq->response && $qreq->is_get()) {
             $qreq->c = ($qreq->response === "1" ? "" : $qreq->response) . "response";
         }
-        if ($qreq->c && $qreq->c !== "new") {
-            list($crow, $msg) = self::lookup($user, $qreq, $prow);
-            if (!$crow) {
-                return new JsonResult(404, $msg);
-            }
+        if ($qreq->c
+            && $qreq->c !== "new"
+            && !($crow = self::lookup($user, $qreq, $prow, $mis))) {
+            return new JsonResult(404, ["ok" => false, "message_list" => $mis]);
         }
 
         if ($qreq->is_post()) {
-            list($crow, $status, $msg) = self::run_post($user, $qreq, $prow, $crow);
+            list($crow, $status) = self::run_post($user, $qreq, $prow, $crow, $mis);
         } else {
             $status = 200;
         }
 
-        if (is_bool($status)) {
-            $status = $status ? 200 : 400;
-        }
         $j = ["ok" => $status <= 299];
         if ($crow && $crow->commentId) {
             // NB CommentInfo::unparse_json checks can_view_comment
             $j["cmt"] = $crow->unparse_json($user);
         }
-        if ($msg) {
-            $j["message"] = $msg;
+        if ($mis) {
+            $j["message_list"] = $mis;
+        }
+        foreach ($mis as $mi) {
+            if ($mi->field)
+                $j[$mi->field] = true;
         }
         return new JsonResult($status, $j);
     }

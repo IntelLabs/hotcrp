@@ -1,6 +1,6 @@
 <?php
 // search/st_reviewtoken.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ReviewToken_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -22,7 +22,7 @@ class ReviewToken_SearchTerm extends SearchTerm {
         } else if (($token = decode_token($word, "V"))) {
             return new ReviewToken_SearchTerm($srch->user, $token, null);
         } else {
-            $srch->warning("“" . htmlspecialchars($word) . "” is not a valid review token.");
+            $srch->lwarning($sword, "<0>Invalid review token");
             return new False_SearchTerm;
         }
     }

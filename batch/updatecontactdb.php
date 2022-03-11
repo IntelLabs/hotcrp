@@ -1,8 +1,8 @@
 <?php
 // updatecontactdb.php -- HotCRP maintenance script
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 
 $arg = Getopt::rest($argv, "hn:pu", ["help", "name:", "papers", "users", "collaborators"]);
 if (isset($arg["h"]) || isset($arg["help"])
@@ -52,15 +52,17 @@ if ($users) {
     Dbl::free($result);
 
     // read current db roles
-    Contact::$allow_nonexistent_properties = true;
-    $result = Dbl::ql($Conf->dblink, "select ContactInfo.contactId, email, firstName, lastName, unaccentedName, disabled, roles, password, passwordTime, passwordUseTime, lastLogin,
-        exists (select * from PaperConflict where contactId=ContactInfo.contactId and conflictType>=" . CONFLICT_AUTHOR . ") __isAuthor__,
-        exists (select * from PaperReview where contactId=ContactInfo.contactId) __hasReview__
+    $result = Dbl::ql($Conf->dblink, "select ContactInfo.contactId, email, firstName, lastName, unaccentedName, disabled,
+        (ContactInfo.roles
+         | if(exists (select * from PaperConflict where contactId=ContactInfo.contactId and conflictType>=" . CONFLICT_AUTHOR . ")," . Contact::ROLE_AUTHOR . ",0)
+         | if(exists (select * from PaperReview where contactId=ContactInfo.contactId)," . Contact::ROLE_REVIEWER . ",0)) roles,
+        " . (Contact::ROLE_DBMASK | Contact::ROLE_AUTHOR | Contact::ROLE_REVIEWER) . " role_mask,
+        password, passwordTime, passwordUseTime, lastLogin
         from ContactInfo");
     $cdbids = [];
     $qv = [];
     while (($u = Contact::fetch($result, $Conf))) {
-        $cdb_roles = $u->contactdb_roles();
+        $cdb_roles = $u->cdb_roles();
         if ($cdb_roles == 0
             || (str_starts_with($u->email, "anonymous")
                 && preg_match('/\Aanonymous\d*\z/', $u->email))) {
@@ -85,7 +87,7 @@ if ($users) {
 
     // perform role updates
     if (!empty($qv)) {
-        Dbl::ql($cdb, "insert into Roles (contactDbId,confid,roles,activity_at) values ?v on duplicate key update roles=values(roles), activity_at=values(activity_at)", $qv);
+        Dbl::ql($cdb, "insert into Roles (contactDbId,confid,roles,activity_at) values ?v ?U on duplicate key update roles=?U(roles), activity_at=?U(activity_at)", $qv);
     }
 
     // remove old roles
@@ -105,7 +107,7 @@ if ($papers) {
     Dbl::free($result);
 
     if (!empty($qv)) {
-        Dbl::ql($cdb, "insert into ConferencePapers (confid,paperId,title) values ?v on duplicate key update title=values(title)", $qv);
+        Dbl::ql($cdb, "insert into ConferencePapers (confid,paperId,title) values ?v ?U on duplicate key update title=?U(title)", $qv);
     }
     Dbl::ql($cdb, "delete from ConferencePapers where confid=? and paperId?A", $confid, $pids);
     if ($confrow->last_submission_at != $max_submitted) {

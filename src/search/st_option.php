@@ -1,6 +1,6 @@
 <?php
 // search/st_option.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 abstract class Option_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -13,6 +13,11 @@ abstract class Option_SearchTerm extends SearchTerm {
         parent::__construct($type);
         $this->user = $user;
         $this->option = $option;
+    }
+
+    /** @return PaperOption */
+    function option() {
+        return $this->option;
     }
 
     function sqlexpr(SearchQueryInfo $sqi) {
@@ -51,7 +56,7 @@ abstract class Option_SearchTerm extends SearchTerm {
                 return self::make_present($srch->conf->options()->normal(), $srch->user);
             } else if (!$sword->quoted && strcasecmp($word, "none") === 0) {
                 return self::make_present($srch->conf->options()->normal(), $srch->user)->negate();
-            } else if (preg_match('/\A(.*?)(?::|(?=[#=!<>]|≠|≤|≥))(.*)\z/', $word, $m)) {
+            } else if (preg_match('/\A(.*?)(?::|(?=[#=!<>]|≠|≤|≥))(.*)\z/s', $word, $m)) {
                 $oname = $m[1];
                 $ocontent = $m[2];
             } else {
@@ -67,10 +72,11 @@ abstract class Option_SearchTerm extends SearchTerm {
         $os = $srch->conf->abbrev_matcher()->findp($oname, Conf::MFLAG_OPTION);
         if (empty($os)) {
             if (($os2 = $srch->conf->abbrev_matcher()->find_all($oname, Conf::MFLAG_OPTION))) {
-                $ts = array_map(function ($o) { return "“" . htmlspecialchars($o->search_keyword()) . "”"; }, $os2);
-                $srch->warning("“" . htmlspecialchars($oname) . "” matches more than one submission field. Try " . commajoin($ts, " or ") . ", or use “" . htmlspecialchars($oname) . "*” if you mean to match them all.");
+                $ts = array_map(function ($o) { return "‘" . $o->search_keyword() . "’"; }, $os2);
+                $srch->lwarning($sword, "<0>Submission field ‘{$oname}’ is ambiguous");
+                $srch->message_set()->msg_at(null, "<0>Try " . commajoin($ts, " or ") . ", or use ‘{$oname}*’ if you mean to match them all.", MessageSet::INFORM);
             } else {
-                $srch->warning("“" . htmlspecialchars($oname) . "” matches no submission fields.");
+                $srch->lwarning($sword, "Submission field ‘{$oname}’ not found");
             }
             return new False_SearchTerm;
         }
@@ -94,11 +100,11 @@ abstract class Option_SearchTerm extends SearchTerm {
 
         $ts = [];
         foreach ($os as $o) {
-            $nwarn = $srch->message_count();
+            $nwarn = $srch->message_set()->message_count();
             if (($st = $o->parse_search($sword, $srch))) {
                 $ts[] = $st;
-            } else if ($nwarn === $srch->message_count()) {
-                $srch->warning("Submission field " . htmlspecialchars($o->search_keyword()) . " (" . $o->title_html() . ") does not understand search “" . htmlspecialchars($ocontent) . "”.");
+            } else if ($nwarn === $srch->message_set()->message_count()) {
+                $srch->lwarning($sword, "<0>Submission field ‘{$oname}’ does not support this search");
             }
         }
         return SearchTerm::combine("or", $ts);

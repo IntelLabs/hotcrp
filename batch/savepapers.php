@@ -1,10 +1,10 @@
 <?php
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 
-$arg = Getopt::rest($argv, "hn:qrf:",
-    ["help", "name:", "filter=f:", "quiet", "disable", "disable-users",
-     "reviews", "match-title", "ignore-pid", "ignore-errors", "add-topics", "no-log"]);
-if (isset($arg["h"]) || isset($arg["help"])
+$arg = (new Getopt)->long("n:,name:", "f[],filter[]", "r,reviews", "q,quiet",
+    "disable-users,disable", "match-title", "ignore-pid", "ignore-errors", "add-topics",
+    "no-log", "help,h")->parse($argv);
+if (isset($arg["help"])
     || count($arg["_"]) > 1
     || (count($arg["_"]) && $arg["_"][0] !== "-" && $arg["_"][0][0] === "-")) {
     fwrite(STDOUT, "Usage: php batch/savepapers.php [-n CONFID] [OPTIONS] FILE
@@ -74,16 +74,15 @@ class BatchSavePapers {
     }
 
     function set_args($arg) {
-        $this->quiet = isset($arg["q"]) || isset($arg["quiet"]);
+        $this->quiet = isset($arg["q"]);
         $this->ignore_errors = isset($arg["ignore-errors"]);
         $this->ignore_pid = isset($arg["ignore-pid"]);
         $this->match_title = isset($arg["match-title"]);
-        $this->disable_users = isset($arg["disable"]) || isset($arg["disable-users"]);
+        $this->disable_users = isset($arg["disable-users"]);
         $this->add_topics = isset($arg["add-topics"]);
-        $this->reviews = isset($arg["r"]) || isset($arg["reviews"]);
+        $this->reviews = isset($arg["r"]);
         $this->log = !isset($arg["no-log"]);
-        $fs = $arg["f"] ?? [];
-        foreach (is_array($fs) ? $fs : [$fs] as $f) {
+        foreach ($arg["f"] ?? [] as $f) {
             if (($colon = strpos($f, ":")) !== false
                 && $colon + 1 < strlen($f)
                 && $f[$colon + 1] !== ":") {
@@ -241,13 +240,10 @@ class BatchSavePapers {
         }
 
         $ps = new PaperStatus($this->conf, null, [
-            "no_notify" => true,
             "disable_users" => $this->disable_users,
             "add_topics" => $this->add_topics,
             "content_file_prefix" => $this->document_directory
         ]);
-        $ps->set_allow_error_at("topics", true);
-        $ps->set_allow_error_at("options", true);
         $ps->on_document_import([$this, "on_document_import"]);
 
         $pid = $ps->save_paper_json($j);
@@ -256,12 +252,12 @@ class BatchSavePapers {
             $pidtext = "#$pid";
         }
         if (!$this->quiet) {
-            fwrite(STDERR, $pid ? ($ps->diffs ? "saved\n" : "unchanged\n") : "failed\n");
+            fwrite(STDERR, $pid ? ($ps->has_change() ? "saved\n" : "unchanged\n") : "failed\n");
         }
         // XXX does not change decision
         $prefix = $pidtext . ": ";
-        foreach ($ps->landmarked_message_texts() as $msg) {
-            fwrite(STDERR, $prefix . htmlspecialchars_decode($msg) . "\n");
+        foreach ($ps->decorated_message_list() as $mi) {
+            fwrite(STDERR, $prefix . $mi->message_as(0) . "\n");
         }
         if (!$pid) {
             ++$this->nerrors;
@@ -280,24 +276,23 @@ class BatchSavePapers {
                 } else {
                     $this->tf->req["override"] = true;
                     $this->tf->paperId = $pid;
-                    $user_req = [
+                    $user = Contact::make_keyed($this->conf, [
                         "firstName" => $this->tf->req["reviewerFirst"] ?? "",
                         "lastName" => $this->tf->req["reviewerLast"] ?? "",
                         "email" => $this->tf->req["reviewerEmail"],
                         "affiliation" => $this->tf->req["reviewerAffiliation"] ?? null,
                         "disabled" => $this->disable_users
-                    ];
-                    $user = Contact::create($this->conf, null, $user_req);
+                    ])->store();
                     $this->tf->check_and_save($this->user, $prow, null);
                 }
             }
-            foreach ($this->tf->message_texts() as $te) {
-                fwrite(STDERR, $prefix . htmlspecialchars_decode($te) . "\n");
+            foreach ($this->tf->message_list() as $mi) {
+                fwrite(STDERR, $prefix . $mi->message_as(0) . "\n");
             }
             $this->tf->clear_messages();
         }
 
-        if ($ps->diffs && $this->log) {
+        if ($ps->has_change() && $this->log) {
             $ps->log_save_activity($this->user, "save", "via CLI");
         }
         ++$this->nsuccesses;

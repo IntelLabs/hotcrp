@@ -1,6 +1,6 @@
 <?php
 // pc_tag.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Tag_PaperColumn extends PaperColumn {
     /** @var ?bool */
@@ -52,17 +52,21 @@ class Tag_PaperColumn extends PaperColumn {
         if ($this->etag[0] == ":"
             && !$this->is_value
             && ($dt = $pl->user->conf->tags()->check($this->dtag))
-            && $dt->emoji !== null
+            && isset($dt->emoji)
             && count($dt->emoji) === 1) {
+            /** @phan-suppress-next-line PhanTypeArraySuspiciousNullable */
             $this->emoji = $dt->emoji[0];
         }
         if ($this->editable
             && !$pl->user->can_edit_tag_somewhere($this->etag)) {
-            $m = "You can’t edit tag #" . htmlspecialchars($this->dtag) . ".";
+            $pl->column_error("<0>Tag ‘#{$this->dtag}’ is read-only");
             if ($pl->conf->tags()->is_automatic($this->etag)) {
-                $m .= " That tag is set automatically.";
+                if ($pl->conf->tags()->is_votish($this->etag)) {
+                    $pl->column_error(new MessageItem(null, "<0>That tag is set automatically based on per-user votes. Did you mean to edit ‘#~{$this->dtag}’?", MessageSet::INFORM));
+                } else {
+                    $pl->column_error(new MessageItem(null, "<0>That tag is set automatically.", MessageSet::INFORM));
+                }
             }
-            $pl->message_set()->error_at($this->name, $m);
         }
         if ($this->editable
             && ($visible & PaperColumn::PREP_VISIBLE)
@@ -181,5 +185,13 @@ class Tag_PaperColumn extends PaperColumn {
             PaperColumn::column_error($user, $e);
         }
         return $rs;
+    }
+
+    static function completions(Contact $user, $xfj) {
+        if ($user->can_view_tags(null)) {
+            return ["#<tag>"];
+        } else {
+            return [];
+        }
     }
 }

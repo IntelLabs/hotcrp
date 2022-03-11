@@ -1,12 +1,13 @@
 <?php
 // autoassigner.php -- HotCRP helper classes for autoassignment
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class AutoassignerCosts implements JsonSerializable {
     public $assignment = 100;
     public $preference = 60;
     public $expertise_x = -200;
     public $expertise_y = -140;
+    #[\ReturnTypeWillChange]
     function jsonSerialize() {
         return get_object_vars($this);
     }
@@ -354,28 +355,30 @@ class Autoassigner {
         $all_fields = $this->conf->all_review_fields();
         $score = null;
         $scoredir = 1;
+        $scoreorder = 0;
         if ((substr($scoreinfo, 0, 1) === "-"
              || substr($scoreinfo, 0, 1) === "+")
             && isset($all_fields[substr($scoreinfo, 1)])) {
             $score = substr($scoreinfo, 1);
             $scoredir = substr($scoreinfo, 0, 1) === "-" ? -1 : 1;
+            $scoreorder = $all_fields[substr($scoreinfo, 1)]->order;
         }
 
-        $set = $this->conf->paper_set(["paperId" => $this->papersel, "allConflictType" => true, "reviewSignatures" => true, "scores" => $score ? [$score] : []]);
+        $set = $this->conf->paper_set(["paperId" => $this->papersel, "allConflictType" => true, "reviewSignatures" => true, "scores" => $score ? [$all_fields[$score]] : []]);
 
         $scorearr = [];
         foreach ($set as $prow) {
-            if ($score) {
-                $prow->ensure_review_score($score);
+            if ($scoreorder) {
+                $prow->ensure_review_field_order($scoreorder);
             }
             foreach ($this->acs as $cid => $ac) {
                 if ($prow->has_conflict($cid)
                     || !($rrow = $prow->review_by_user($cid))
                     || ($scoreinfo !== "xa" && $rrow->reviewStatus < ReviewInfo::RS_COMPLETED)
-                    || ($score && !$rrow->$score)) {
+                    || ($scoreorder && !$rrow->fields[$scoreorder])) {
                     $scorearr[$prow->paperId][$cid] = -1;
                 } else {
-                    $s = $score ? $rrow->$score : 1;
+                    $s = $score ? $rrow->fields[$scoreorder] : 1;
                     if ($scoredir == -1) {
                         $s = 1000 - $s;
                     }
@@ -795,7 +798,10 @@ class Autoassigner {
             $x = ", possibly because the selected PC members didn’t review these submissions";
         }
         $y = (count($b) > 1 ? ' (' . $this->conf->hotlink("list them", "search", "q=$pidx", ["class" => "nw"]) . ')' : '');
-        $this->conf->warnMsg("I wasn’t able to complete the assignment$x. The following submissions got fewer than the required number of assignments: " . join(", ", $b) . $y . ".");
+        $this->conf->feedback_msg(
+            MessageItem::warning("<0>The assignment could not be completed{$x}"),
+            MessageItem::inform("<5>The following submissions got fewer than the required number of assignments: " . join(", ", $b) . $y . ".")
+        );
     }
 
     private function finish_assignment() {

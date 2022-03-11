@@ -1,6 +1,6 @@
 <?php
 // api_preference.php -- HotCRP preference API call
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Preference_API {
     static function pref_api(Contact $user, Qrequest $qreq, PaperInfo $prow = null) {
@@ -42,7 +42,7 @@ class Preference_API {
             $jr->content["topic_score"] = $pref[2];
         }
         if ($qreq->method() === "POST" && $prow->timeWithdrawn > 0) {
-            $jr->content["warning"] = $prow->make_whynot(["withdrawn" => 1])->unparse_html();
+            $jr->content["message_list"][] = new MessageItem(null, "<5>" . $prow->make_whynot(["withdrawn" => 1])->unparse_html(), 1);
         }
         return $jr;
     }

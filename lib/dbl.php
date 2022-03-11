@@ -1,6 +1,6 @@
 <?php
 // dbl.php -- database interface layer
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Dbl_Result {
     /** @var int */
@@ -17,13 +17,12 @@ class Dbl_Result {
     public $query_string;
 
     /** @return Dbl_Result */
-    static function make(mysqli $dblink, $qstr = null) {
+    static function make(mysqli $dblink) {
         $r = new Dbl_Result;
         $r->affected_rows = $dblink->affected_rows;
         $r->insert_id = $dblink->insert_id;
         $r->warning_count = $dblink->warning_count;
         $r->errno = $dblink->errno;
-        $r->query_string = $qstr;
         return $r;
     }
     /** @return Dbl_Result */
@@ -33,6 +32,10 @@ class Dbl_Result {
         $r->insert_id = null;
         $r->errno = 0;
         return $r;
+    }
+    /** @return list<array<int,?string>> */
+    function fetch_all() {
+        return [];
     }
     /** @return ?array<int,?string> */
     function fetch_row() {
@@ -55,13 +58,18 @@ class Dbl_Result {
 class Dbl_MultiResult {
     /** @var \mysqli */
     private $dblink;
+    /** @var int */
     private $flags;
-    private $qstr;
+    /** @var string */
+    private $query_string;
 
+    /** @param int $flags
+     * @param string $qstr
+     * @param bool $result */
     function __construct(mysqli $dblink, $flags, $qstr, $result) {
         $this->dblink = $dblink;
         $this->flags = $flags | Dbl::F_MULTI | ($result ? Dbl::F_MULTI_OK : 0);
-        $this->qstr = $qstr;
+        $this->query_string = $qstr;
     }
     /** @return false|Dbl_Result */
     function next() {
@@ -82,7 +90,7 @@ class Dbl_MultiResult {
         } else {
             $this->flags &= ~(Dbl::F_MULTI | Dbl::F_MULTI_OK);
         }
-        return Dbl::do_result($this->dblink, $this->flags, $this->qstr, $result);
+        return Dbl::do_result($this->dblink, $this->flags, $this->query_string, $result);
     }
     function free_all() {
         while (($result = $this->next())) {
@@ -105,7 +113,7 @@ class Dbl {
     /** @var int */
     static public $nerrors = 0;
     static public $default_dblink;
-    /** @var callable */
+    /** @var callable(\mysqli,string) */
     static private $error_handler = "Dbl::default_error_handler";
     /** @var false|array<string,array{float,int,string}> */
     static private $query_log = false;
@@ -114,12 +122,17 @@ class Dbl {
     static private $query_log_file = null;
     /** @var bool */
     static public $check_warnings = true;
+    /** @var bool */
+    static public $verbose = false;
     static public $landmark_sanitizer = "/^Dbl::/";
 
+    /** @return bool */
     static function has_error() {
         return self::$nerrors > 0;
     }
 
+    /** @param array $opt
+     * @return ?string */
     static function make_dsn($opt) {
         if (isset($opt["dsn"])) {
             if (is_string($opt["dsn"])) {
@@ -140,6 +153,8 @@ class Dbl {
         return null;
     }
 
+    /** @param string $dsn
+     * @return string */
     static function sanitize_dsn($dsn) {
         return preg_replace('{\A(\w+://[^/:]*:)[^\@/]+([\@/])}', '$1PASSWORD$2', $dsn);
     }
@@ -150,14 +165,14 @@ class Dbl {
         global $Opt;
 
         $dbhost = $dbuser = $dbpass = $dbname = $dbport = null;
-        if ($dsn && preg_match('|^mysql://([^:@/]*)/(.*)|', $dsn, $m)) {
+        if ($dsn && preg_match('/^mysql:\/\/([^:@\/]*)\/(.*)/', $dsn, $m)) {
             $dbhost = urldecode($m[1]);
             $dbname = urldecode($m[2]);
-        } else if ($dsn && preg_match('|^mysql://([^:@/]*)@([^/]*)/(.*)|', $dsn, $m)) {
+        } else if ($dsn && preg_match('/^mysql:\/\/([^:@\/]*)@([^\/]*)\/(.*)/', $dsn, $m)) {
             $dbhost = urldecode($m[2]);
             $dbuser = urldecode($m[1]);
             $dbname = urldecode($m[3]);
-        } else if ($dsn && preg_match('|^mysql://([^:@/]*):([^@/]*)@([^/]*)/(.*)|', $dsn, $m)) {
+        } else if ($dsn && preg_match('/^mysql:\/\/([^:@\/]*):([^@\/]*)@([^\/]*)\/(.*)/', $dsn, $m)) {
             $dbhost = urldecode($m[3]);
             $dbuser = urldecode($m[1]);
             $dbpass = urldecode($m[2]);
@@ -191,7 +206,12 @@ class Dbl {
             $dblink = new mysqli($dbhost, $dbuser, $dbpass);
         }
 
-        if (!mysqli_connect_errno() && $dblink->select_db($dbname)) {
+        if ($dblink->connect_errno || mysqli_connect_errno()) {
+            return [null, $dbname];
+        } else if (!$dblink->select_db($dbname)) {
+            $dblink->close();
+            return [null, $dbname];
+        } else {
             // We send binary strings to MySQL, so we don't want warnings
             // about non-UTF-8 data
             $dblink->set_charset("binary");
@@ -199,26 +219,29 @@ class Dbl {
             // (the default is 1024/!?))(U#*@$%&!U
             $dblink->query("set group_concat_max_len=4294967295");
             return [$dblink, $dbname];
-        } else {
-            $dblink->close();
-            return [null, $dbname];
         }
     }
 
+    /** @param \mysqli $dblink */
     static function set_default_dblink($dblink) {
         self::$default_dblink = $dblink;
     }
 
+    /** @param ?callable(\mysqli,string) $callable */
     static function set_error_handler($callable) {
-        self::$error_handler = $callable ? : "Dbl::default_error_handler";
+        self::$error_handler = $callable ?? "Dbl::default_error_handler";
     }
 
+    /** @return string */
     static function landmark() {
         return caller_landmark(1, self::$landmark_sanitizer);
     }
 
+    /** @param \mysqli $dblink
+     * @param string $query */
     static function default_error_handler($dblink, $query) {
-        trigger_error(self::landmark() . ": database error: $dblink->error in $query");
+        error_log(self::landmark() . ": database error: {$dblink->error} in {$query}");
+        trigger_error(self::landmark() . ": database error: {$dblink->error} in {$query}");
     }
 
     static private function query_args($args, $flags, $log_location) {
@@ -264,16 +287,45 @@ class Dbl {
         $strpos = $argpos = 0;
         $usedargs = [];
         $simpleargs = true;
+        $U_mysql8 = null;
         while (($strpos = strpos($qstr, "?", $strpos)) !== false) {
-            // argument name
+            $prefix = substr($qstr, 0, $strpos);
             $nextpos = $strpos + 1;
             $nextch = substr($qstr, $nextpos, 1);
+
+            // non-argument expansions
             if ($nextch === "?") {
-                $qstr = substr($qstr, 0, $strpos + 1) . substr($qstr, $strpos + 2);
-                $strpos = $strpos + 1;
+                $qstr = $prefix . substr($qstr, $nextpos);
+                $strpos = $nextpos;
                 continue;
-            } else if ($nextch === "{"
-                       && ($rbracepos = strpos($qstr, "}", $nextpos + 1)) !== false) {
+            } else if ($nextch === "U") {
+                $U_mysql8 = $U_mysql8 ?? (strpos($dblink->server_info, "Maria") === false
+                                          && $dblink->server_version >= 80020);
+                $ql = substr($qstr, 0, $strpos);
+                if (substr($qstr, $nextpos + 1, 1) === "(") {
+                    $rparen = strpos($qstr, ")", $nextpos + 2);
+                    $name = substr($qstr, $nextpos + 2, $rparen - $nextpos - 2);
+                    $suffix = substr($qstr, $rparen + 1);
+                    if ($U_mysql8) {
+                        $qstr = "{$prefix}__values.{$name}{$suffix}";
+                    } else {
+                        $qstr = "{$prefix}values({$name}){$suffix}";
+                    }
+                } else {
+                    $suffix = substr($qstr, $nextpos + 1);
+                    if ($U_mysql8) {
+                        $qstr = "{$prefix} as __values {$suffix}";
+                    } else {
+                        $qstr = "{$prefix}{$suffix}";
+                    }
+                }
+                $nextpos = strlen($qstr) - strlen($suffix);
+                continue;
+            }
+
+            // find argument
+            if ($nextch === "{"
+                && ($rbracepos = strpos($qstr, "}", $nextpos + 1)) !== false) {
                 $thisarg = substr($qstr, $nextpos + 1, $rbracepos - $nextpos - 1);
                 if ($thisarg === (string) (int) $thisarg)
                     --$thisarg;
@@ -290,6 +342,7 @@ class Dbl {
                 trigger_error(self::landmark() . ": query '$original_qstr' argument " . (is_int($thisarg) ? $thisarg + 1 : $thisarg) . " not set");
             }
             $usedargs[$thisarg] = true;
+
             // argument format
             $arg = $argv[$thisarg] ?? null;
             if ($nextch === "e" || $nextch === "E") {
@@ -332,15 +385,15 @@ class Dbl {
                 }
                 ++$nextpos;
             } else if ($nextch === "s") {
-                $arg = $dblink->real_escape_string($arg);
+                $arg = $dblink->real_escape_string((string) $arg);
                 ++$nextpos;
             } else if ($nextch === "l") {
-                $arg = sqlq_for_like($arg);
+                $arg = $dblink->real_escape_string(self::escape_like((string) $arg));
                 ++$nextpos;
-                if (substr($qstr, $nextpos + 1, 1) === "s") {
+                if (substr($qstr, $nextpos, 1) === "s") {
                     ++$nextpos;
                 } else {
-                    $arg = "'" . $arg . "'";
+                    $arg = "'{$arg}'";
                 }
             } else if ($nextch === "v") {
                 ++$nextpos;
@@ -383,7 +436,7 @@ class Dbl {
             }
             // combine
             $suffix = substr($qstr, $nextpos);
-            $qstr = substr($qstr, 0, $strpos) . $arg . $suffix;
+            $qstr = "$prefix$arg$suffix";
             $strpos = strlen($qstr) - strlen($suffix);
         }
         if ($simpleargs && $argpos !== count($argv)) {
@@ -404,7 +457,7 @@ class Dbl {
 
     /** @return mysqli_result|bool|null */
     static private function call_query($dblink, $flags, $qfunc, $qstr) {
-        if ($flags & self::F_ECHO) {
+        if (($flags & self::F_ECHO) || self::$verbose) {
             error_log($qstr);
         }
         if ($flags & self::F_NOEXEC) {
@@ -443,7 +496,14 @@ class Dbl {
 
     /** @return Dbl_Result */
     static public function do_result($dblink, $flags, $qstr, $result) {
-        if ($result === false && $dblink->errno) {
+        if (is_bool($result)) {
+            $result = Dbl_Result::make($dblink);
+        } else if ($result === null) {
+            $result = Dbl_Result::make_empty();
+            $result->errno = 1002;
+        }
+        if ($dblink->errno) {
+            $result->query_string = $qstr;
             if (!($flags & self::F_ALLOWERROR)) {
                 ++self::$nerrors;
             }
@@ -452,12 +512,6 @@ class Dbl {
             } else if ($flags & self::F_LOG) {
                 error_log(self::landmark() . ": database error: " . $dblink->error . " in $qstr");
             }
-            $result = Dbl_Result::make($dblink, $qstr);
-        } else if ($result === false || $result === true) {
-            $result = Dbl_Result::make($dblink);
-        } else if ($result === null) {
-            $result = Dbl_Result::make_empty();
-            $result->errno = 1002;
         }
         if (self::$check_warnings
             && !($flags & self::F_ALLOWERROR)
@@ -705,8 +759,9 @@ class Dbl {
     static function fetch_first_columns(/* $result | [$dblink,] $query, ... */) {
         $result = self::do_make_result(func_get_args());
         $x = array();
-        while ($result && ($row = $result->fetch_row()))
+        while ($result && ($row = $result->fetch_row())) {
             $x[] = $row[0];
+        }
         $result && $result->close();
         return $x;
     }
@@ -800,32 +855,63 @@ class Dbl {
         self::$query_log = false;
     }
 
-    /** @return string */
-    static function utf8(/* [$dblink,] $qstr */) {
-        $args = func_get_args();
-        $dblink = count($args) > 1 ? $args[0] : self::$default_dblink;
-        $utf8 = $dblink->server_version >= 50503 ? "utf8mb4" : "utf8";
-        $qstr = count($args) > 1 ? $args[1] : $args[0];
-        return "_" . $utf8 . $qstr;
+    /** @param ?\mysqli $dblink
+     * @return string */
+    static function utf8_charset($dblink = null) {
+        $dblink = $dblink ?? self::$default_dblink;
+        return $dblink->server_version >= 50503 ? "utf8mb4" : "utf8";
     }
 
-    /** @return string */
-    static function utf8ci(/* [$dblink,] $qstr */) {
-        $args = func_get_args();
-        $dblink = count($args) > 1 ? $args[0] : self::$default_dblink;
+    /** @param \mysqli|string $dblink
+     * @param ?string $qstr
+     * @return string */
+    static function utf8($dblink, $qstr = null) {
+        if (is_string($dblink)) {
+            $qstr = $dblink;
+            $dblink = self::$default_dblink;
+        }
         $utf8 = $dblink->server_version >= 50503 ? "utf8mb4" : "utf8";
-        $qstr = count($args) > 1 ? $args[1] : $args[0];
-        return "_" . $utf8 . $qstr . " collate " . $utf8 . "_general_ci";
+        return "_{$utf8}{$qstr}";
+    }
+
+    /** @param \mysqli|string $dblink
+     * @param ?string $qstr
+     * @return string */
+    static function utf8ci($dblink, $qstr = null) {
+        if (is_string($dblink)) {
+            $qstr = $dblink;
+            $dblink = self::$default_dblink;
+        }
+        $utf8 = $dblink->server_version >= 50503 ? "utf8mb4" : "utf8";
+        return "_{$utf8}{$qstr} collate {$utf8}_general_ci";
+    }
+
+    /** @param \mysqli|string $dblink
+     * @param ?string $qstr
+     * @return string */
+    static function convert_utf8($dblink, $qstr = null) {
+        if (is_string($dblink)) {
+            $qstr = $dblink;
+            $dblink = self::$default_dblink;
+        }
+        $utf8 = $dblink->server_version >= 50503 ? "utf8mb4" : "utf8";
+        return "convert($qstr using $utf8)";
+    }
+
+    /** @param string $str
+     * @return string
+     *
+     * The return value of this function must be quoted by `sqlq` before
+     * being passed to SQL, for instance by `?` in `Dbl::format_query`. */
+    static function escape_like($str) {
+        return preg_replace("/(?=[%_\\\\'\"\\x00\\n\\r\\x1a])/", "\\", $str);
     }
 }
 
-// quoting for SQL
+/** @param string $value
+ * @return string */
 function sqlq($value) {
     return Dbl::$default_dblink->escape_string($value);
-}
-
-function sqlq_for_like($value) {
-    return preg_replace("/(?=[%_\\\\'\"\\x00\\n\\r\\x1a])/", "\\", $value);
 }
 
 /** @param list<int> $set

@@ -1,13 +1,13 @@
 <?php
 // csv.php -- HotCRP CSV parsing functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 if (!function_exists("gmp_init")) {
     require_once(SiteLoader::find("lib/polyfills.php"));
 }
 
 class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializable {
-    /** @var list<string> */
+    /** @var array<int|string,string> */
     private $a;
     /** @var CsvParser */
     private $csvp;
@@ -17,6 +17,9 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         $this->a = $a;
         $this->csvp = $csvp;
     }
+    #[\ReturnTypeWillChange]
+    /** @param int|string $offset
+     * @return bool */
     function offsetExists($offset) {
         if (is_string($offset)
             && ($i = $this->csvp->column($offset)) >= 0) {
@@ -24,6 +27,9 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         }
         return isset($this->a[$offset]);
     }
+    #[\ReturnTypeWillChange]
+    /** @param int|string $offset
+     * @return string */
     function& offsetGet($offset) {
         if (is_string($offset)
             && ($i = $this->csvp->column($offset, true)) >= 0) {
@@ -35,6 +41,9 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         }
         return $x;
     }
+    #[\ReturnTypeWillChange]
+    /** @param int|string $offset
+     * @param string $value */
     function offsetSet($offset, $value) {
         if (is_string($offset)
             && ($i = $this->csvp->column($offset, true)) >= 0) {
@@ -42,6 +51,8 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         }
         $this->a[$offset] = $value;
     }
+    #[\ReturnTypeWillChange]
+    /** @param int|string $offset */
     function offsetUnset($offset) {
         if (is_string($offset)
             && ($i = $this->csvp->column($offset)) >= 0) {
@@ -49,16 +60,20 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         }
         unset($this->a[$offset]);
     }
+    #[\ReturnTypeWillChange]
+    /** @return Generator<string> */
     function getIterator() {
         foreach ($this->a as $i => $v) {
             $offset = is_int($i) ? $this->csvp->column_at($i) : $i;
             yield $offset => $v;
         }
     }
+    #[\ReturnTypeWillChange]
     /** @return int */
     function count() {
         return count($this->a);
     }
+    #[\ReturnTypeWillChange]
     function jsonSerialize() {
         return $this->as_map();
     }
@@ -519,6 +534,7 @@ class CsvParser implements Iterator {
         return $a;
     }
 
+    #[\ReturnTypeWillChange]
     /** @return CsvRow */
     function current() {
         if ($this->_current === null) {
@@ -527,11 +543,13 @@ class CsvParser implements Iterator {
         return $this->_current;
     }
 
+    #[\ReturnTypeWillChange]
     /** @return int */
     function key() {
         return $this->_current_pos;
     }
 
+    #[\ReturnTypeWillChange]
     /** @return void */
     function next() {
         if ($this->_current === null) {
@@ -542,6 +560,7 @@ class CsvParser implements Iterator {
         $this->_current_pos = $this->lpos;
     }
 
+    #[\ReturnTypeWillChange]
     /** @return void */
     function rewind() {
         $this->lpos = $this->_rewind_pos;
@@ -550,6 +569,7 @@ class CsvParser implements Iterator {
         $this->_current_pos = $this->lpos;
     }
 
+    #[\ReturnTypeWillChange]
     /** @return bool */
     function valid() {
         return $this->lpos !== count($this->lines);
@@ -606,7 +626,7 @@ class CsvGenerator {
     static function quote($text, $quote_empty = false) {
         if ($text === "") {
             return $quote_empty ? '""' : $text;
-        } else if (preg_match('/\A[-_@\$+A-Za-z0-9.](?:[-_@\$+A-Za-z0-9. \t]*[-_\$+A-Za-z0-9.]|)\z/', $text)) {
+        } else if (preg_match('/\A[-_@\/\$+A-Za-z0-9.](?:[-_@\/\$+A-Za-z0-9. \t]*[-_@\/\$+A-Za-z0-9.]|)\z/', $text)) {
             return $text;
         } else {
             return self::always_quote($text);

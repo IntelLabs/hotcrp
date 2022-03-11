@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getrank.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class GetRank_ListAction extends ListAction {
     function allow(Contact $user, Qrequest $qreq) {
@@ -9,7 +9,7 @@ class GetRank_ListAction extends ListAction {
     function run(Contact $user, Qrequest $qreq, SearchSelection $ssel) {
         $settingrank = $user->conf->setting("tag_rank") && $qreq->tag == "~" . $user->conf->setting_data("tag_rank");
         if (!$user->isPC && !($user->is_reviewer() && $settingrank)) {
-            return self::EPERM;
+            return self::eperm();
         }
         $tagger = new Tagger($user);
         if (($tag = $tagger->check($qreq->tag, Tagger::NOVALUE | Tagger::NOCHAIR))) {
@@ -67,10 +67,10 @@ tag," . CsvGenerator::quote(trim($qreq->tag)) . "
 # same rank as the preceding paper. Lines starting with \">>\", \">>>\",
 # and so forth indicate rank gaps between papers. When you are done,
 # upload the file here:\n"
-                    . "# " . $user->conf->hoturl_absolute("offline", null, Conf::HOTURL_RAW) . "\n\n"
+                    . "# " . $user->conf->hoturl_raw("offline", null, Conf::HOTURL_ABSOLUTE) . "\n\n"
                     . $real . ($real === "" ? "" : "\n") . $null);
         } else {
-            Conf::msg_error($tagger->error_html());
+            return MessageItem::error("<5>" . $tagger->error_html());
         }
     }
 }

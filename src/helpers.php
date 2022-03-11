@@ -1,16 +1,6 @@
 <?php
 // helpers.php -- HotCRP non-class helper functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
-
-/** @return array */
-function mkarray($value) {
-    if (is_array($value)) {
-        return $value;
-    } else {
-        return array($value);
-    }
-}
-
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 // string helpers
 
@@ -64,6 +54,9 @@ function unparse_number_pm_text($n) {
     }
 }
 
+/** @param string $url
+ * @param string $component
+ * @return string */
 function hoturl_add_raw($url, $component) {
     if (($pos = strpos($url, "#")) !== false) {
         $component .= substr($url, $pos);
@@ -72,6 +65,10 @@ function hoturl_add_raw($url, $component) {
     return $url . (strpos($url, "?") === false ? "?" : "&") . $component;
 }
 
+/** @param string $page
+ * @param null|string|array $param
+ * @return string
+ * @deprecated */
 function hoturl($page, $param = null) {
     return Conf::$main->hoturl($page, $param);
 }
@@ -102,8 +99,12 @@ class JsonResult implements JsonSerializable {
         } else if ($values === null) {
             $this->content = [];
         } else if (is_object($values)) {
-            assert(!($values instanceof JsonResult));
-            $this->content = (array) $values;
+            if ($values instanceof JsonSerializable) {
+                $this->content = (array) $values->jsonSerialize();
+            } else {
+                assert(!($values instanceof JsonResult));
+                $this->content = (array) $values;
+            }
         } else if (is_string($values)) {
             assert($this->status && $this->status > 299);
             $this->content = ["ok" => false, "error" => $values];
@@ -122,21 +123,25 @@ class JsonResult implements JsonSerializable {
             return new JsonResult($jr);
         }
     }
-    function export_errors(Conf $conf = null) {
-        if (isset($this->content["error"])) {
-            Conf::msg_on($conf, $this->content["error"], 2);
-        }
-    }
     function export_messages(Conf $conf) {
-        $this->export_errors();
-        foreach ($this->content["message_list"] ?? [] as $mx) {
-            $ma = (array) $mx;
-            if (is_string($ma["message"] ?? null) && $ma["message"] !== "") {
-                Conf::msg_on($conf, $ma["message"], $ma["status"]);
+        $ml = [];
+        foreach ($this->content["message_list"] ?? [] as $mi) {
+            if ($mi instanceof MessageItem) {
+                $ml[] = $mi;
+            } else {
+                error_log("message_list is not MessageItem: " . debug_string_backtrace());
             }
-            if (is_string($ma["field"] ?? null)) {
-                Ht::message_set()->msg_at($ma["field"], $ma["message"] ?? null, $ma["status"]);
-            }
+        }
+        if (empty($ml) && isset($this->content["error"])) {
+            $ml[] = new MessageItem(null, "<0>" . $this->content["error"], 2);
+        }
+        if (empty($ml) && !($this->content["ok"] ?? ($this->status <= 299))) {
+            $ml[] = new MessageItem(null, "<0>Internal error", 2);
+        }
+        $conf->feedback_msg($ml);
+        foreach ($ml as $mi) {
+            if ($mi->field)
+                Ht::message_set()->append_item($mi);
         }
     }
     /** @param bool $validated */
@@ -162,19 +167,9 @@ class JsonResult implements JsonSerializable {
         header("Content-Type: application/json; charset=utf-8");
         echo json_encode_browser($this->content);
     }
+    #[\ReturnTypeWillChange]
     function jsonSerialize() {
         return $this->content;
-    }
-}
-
-class JsonResultException extends Exception {
-    /** @var JsonResult */
-    public $result;
-    /** @var int */
-    static public $capturing = 0;
-    /** @param JsonResult $j */
-    function __construct($j) {
-        $this->result = $j;
     }
 }
 
@@ -188,21 +183,33 @@ class Redirection extends Exception {
     }
 }
 
-function json_exit($json, $arg2 = null) {
-    global $Qreq;
-    $json = JsonResult::make($json, $arg2);
-    if (JsonResultException::$capturing > 0) {
-        throw new JsonResultException($json);
-    } else {
-        $json->emit($Qreq && $Qreq->valid_token());
-        exit;
+class PageCompletion extends Exception {
+    function __construct() {
+        parent::__construct("Page complete");
     }
 }
 
-/** @deprecated */
-function csv_exit(CsvGenerator $csv) {
-    $csv->emit();
-    exit;
+class JsonCompletion extends Exception {
+    /** @var JsonResult */
+    public $result;
+    /** @var int */
+    static public $capturing = 0;
+    /** @var bool */
+    static public $allow_short_circuit = false;
+    /** @param JsonResult $j */
+    function __construct($j) {
+        $this->result = $j;
+    }
+}
+
+function json_exit($json, $arg2 = null) {
+    $json = JsonResult::make($json, $arg2);
+    if (JsonCompletion::$capturing > 0) {
+        throw new JsonCompletion($json);
+    } else {
+        $json->emit(Qrequest::$main_request && Qrequest::$main_request->valid_token());
+        exit;
+    }
 }
 
 function foldupbutton($foldnum = 0, $content = "", $js = null) {
@@ -239,8 +246,7 @@ function expander($open, $foldnum = null, $open_tooltip = null) {
 /** @param Contact|Author|ReviewInfo|CommentInfo $userlike
  * @return string */
 function actas_link($userlike) {
-    global $Qreq;
-    return '<a href="' . Conf::$main->selfurl($Qreq, ["actas" => $userlike->email])
+    return '<a href="' . Conf::$main->selfurl(Qrequest::$main_request, ["actas" => $userlike->email])
         . '" tabindex="-1">' . Ht::img("viewas.png", "[Act as]", ["title" => "Act as " . Text::nameo($userlike, NAME_P)])
         . '</a>';
 }
@@ -258,7 +264,7 @@ function _one_quicklink($id, $baseUrl, $urlrest, $listtype, $isprev) {
         $urlrest["p"] = $id;
     }
     return "<a id=\"quicklink-" . ($isprev ? "prev" : "next")
-        . "\" class=\"x pnum\" href=\"" . hoturl($baseUrl, $urlrest) . "\">"
+        . "\" class=\"ulh pnum\" href=\"" . Conf::$main->hoturl($baseUrl, $urlrest) . "\">"
         . ($isprev ? Icons::ui_linkarrow(3) : "")
         . $paperText
         . ($isprev ? "" : Icons::ui_linkarrow(1))
@@ -284,11 +290,6 @@ function goPaperForm($baseUrl = null, $args = array()) {
     return $x;
 }
 
-function rm_rf_tempdir($tempdir) {
-    assert(substr($tempdir, 0, 1) === "/");
-    exec("/bin/rm -rf " . escapeshellarg($tempdir));
-}
-
 function clean_tempdirs() {
     $dir = sys_get_temp_dir() ? : "/";
     while (substr($dir, -1) === "/") {
@@ -306,43 +307,20 @@ function clean_tempdirs() {
     closedir($dirh);
 }
 
-function tempdir($mode = 0700) {
-    $dir = sys_get_temp_dir() ? : "/";
-    while (substr($dir, -1) === "/") {
-        $dir = substr($dir, 0, -1);
-    }
-    for ($i = 0; $i !== 100; $i++) {
-        $path = $dir . "/hotcrptmp" . mt_rand(0, 9999999);
-        if (mkdir($path, $mode)) {
-            register_shutdown_function("rm_rf_tempdir", $path);
-            return $path;
-        }
-    }
-    return false;
-}
-
 
 // text helpers
-function commajoin($what, $joinword = "and") {
-    $what = array_values($what);
-    $c = count($what);
-    if ($c == 0) {
-        return "";
-    } else if ($c == 1) {
-        return $what[0];
-    } else if ($c == 2) {
-        return $what[0] . " " . $joinword . " " . $what[1];
-    } else {
-        return join(", ", array_slice($what, 0, -1)) . ", " . $joinword . " " . $what[count($what) - 1];
-    }
-}
-
+/** @param array $what
+ * @param string $prefix
+ * @param string $joinword
+ * @return string */
 function prefix_commajoin($what, $prefix, $joinword = "and") {
     return commajoin(array_map(function ($x) use ($prefix) {
         return $prefix . $x;
     }, $what), $joinword);
 }
 
+/** @param iterable $range
+ * @return string */
 function numrangejoin($range) {
     $a = [];
     $format = $first = $last = null;
@@ -360,7 +338,7 @@ function numrangejoin($range) {
                 $a[] = $first . "–" . substr($last, $plen);
             }
         }
-        if ($current !== "" && ctype_digit($current)) {
+        if ($current !== "" && (is_int($current) || ctype_digit($current))) {
             $format = "%0" . strlen((string) $current) . "d";
             $plen = 0;
             $first = $last = $current;
@@ -383,38 +361,63 @@ function numrangejoin($range) {
     return commajoin($a);
 }
 
+/** @param int|float|array $n
+ * @param string $what
+ * @return string */
 function pluralx($n, $what) {
-    if (is_array($n)) {
-        $n = count($n);
-    }
-    return $n == 1 ? $what : pluralize($what);
+    $z = is_array($n) ? count($n) : $n;
+    return $z == 1 ? $what : pluralize($what);
 }
 
-function pluralize($what) {
-    if ($what === "this") {
-        return "these";
-    } else if ($what === "has") {
-        return "have";
-    } else if ($what === "is") {
-        return "are";
-    } else if (str_ends_with($what, ")")
-               && preg_match('/\A(.*?)(\s*\([^)]*\))\z/', $what, $m)) {
-        return pluralize($m[1]) . $m[2];
-    } else if (preg_match('/\A.*?(?:s|sh|ch|[bcdfgjklmnpqrstvxz]y)\z/', $what)) {
-        if (substr($what, -1) === "y") {
-            return substr($what, 0, -1) . "ies";
+/** @param string $s
+ * @return string
+ * @suppress PhanParamSuspiciousOrder */
+function pluralize($s) {
+    if ($s[0] === "t"
+        && (str_starts_with($s, "this ") || str_starts_with($s, "that "))) {
+        return ($s[2] === "i" ? "these " : "those ") . pluralize(substr($s, 5));
+    }
+    $len = strlen($s);
+    $last = $s[$len - 1];
+    if ($last === "s") {
+        if ($s === "this") {
+            return "these";
+        } else if ($s === "has") {
+            return "have";
+        } else if ($s === "is") {
+            return "are";
         } else {
-            return $what . "es";
+            return "{$s}es";
         }
+    } else if ($last === "h"
+               && $len > 1
+               && ($s[$len - 2] === "s" || $s[$len - 2] === "c")) {
+        return "{$s}es";
+    } else if ($last === "y"
+               && $len > 1
+               && strpos("bcdfgjklmnpqrstvxz", $s[$len - 2]) !== false) {
+        return substr($s, 0, $len - 1) . "ies";
+    } else if ($last === "t"
+               && $s === "that") {
+        return "those";
+    } else if ($last === ")"
+               && preg_match('/\A(.*?)(\s*\([^)]*\))\z/', $s, $m)) {
+        return pluralize($m[1]) . $m[2];
     } else {
-        return $what . "s";
+        return "{$s}s";
     }
 }
 
+/** @param int|float|array $n
+ * @param string $what
+ * @return string */
 function plural($n, $what) {
-    return (is_array($n) ? count($n) : $n) . ' ' . pluralx($n, $what);
+    $z = is_array($n) ? count($n) : $n;
+    return "$z " . pluralx($z, $what);
 }
 
+/** @param int $n
+ * @return string */
 function ordinal($n) {
     $x = $n;
     if ($x > 100) {
@@ -424,30 +427,6 @@ function ordinal($n) {
         $x = $x % 10;
     }
     return $n . ($x < 1 || $x > 3 ? "th" : ($x == 1 ? "st" : ($x == 2 ? "nd" : "rd")));
-}
-
-function tabLength($text, $all) {
-    $len = 0;
-    for ($i = 0; $i < strlen($text); ++$i) {
-        if ($text[$i] === ' ') {
-            ++$len;
-        } else if ($text[$i] === '\t') {
-            $len += 8 - ($len % 8);
-        } else if (!$all) {
-            break;
-        } else {
-            ++$len;
-        }
-    }
-    return $len;
-}
-
-/** @param string $varname */
-function ini_get_bytes($varname, $value = null) {
-    $val = trim($value !== null ? $value : ini_get($varname));
-    $last = strlen($val) ? strtolower($val[strlen($val) - 1]) : ".";
-    /** @phan-suppress-next-line PhanParamSuspiciousOrder */
-    return (int) ceil(floatval($val) * (1 << (+strpos(".kmg", $last) * 10)));
 }
 
 /** @param int|float $n
@@ -482,12 +461,9 @@ function unparse_byte_size_binary($n) {
     }
 }
 
-/** @param PermissionProblem $whyNot
- * @deprecated */
-function whyNotText($whyNot, $text_only = false) {
-    return $whyNot->unparse($text_only ? 0 : 5);
-}
-
+/** @param ?string $mode
+ * @param ?Qrequest $qreq
+ * @return string */
 function actionBar($mode = null, $qreq = null) {
     global $Me;
     if ($Me->is_disabled()) {
@@ -496,20 +472,22 @@ function actionBar($mode = null, $qreq = null) {
     $forceShow = ($Me->is_admin_force() ? "&amp;forceShow=1" : "");
 
     $paperArg = "p=*";
-    $xmode = array();
+    $xmode = [];
     $listtype = "p";
 
     $goBase = "paper";
-    if ($mode == "assign") {
+    if ($mode === "assign") {
         $goBase = "assign";
-    } else if ($mode == "re") {
+    } else if ($mode === "re") {
         $goBase = "review";
-    } else if ($mode == "account") {
+    } else if ($mode === "account") {
         $listtype = "u";
         if ($Me->privChair) {
             $goBase = "profile";
             $xmode["search"] = 1;
         }
+    } else if ($mode === "edit") {
+        $xmode["m"] = "edit";
     } else if ($qreq && ($qreq->m || $qreq->mode)) {
         $xmode["m"] = $qreq->m ? : $qreq->mode;
     }
@@ -517,22 +495,28 @@ function actionBar($mode = null, $qreq = null) {
     // quicklinks
     $x = "";
     if (($list = Conf::$main->active_list())) {
-        $x .= '<td class="vbar quicklinks">';
-        if (($prev = $list->neighbor_id(-1)) !== false)
+        $x .= '<td class="vbar quicklinks"';
+        if ($xmode || $goBase !== "paper") {
+            $x .= ' data-link-params="' . htmlspecialchars(json_encode_browser(["page" => $goBase] + $xmode)) . '"';
+        }
+        $x .= '>';
+        if (($prev = $list->neighbor_id(-1)) !== false) {
             $x .= _one_quicklink($prev, $goBase, $xmode, $listtype, true) . " ";
+        }
         if ($list->description) {
             $url = $list->full_site_relative_url();
             if ($url) {
-                $x .= '<a id="quicklink-list" class="x" href="' . htmlspecialchars(Navigation::siteurl() . $url) . "\">" . $list->description . "</a>";
+                $x .= '<a id="quicklink-list" class="ulh" href="' . htmlspecialchars(Navigation::siteurl() . $url) . "\">{$list->description}</a>";
             } else {
-                $x .= '<span id="quicklink-list">' . $list->description . '</span>';
+                $x .= "<span id=\"quicklink-list\">{$list->description}</span>";
             }
         }
-        if (($next = $list->neighbor_id(1)) !== false)
+        if (($next = $list->neighbor_id(1)) !== false) {
             $x .= " " . _one_quicklink($next, $goBase, $xmode, $listtype, false);
+        }
         $x .= '</td>';
 
-        if ($Me->is_track_manager() && $listtype == "p") {
+        if ($Me->is_track_manager() && $listtype === "p") {
             $x .= '<td id="tracker-connect" class="vbar"><a id="tracker-connect-btn" class="ui js-tracker tbtn need-tooltip" href="" aria-label="Start meeting tracker">&#9759;</a><td>';
         }
     }
@@ -581,23 +565,6 @@ function unparse_latin_ordinal($n) {
             }
             $n = intval(($n - 1) / 26);
         }
-    }
-}
-
-/** @param null|ReviewInfo|int $ord
- * @return string
- * @deprecated */
-function unparseReviewOrdinal($ord) {
-    if (!$ord) {
-        return ".";
-    } else if (is_object($ord)) {
-        if ($ord->reviewOrdinal) {
-            return $ord->paperId . unparse_latin_ordinal($ord->reviewOrdinal);
-        } else {
-            return (string) $ord->reviewId;
-        }
-    } else {
-        return unparse_latin_ordinal($ord);
     }
 }
 
@@ -650,7 +617,11 @@ function unparse_preference_span($preference, $always = false) {
     return $t;
 }
 
-function review_type_icon($revtype, $unfinished = null, $classes = null) {
+/** @param int $revtype
+ * @param bool $unfinished
+ * @param ?string $classes
+ * @return string */
+function review_type_icon($revtype, $unfinished = false, $classes = null) {
     // see also script.js:review_form
     assert(!!$revtype);
     return '<span class="rto rt' . $revtype
@@ -660,10 +631,12 @@ function review_type_icon($revtype, $unfinished = null, $classes = null) {
         . '"><span class="rti">' . ReviewForm::$revtype_icon_text[$revtype] . '</span></span>';
 }
 
+/** @return string */
 function review_lead_icon() {
     return '<span class="rto rtlead" title="Lead"><span class="rti">L</span></span>';
 }
 
+/** @return string */
 function review_shepherd_icon() {
     return '<span class="rto rtshep" title="Shepherd"><span class="rti">S</span></span>';
 }
@@ -671,6 +644,8 @@ function review_shepherd_icon() {
 
 // Aims to return a random password string with at least
 // `$length * 5` bits of entropy.
+/** @param int $length
+ * @return string */
 function hotcrp_random_password($length = 14) {
     // XXX it is possible to correctly account for loss of entropy due
     // to use of consonant pairs; I have only estimated
@@ -710,6 +685,9 @@ function hotcrp_random_password($length = 14) {
 }
 
 
+/** @param int|string $x
+ * @param string $format
+ * @return string */
 function encode_token($x, $format = "") {
     $s = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     $t = "";
@@ -739,6 +717,8 @@ function encode_token($x, $format = "") {
     }
 }
 
+/** @param string $x
+ * @param string $format */
 function decode_token($x, $format = "") {
     $map = "//HIJKLMNO///////01234567/89:;</=>?@ABCDEFG";
     $t = "";
@@ -774,7 +754,7 @@ function decode_token($x, $format = "") {
 /** @param string $bytes
  * @return string */
 function base48_encode($bytes) {
-    $convtab = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV";
+    $convtab = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXY";
     $bi = 0;
     $blen = strlen($bytes);
     $have = $w = 0;
@@ -799,6 +779,7 @@ function base48_encode($bytes) {
 /** @param string $text
  * @return string|false */
 function base48_decode($text) {
+    $revconvtab = "IJKLMNOP QRSTU VWXYZ[\\]^_       0123456789: ;<=>?@ABCDEFGH";
     $ti = 0;
     $tlen = strlen($text);
     $have = $w = 0;
@@ -807,11 +788,7 @@ function base48_decode($text) {
         $chunk = $idx = 0;
         while ($ti !== $tlen && $idx !== 2) {
             $ch = ord($text[$ti]);
-            if ($ch >= 97 && $ch <= 122) {
-                $n = $ch - 97;
-            } else if ($ch >= 65 && $ch <= 86) {
-                $n = $ch - 39;
-            } else {
+            if ($ch < 65 || $ch > 122 || ($n = ord($revconvtab[$ch - 65]) - 48) < 0) {
                 return false;
             }
             ++$ti;

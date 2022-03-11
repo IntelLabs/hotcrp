@@ -1,6 +1,6 @@
 <?php
 // o_contacts.php -- HotCRP helper class for contacts intrinsic
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Contacts_PaperOption extends PaperOption {
     function __construct(Conf $conf, $args) {
@@ -30,7 +30,7 @@ class Contacts_PaperOption extends PaperOption {
         }
         foreach ($ov->value_list() as $cid) {
             if (!isset($ca[$cid]))
-                $ps->conf->request_cached_user_by_id($cid);
+                $ps->conf->prefetch_user_by_id($cid);
         }
         $j = [];
         foreach ($ov->value_list() as $cid) {
@@ -44,12 +44,13 @@ class Contacts_PaperOption extends PaperOption {
             if (count($ov->value_list()) === 0
                 && $ov->prow->paperId > 0
                 && count($ov->prow->contacts()) > 0) {
-                $ov->error($this->conf->_("Each submission must have at least one contact."));
+                $ov->error($this->conf->_("<0>Each submission must have at least one contact"));
             }
             if (!$user->allow_administer($ov->prow)
                 && $ov->prow->conflict_type($user) >= CONFLICT_CONTACTAUTHOR
                 && self::ca_index($ov->anno("users"), $user->email) === false) {
-                $ov->error($this->conf->_("You can’t remove yourself from the submission’s contacts. (Ask another contact to remove you.)"));
+                $ov->error($this->conf->_("<0>You can’t remove yourself from the submission’s contacts"));
+                $ov->msg("<0>(Ask another contact to remove you.)", MessageSet::INFORM);
             }
         }
     }
@@ -86,12 +87,12 @@ class Contacts_PaperOption extends PaperOption {
                 $ca[] = $c;
             } else {
                 if ($c->email === "" || strcasecmp($c->email, "Email") === 0) {
-                    $ov->error("Email address required.");
+                    $ov->error("<0>Email address required");
                 } else {
-                    $ov->error("“" . htmlspecialchars($c->email) . "” is not a valid email address.");
+                    $ov->error("<0>Invalid email address ‘{$c->email}’");
                 }
                 if ($c->author_index) {
-                    $ov->msg_at("contacts:{$c->author_index}", false, MessageSet::ERROR);
+                    $ov->msg_at("contacts:{$c->author_index}", null, MessageSet::ERROR);
                 }
                 $bad_ca[] = $c;
             }
@@ -102,7 +103,7 @@ class Contacts_PaperOption extends PaperOption {
         $ov->set_anno("bad_users", $bad_ca);
         $ov->set_anno("modified", true);
     }
-    function parse_web(PaperInfo $prow, Qrequest $qreq) {
+    function parse_qreq(PaperInfo $prow, Qrequest $qreq) {
         $ov = PaperValue::make_force($prow, $this);
         $ca = $ov->anno("users");
         $bad_ca = $new_ca = [];
@@ -143,7 +144,7 @@ class Contacts_PaperOption extends PaperOption {
                         $new_ca[] = Author::make_keyed($a);
                     }
                 } else {
-                    return PaperValue::make_estop($prow, $this, "Validation error.");
+                    return PaperValue::make_estop($prow, $this, "<0>Validation error");
                 }
             }
         } else if (is_array($j)) {
@@ -156,7 +157,7 @@ class Contacts_PaperOption extends PaperOption {
                 } else if (is_object($v) && isset($v->email)) {
                     $email = $v->email;
                 } else {
-                    return PaperValue::make_estop($prow, $this, "Validation error.");
+                    return PaperValue::make_estop($prow, $this, "<0>Validation error");
                 }
                 if (self::ca_index($ca, $email) !== false) {
                     // double mention -- do nothing
@@ -169,7 +170,7 @@ class Contacts_PaperOption extends PaperOption {
                 }
             }
         } else {
-            return PaperValue::make_estop($prow, $this, "Validation error.");
+            return PaperValue::make_estop($prow, $this, "<0>Validation error");
         }
         self::apply_new_users($ov, $new_ca, $ca);
         return $ov;
@@ -197,7 +198,7 @@ class Contacts_PaperOption extends PaperOption {
             . $pt->messages_at("contacts:email_$reqidx")
             . '</div>';
     }
-    function echo_web_edit(PaperTable $pt, $ov, $reqov) {
+    function print_web_edit(PaperTable $pt, $ov, $reqov) {
         $contacts = $ov->anno("users") ?? [];
         foreach ($ov->prow->author_list() as $au) {
             if (!$this->value_by_email($ov, $au->email)
@@ -209,7 +210,7 @@ class Contacts_PaperOption extends PaperOption {
         usort($contacts, $this->conf->user_comparator());
         $readonly = !$this->test_editable($ov->prow);
 
-        $pt->echo_editable_option_papt($this, null, ["id" => "contacts", "for" => false]);
+        $pt->print_editable_option_papt($this, null, ["id" => "contacts", "for" => false]);
         echo '<div class="papev js-row-order"><div>';
 
         $cidx = 1;

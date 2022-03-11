@@ -1,9 +1,9 @@
 <?php
-// src/help/h_keywords.php -- HotCRP help functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// help/h_keywords.php -- HotCRP help functions
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Keywords_HelpTopic {
-    static function render(HelpRenderer $hth) {
+    static function print(HelpRenderer $hth) {
         // how to report author searches?
         if ($hth->conf->submission_blindness() === Conf::BLIND_NEVER) {
             $aunote = "";
@@ -14,7 +14,7 @@ class Keywords_HelpTopic {
         }
 
         // does a reviewer tag exist?
-        $retag = $hth->meaningful_pc_tag() ? : "";
+        $retag = $hth->meaningful_pc_tag() ?? "";
 
         echo $hth->table(true);
         echo $hth->tgroup("Basics");
@@ -49,7 +49,7 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("topic:link", "selected topics match “link”");
 
         $opts = array_filter($hth->conf->options()->normal(), function ($o) {
-            return $o->form_position() !== false && $o->search_keyword() !== false;
+            return $o->form_order() !== false && $o->search_keyword() !== false;
         });
         usort($opts, function ($a, $b) {
             if ($a->final !== $b->final) {
@@ -112,8 +112,9 @@ class Keywords_HelpTopic {
         echo $hth->tgroup("Reviews");
         echo $hth->search_trow("re:me", "you are a reviewer");
         echo $hth->search_trow("re:fdabek", "“fdabek” in reviewer name/email");
-        if ($retag)
+        if ($retag) {
             echo $hth->search_trow("re:#$retag", "has a reviewer tagged “#" . $retag . "”");
+        }
         echo $hth->search_trow("re:4", "four reviewers (assigned and/or completed)");
         if ($retag) {
             echo $hth->search_trow("re:#$retag>1", "at least two reviewers (assigned and/or completed) tagged “#" . $retag . "”");
@@ -143,7 +144,7 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("cmt:>=3", "at least <em>three</em> visible reviewer comments");
         echo $hth->search_trow("has:aucmt", "at least one reviewer comment visible to authors");
         echo $hth->search_trow("cmt:sylvia", "“sylvia” (in name/email) wrote at least one visible comment; can combine with counts, use reviewer tags");
-        $rrds = $hth->conf->resp_rounds();
+        $rrds = $hth->conf->response_rounds();
         if (count($rrds) > 1) {
             echo $hth->search_trow("has:response", "has an author’s response");
             echo $hth->search_trow("has:{$rrds[1]->name}response", "has {$rrds[1]->name} response");

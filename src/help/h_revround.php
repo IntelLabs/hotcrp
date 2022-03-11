@@ -1,13 +1,13 @@
 <?php
-// src/help/h_revround.php -- HotCRP help functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// help/h_revround.php -- HotCRP help functions
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class RevRound_HelpTopic {
-    static function render(HelpRenderer $hth) {
+    static function print(HelpRenderer $hth) {
         echo "<p>Many conferences divide their review assignments into multiple <em>rounds</em>.
 Each round is given a name, such as “R1” or “lastround.”
 (We suggest very short names like “R1”.)
-Configure rounds on the ", $hth->setting_link("settings page", "roundname"), ".
+Configure rounds on the ", $hth->setting_link("settings page", "roundname_0"), ".
 To search for any paper with a round “R2” review assignment, ",
 $hth->search_link("search for “re:R2”", "re:R2"), ".
 To list a PC member’s round “R1” review assignments, ",

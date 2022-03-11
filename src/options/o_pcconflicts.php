@@ -1,11 +1,11 @@
 <?php
 // o_pcconflicts.php -- HotCRP helper class for PC conflicts intrinsic
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class PCConflicts_PaperOption extends PaperOption {
     function __construct(Conf $conf, $args) {
         parent::__construct($conf, $args);
-        $this->set_exists_if(!!$this->conf->setting("sub_pcconf"));
+        $this->set_exists_condition(!!$this->conf->setting("sub_pcconf"));
     }
     /** @return array<int,int> */
     static private function paper_value_map(PaperInfo $prow) {
@@ -46,14 +46,15 @@ class PCConflicts_PaperOption extends PaperOption {
             && ($ov->prow->outcome <= 0 || !$user->can_view_decision($ov->prow))) {
             $vm = self::value_map($ov);
             $pcs = [];
-            foreach ($this->conf->full_pc_members() as $p) {
+            $this->conf->ensure_cached_user_collaborators();
+            foreach ($this->conf->pc_members() as $p) {
                 if (($vm[$p->contactId] ?? 0) === 0 /* not MAXUNCONFLICTED */
                     && $ov->prow->potential_conflict($p)) {
-                    $pcs[] = Ht::link($p->name_h(NAME_P), "#pcc{$p->contactId}", ["class" => "uu"]);
+                    $pcs[] = Ht::link($p->name_h(NAME_P), "#pcconf:{$p->contactId}");
                 }
             }
             if (!empty($pcs)) {
-                $ov->warning($this->conf->_("You may have missed conflicts of interest with %s. Please verify that all conflicts are correctly marked.", commajoin($pcs, "and")) . $this->conf->_(" Hover over “possible conflict” labels for more information."));
+                $ov->warning($this->conf->_("<5>You may have missed conflicts of interest with %#s. Please verify that all conflicts are correctly marked.", $pcs) . $this->conf->_(" Hover over “possible conflict” labels for more information."));
             }
         }
     }
@@ -75,11 +76,13 @@ class PCConflicts_PaperOption extends PaperOption {
     private function update_value_map(&$vm, $k, $v) {
         $vm[$k] = (($vm[$k] ?? 0) & ~CONFLICT_PCMASK) | $v;
     }
-    function parse_web(PaperInfo $prow, Qrequest $qreq) {
+    function parse_qreq(PaperInfo $prow, Qrequest $qreq) {
         $vm = self::paper_value_map($prow);
         foreach ($prow->conf->pc_members() as $cid => $pc) {
-            if (isset($qreq["has_pcc$cid"]) || isset($qreq["pcc$cid"])) {
-                $ct = $qreq["pcc$cid"] ?? "0";
+            if (isset($qreq["has_pcconf:$cid"]) || isset($qreq["pcconf:$cid"])
+                // XXX backward compat:
+                || isset($qreq["has_pcc$cid"]) || isset($qreq["pcc$cid"])) {
+                $ct = $qreq["pcconf:$cid"] ?? $qreq["pcc$cid"] ?? "0";
                 if (ctype_digit($ct) && $ct >= 0 && $ct <= 127) {
                     $this->update_value_map($vm, $cid, (int) $ct);
                 }
@@ -99,11 +102,11 @@ class PCConflicts_PaperOption extends PaperOption {
                 if (is_string($x)) {
                     $ja[strtolower($x)] = true;
                 } else {
-                    return PaperValue::make_estop($prow, $this, "Validation error.");
+                    return PaperValue::make_estop($prow, $this, "<0>Validation error");
                 }
             }
         } else {
-            return PaperValue::make_estop($prow, $this, "Validation error.");
+            return PaperValue::make_estop($prow, $this, "<0>Validation error");
         }
 
         $vm = self::paper_value_map($prow);
@@ -122,25 +125,25 @@ class PCConflicts_PaperOption extends PaperOption {
                     $pc = $prow->conf->cached_user_by_id($pc->primaryContactId);
                 }
                 if (!$pc || !$pc->isPC) {
-                    $pv->msg("“" . htmlspecialchars($email) . "” is not a PC member’s email.", MessageSet::WARNING);
+                    $pv->msg("<0>Email address ‘{$email}’ does not match a PC member", MessageSet::WARNING);
                 }
                 $ct = $confset->parse_json($v);
                 if ($ct === false) {
-                    $pv->msg("“" . htmlspecialchars($v) . "” does not describe a conflict type.", MessageSet::WARNING);
+                    $pv->msg("<0>Invalid conflict type ‘{$v}’", MessageSet::WARNING);
                     $ct = Conflict::GENERAL;
                 }
                 if ($pc && $pc->isPC) {
                     $this->update_value_map($vm, $pc->contactId, $ct);
                 }
             } else {
-                return PaperValue::make_estop($prow, $this, "Validation error.");
+                return PaperValue::make_estop($prow, $this, "<0>Validation error");
             }
         }
         /** @phan-suppress-next-line PhanTypeMismatchArgument */
         $pv->set_value_data(array_keys($vm), array_values($vm));
         return $pv;
     }
-    function echo_web_edit(PaperTable $pt, $ov, $reqov) {
+    function print_web_edit(PaperTable $pt, $ov, $reqov) {
         assert(!!$this->conf->setting("sub_pcconf"));
         $admin = $pt->user->can_administer($ov->prow);
         if (!$this->conf->setting("sub_pcconf")
@@ -148,7 +151,8 @@ class PCConflicts_PaperOption extends PaperOption {
             return;
         }
 
-        $pcm = $this->conf->full_pc_members();
+        $this->conf->ensure_cached_user_collaborators();
+        $pcm = $this->conf->pc_members();
         if (empty($pcm)) {
             return;
         }
@@ -178,7 +182,7 @@ class PCConflicts_PaperOption extends PaperOption {
             }
         }
 
-        $pt->echo_editable_option_papt($this, null, ["id" => $this->formid]);
+        $pt->print_editable_option_papt($this, null, ["id" => $this->formid]);
         echo '<div class="papev"><ul class="pc-ctable">';
         $readonly = !$this->test_editable($ov->prow);
 
@@ -209,7 +213,8 @@ class PCConflicts_PaperOption extends PaperOption {
             }
             echo '"><label>';
 
-            $js = ["id" => "pcc$id", "disabled" => $readonly];
+            $js = ["id" => "pcconf:$id", "disabled" => $readonly];
+            $hidden = "";
             if (Conflict::is_author($pct)
                 || (!$admin && Conflict::is_pinned($pct))) {
                 if ($selectors) {
@@ -225,7 +230,7 @@ class PCConflicts_PaperOption extends PaperOption {
                 } else {
                     echo '<span class="checkc">', Ht::checkbox(null, 1, Conflict::is_conflicted($pct), ["disabled" => true]), '</span>';
                 }
-                echo Ht::hidden("pcc$id", $pct, ["class" => "conflict-entry", "disabled" => true]);
+                echo Ht::hidden("pcconf:$id", $pct, ["class" => "conflict-entry", "disabled" => true]);
             } else if ($selectors) {
                 $xctypes = $ctypes;
                 if (!isset($xctypes[$ct])) {
@@ -234,20 +239,20 @@ class PCConflicts_PaperOption extends PaperOption {
                 $js["class"] = "conflict-entry";
                 $js["data-default-value"] = $pct;
                 echo '<span class="pcconf-editselector">',
-                    Ht::select("pcc$id", $xctypes, $ct, $js),
+                    Ht::select("pcconf:$id", $xctypes, $ct, $js),
                     '</span>';
             } else {
                 $js["data-default-checked"] = Conflict::is_conflicted($pct);
-                $js["data-range-type"] = "pcc";
+                $js["data-range-type"] = "pcconf";
                 $js["class"] = "uic js-range-click conflict-entry";
                 $checked = Conflict::is_conflicted($ct);
                 echo '<span class="checkc">',
-                    Ht::hidden("has_pcc$id", 1),
-                    Ht::checkbox("pcc$id", $checked ? $ct : Conflict::GENERAL, $checked, $js),
+                    Ht::checkbox("pcconf:$id", $checked ? $ct : Conflict::GENERAL, $checked, $js),
                     '</span>';
+                $hidden = Ht::hidden("has_pcconf:$id", 1);
             }
 
-            echo $label, "</label>";
+            echo $label, "</label>", $hidden;
             if ($pcconfmatch) {
                 echo $pcconfmatch[0];
             }

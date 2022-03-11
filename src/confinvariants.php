@@ -1,6 +1,6 @@
 <?php
 // confinvariants.php -- HotCRP invariant checker
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ConfInvariants {
     /** @var Conf */
@@ -141,7 +141,7 @@ class ConfInvariants {
         Dbl::free($result);
 
         // anonymous users are disabled; primaryContactId is not recursive
-        $result = $this->conf->qe("select contactId, email, primaryContactId, disabled from ContactInfo where primaryContactId!=0 or (email>='anonymous' and email<='anonymous:')");
+        $result = $this->conf->qe("select contactId, email, primaryContactId, roles, disabled from ContactInfo where primaryContactId!=0 or (email>='anonymous' and email<='anonymous:') or (roles!=0 and (roles&~" . Contact::ROLE_DBMASK . ")!=0)");
         $primary = [];
         while (($row = $result->fetch_object())) {
             if (str_starts_with($row->email, "anonymous")
@@ -158,12 +158,16 @@ class ConfInvariants {
                     $this->invariant_error("primary_user_loop", "primary user loop involving {$cid}/{$row->email}");
                 }
             }
+            if (($row->roles & ~Contact::ROLE_DBMASK) !== 0) {
+                $this->invariant_error("user_roles", "user {$row->email} has funky roles {$row->roles}");
+            }
         }
         Dbl::free($result);
 
         // whitespace is simplified
-        $regex = Dbl::utf8($this->conf->dblink, "'^ | \$|  |[\\n\\r\\t]'");
-        $any = $this->invariantq("select email from ContactInfo where firstName regexp $regex or lastName regexp $regex or affiliation regexp $regex limit 1");
+        $utf8cs = Dbl::utf8_charset($this->conf->dblink);
+        $regex = "_{$utf8cs}'^ | \$|  |[\\n\\r\\t]'";
+        $any = $this->invariantq("select email from ContactInfo where convert(firstName using $utf8cs) regexp $regex or convert(lastName using $utf8cs) regexp $regex or convert(affiliation using $utf8cs) regexp $regex limit 1");
         if ($any) {
             $this->invariant_error("user_whitespace", "user whitespace is not simplified");
         }
@@ -224,8 +228,14 @@ class ConfInvariants {
             $this->invariant_error("empty comment #{0}/{1}");
         }
 
+        // responses have author visibility
+        $any = $this->invariantq("select paperId, commentId from PaperComment where (commentType&" . CommentInfo::CT_RESPONSE  . ")!=0 and (commentType&" . CommentInfo::CT_AUTHOR . ")=0 limit 1");
+        if ($any) {
+            $this->invariant_error("submitted response #{0}/{1} is not author-visible");
+        }
+
         // non-draft comments are displayed
-        $any = $this->invariantq("select paperId, commentId from PaperComment where timeDisplayed=0 and (commentType&" . COMMENTTYPE_DRAFT . ")=0 limit 1");
+        $any = $this->invariantq("select paperId, commentId from PaperComment where timeDisplayed=0 and (commentType&" . CommentInfo::CT_DRAFT . ")=0 limit 1");
         if ($any) {
             $this->invariant_error("submitted comment #{0}/{1} has no timeDisplayed");
         }
@@ -366,15 +376,17 @@ class ConfInvariants {
         return $this;
     }
 
-    /** @param string $prefix
+    /** @param ?string $prefix
      * @return bool */
-    static function test_all(Conf $conf, $prefix = "") {
+    static function test_all(Conf $conf, $prefix = null) {
+        $prefix = $prefix ?? caller_landmark() . ": ";
         return (new ConfInvariants($conf, $prefix))->exec_all()->ok();
     }
 
-    /** @param string $prefix
+    /** @param ?string $prefix
      * @return bool */
-    static function test_document_inactive(Conf $conf, $prefix = "") {
+    static function test_document_inactive(Conf $conf, $prefix = null) {
+        $prefix = $prefix ?? caller_landmark() . ": ";
         return (new ConfInvariants($conf, $prefix))->exec_document_inactive()->ok();
     }
 }

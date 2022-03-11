@@ -1,6 +1,6 @@
 <?php
 // permissionproblem.php -- HotCRP helper class for permission errors
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class PermissionProblem extends Exception
     implements ArrayAccess, IteratorAggregate, Countable, JsonSerializable {
@@ -14,11 +14,13 @@ class PermissionProblem extends Exception
         $this->conf = $conf;
         $this->_a = $a ?? [];
     }
+    #[\ReturnTypeWillChange]
     /** @param string $offset
      * @return bool */
     function offsetExists($offset) {
         return array_key_exists($offset, $this->_a);
     }
+    #[\ReturnTypeWillChange]
     /** @param string $offset */
     function& offsetGet($offset) {
         $x = null;
@@ -27,15 +29,18 @@ class PermissionProblem extends Exception
         }
         return $x;
     }
+    #[\ReturnTypeWillChange]
     /** @param string $offset
      * @param mixed $value */
     function offsetSet($offset, $value) {
         $this->_a[$offset] = $value;
     }
+    #[\ReturnTypeWillChange]
     /** @param string $offset */
     function offsetUnset($offset) {
         unset($this->_a[$offset]);
     }
+    #[\ReturnTypeWillChange]
     function getIterator() {
         return new ArrayIterator($this->as_array());
     }
@@ -61,10 +66,12 @@ class PermissionProblem extends Exception
         }
         return $this;
     }
+    #[\ReturnTypeWillChange]
     /** @return int */
     function count() {
         return count($this->_a);
     }
+    #[\ReturnTypeWillChange]
     function jsonSerialize() {
         return $this->as_array();
     }
@@ -85,7 +92,6 @@ class PermissionProblem extends Exception
     /** @param int $format
      * @return string */
     function unparse($format = 0) {
-        global $Qreq;
         $paperId = $this->_a["paperId"] ?? -1;
         $reviewId = $this->_a["reviewId"] ?? -1;
         $option = $this->_a["option"] ?? null;
@@ -181,13 +187,13 @@ class PermissionProblem extends Exception
             } else {
                 $open_dname = false;
             }
-            $start = $open_dname ? $this->conf->setting($open_dname, -1) : 1;
+            $start = $open_dname ? $this->conf->setting($open_dname) ?? -1 : 1;
             if ($dname === "extrev_chairreq") {
                 $end_dname = $this->conf->review_deadline_name($this->_a["reviewRound"] ?? null, false, true);
             } else {
                 $end_dname = $dname;
             }
-            $end = $this->conf->setting($end_dname, -1);
+            $end = $this->conf->setting($end_dname) ?? -1;
             if ($dname == "au_seerev") {
                 $ms[] = $this->conf->_c("etime", "Action not available.", $dname, $paperId);
             } else if ($start <= 0 || $start == $end) {
@@ -246,11 +252,14 @@ class PermissionProblem extends Exception
             $ms[] = $this->conf->_c("eperm", "Permission error.", "unknown", $paperId);
         }
         // finish it off
-        if (isset($this->_a["forceShow"]) && $format === 5
+        if (isset($this->_a["forceShow"])
+            && $format === 5
             && Navigation::page() !== "api") {
-            $ms[] = $this->conf->_("<a class=\"nw\" href=\"%s\">Override conflict</a>", $this->conf->selfurl($Qreq, ["forceShow" => 1]));
+            $ms[] = $this->conf->_("<a class=\"nw\" href=\"%s\">Override conflict</a>", $this->conf->selfurl(Qrequest::$main_request, ["forceShow" => 1]));
         }
-        if (!empty($ms) && isset($this->_a["listViewable"]) && $format === 5) {
+        if (!empty($ms)
+            && isset($this->_a["listViewable"])
+            && $format === 5) {
             $ms[] = $this->conf->_("<a href=\"%s\">List the submissions you can view</a>", $this->conf->hoturl("search", "q="));
         }
         return join(" ", $ms);

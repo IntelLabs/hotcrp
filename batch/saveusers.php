@@ -1,8 +1,8 @@
 <?php
 // saveusers.php -- HotCRP maintenance script
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 
 $arg = Getopt::rest($argv, "hn:e:u:r:", ["help", "name:", "no-email", "no-notify", "notify", "modify-only", "create-only", "no-modify", "no-create", "expression:", "expr:", "user:", "roles:", "uname:"]);
 foreach (["expr" => "e", "expression" => "e", "no-email" => "no-notify",
@@ -44,12 +44,10 @@ function save_contact(UserStatus $ustatus, $key, $cj, $arg) {
             fwrite(STDOUT, "{$acct->email}: Saved " . join(", ", array_keys($ustatus->diffs)) . ".\n");
         }
     } else {
-        foreach ($ustatus->error_texts() as $msg) {
-            fwrite(STDERR, $msg . "\n");
-            if (isset($arg["create-only"]) && $ustatus->has_error_at("email_inuse")) {
-                fwrite(STDERR, "(Use --modify to modify existing users.)\n");
-            }
+        if (isset($arg["create-only"]) && $ustatus->has_error_at("email_inuse")) {
+            $ustatus->msg_at("email_inuse", "Use `--modify` to modify existing users.", MessageSet::INFORM);
         }
+        fwrite(STDERR, $ustatus->full_feedback_text());
         $status = 1;
     }
 }
@@ -84,7 +82,7 @@ if (isset($arg["u"])) {
     if (isset($arg["uname"])) {
         $cj->name = $arg["uname"];
     }
-    $ustatus->set_user(new Contact(null, $Conf));
+    $ustatus->set_user(Contact::make($Conf));
     $ustatus->clear_messages();
     save_contact($ustatus, null, $cj, $arg);
 } else if (!preg_match('/\A\s*[\[\{]/i', $content)) {
@@ -99,11 +97,12 @@ if (isset($arg["u"])) {
     }
     $ustatus->add_csv_synonyms($csv);
     while (($line = $csv->next_row())) {
-        $ustatus->set_user(new Contact(null, $Conf));
+        $ustatus->set_user(Contact::make($Conf));
         $ustatus->clear_messages();
-        $cj = (object) ["id" => null];
-        $ustatus->parse_csv_group("", $cj, $line);
-        save_contact($ustatus, null, $cj, $arg);
+        $ustatus->csvreq = $line;
+        $ustatus->jval = (object) ["id" => null];
+        $ustatus->parse_csv_group("");
+        save_contact($ustatus, null, $ustatus->jval, $arg);
     }
 } else {
     $content = json_decode($content);
@@ -120,7 +119,7 @@ if (isset($arg["u"])) {
         exit(1);
     }
     foreach ($content as $key => $cj) {
-        $ustatus->set_user(new Contact(null, $Conf));
+        $ustatus->set_user(Contact::make($Conf));
         $ustatus->clear_messages();
         save_contact($ustatus, $key, $cj, $arg);
     }

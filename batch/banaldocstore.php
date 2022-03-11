@@ -1,6 +1,6 @@
 <?php
 // banaldocstore.php -- HotCRP maintenance script
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 $arg = getopt("hn:c:Vm:dqo:", ["help", "name:", "count:", "verbose", "match:", "max-usage:", "quiet", "silent", "output"]);
 foreach (["c" => "count", "V" => "verbose", "m" => "match",
@@ -21,12 +21,12 @@ if (isset($arg["count"]) && !ctype_digit($arg["count"])) {
     exit(1);
 }
 
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/init.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/init.php");
 
 $dp = $Conf->docstore();
 if (!$dp) {
-   fwrite(STDERR, "batch/cleandocstore.php: Conference doesn't use docstore\n");
-   exit(1);
+    fwrite(STDERR, "batch/cleandocstore.php: Conference doesn't use docstore\n");
+    exit(1);
 }
 preg_match('{\A((?:/[^/%]*(?=/|\z))+)}', $dp, $m);
 $usage_directory = $m[1];

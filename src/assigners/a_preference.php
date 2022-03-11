@@ -1,6 +1,6 @@
 <?php
 // a_preference.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Preference_Assignable extends Assignable {
     /** @var int */
@@ -50,18 +50,18 @@ class Preference_AssignmentParser extends AssignmentParser {
             });
     }
     function expand_missing_user(PaperInfo $prow, $req, AssignmentState $state) {
-        return $state->reviewer->isPC ? [$state->reviewer] : false;
+        return $state->reviewer->isPC ? [$state->reviewer] : null;
     }
     function allow_user(PaperInfo $prow, Contact $user, $req, AssignmentState $state) {
         if (!$user->contactId) {
             return false;
         } else if (!$state->user->can_edit_preference_for($user, $prow)) {
             if ($user->contactId !== $state->user->contactId) {
-                $m = "Can’t enter a preference for " . $user->name_h(NAME_E) . " on #{$prow->paperId}. ";
+                $m = "<5>Can’t enter a preference for " . $user->name_h(NAME_E) . " on #{$prow->paperId}. ";
             } else {
-                $m = "Can’t enter a preference on #{$prow->paperId}. ";
+                $m = "<5>Can’t enter a preference on #{$prow->paperId}. ";
             }
-            return $m . $state->user->perm_edit_preference_for($user, $prow)->unparse_text();
+            return new AssignmentError($m . $state->user->perm_edit_preference_for($user, $prow)->unparse_html());
         } else {
             return true;
         }
@@ -113,26 +113,26 @@ class Preference_AssignmentParser extends AssignmentParser {
     function apply(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
         $pref = $req["preference"];
         if ($pref === null) {
-            return "Missing preference.";
+            return new AssignmentError("<0>Missing preference.");
         }
         $ppref = self::parse($pref);
         if ($ppref === null) {
             if (preg_match('/([+-]?)\s*(\d+)\s*([xyz]?)/i', $pref, $m)) {
-                $msg = $state->conf->_("“%s” isn’t a valid preference. Did you mean “%s”?", htmlspecialchars($pref), $m[1] . $m[2] . strtoupper($m[3]));
+                $msg = $state->conf->_("<0>‘%s’ isn’t a valid preference. Did you mean ‘%s’?", $pref, $m[1] . $m[2] . strtoupper($m[3]));
             } else {
-                $msg = $state->conf->_("“%s” isn’t a valid preference.", htmlspecialchars($pref));
+                $msg = $state->conf->_("<0>‘%s’ isn’t a valid preference.", $pref);
             }
             $state->user_error($msg);
             return false;
         }
         if ($prow->timeWithdrawn > 0) {
-            $state->warning($prow->make_whynot(["withdrawn" => 1])->unparse_html());
+            $state->warning("<5>" . $prow->make_whynot(["withdrawn" => 1])->unparse_html());
         }
 
         $exp = $req["expertise"];
         if ($exp && ($exp = trim($exp)) !== "") {
             if (($pexp = self::parse($exp)) === null || $pexp[0]) {
-                return "Invalid expertise “" . htmlspecialchars($exp) . "”.";
+                return new AssignmentError("<0>Invalid expertise ‘{$exp}’.");
             }
             $ppref[1] = $pexp[1];
         }
@@ -193,8 +193,8 @@ class Preference_Assigner extends Assigner {
         if (($p = $this->preference_data(false))) {
             $aset->stage_qe("insert into PaperReviewPreference
                 set paperId=?, contactId=?, preference=?, expertise=?
-                on duplicate key update preference=values(preference), expertise=values(expertise)",
-                    $this->pid, $this->cid, $p[0], $p[1]);
+                on duplicate key update preference=?, expertise=?",
+                    $this->pid, $this->cid, $p[0], $p[1], $p[0], $p[1]);
         } else {
             $aset->stage_qe("delete from PaperReviewPreference where paperId=? and contactId=?", $this->pid, $this->cid);
         }

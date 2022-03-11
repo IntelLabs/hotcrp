@@ -1,5 +1,5 @@
 <?php
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 
 $arg = Getopt::rest($argv, "hn:yq", ["help", "name:", "yes", "quiet"]);
 if (isset($arg["h"]) || isset($arg["help"])
@@ -49,9 +49,7 @@ if (($pids = $search->paper_ids())) {
     }
     exit($ndeleted ? 0 : 1);
 } else if ($search->has_problem()) {
-    foreach ($search->problem_texts() as $text) {
-        fwrite(STDERR, htmlspecialchars_decode($text) . "\n");
-    }
+    fwrite(STDERR, $search->full_feedback_text());
     exit(1);
 } else {
     fwrite(STDERR, "No matching papers.\n");

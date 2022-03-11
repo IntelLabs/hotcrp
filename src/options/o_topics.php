@@ -1,15 +1,51 @@
 <?php
 // o_topics.php -- HotCRP helper class for topics intrinsic
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Topics_PaperOption extends PaperOption {
+    /** @var int */
+    private $min_count = 0;
+    /** @var ?int */
+    private $max_count;
     function __construct(Conf $conf, $args) {
         parent::__construct($conf, $args);
-        $this->set_exists_if(!!$this->conf->setting("has_topics"));
+        $this->set_exists_condition(!!$this->conf->setting("has_topics"));
+        if (is_int($args->min_count ?? null)) {
+            $this->min_count = $args->min_count;
+            $this->required = $this->min_count > 0;
+        } else if ($this->required) {
+            $this->min_count = 1;
+        }
+        if (is_int($args->max_count ?? null)) {
+            $this->max_count = $args->max_count;
+        }
+    }
+    function jsonSerialize() {
+        $j = parent::jsonSerialize();
+        if ($this->min_count > 1) {
+            $j->min_count = $this->min_count;
+        }
+        if ($this->max_count !== null) {
+            $j->max_count = $this->max_count;
+        }
+        return $j;
     }
     function value_force(PaperValue $ov) {
         $vs = $ov->prow->topic_list();
         $ov->set_value_data($vs, array_fill(0, count($vs), null));
+    }
+    function value_check(PaperValue $ov, Contact $user) {
+        if ($this->test_exists($ov->prow)) {
+            if ($this->min_count > 0
+                && !$ov->prow->allow_absent()
+                && $ov->value_count() < $this->min_count) {
+                $ov->error($this->conf->_("<0>You must select at least %d topics", $this->min_count));
+            }
+            if ($this->max_count !== null
+                && $ov->value_count() > $this->max_count) {
+                $ov->error($this->conf->_("<0>You may select at most %d topics", $this->max_count));
+            }
+        }
     }
     function value_unparse_json(PaperValue $ov, PaperStatus $ps) {
         $vs = $ov->value_list();
@@ -43,18 +79,19 @@ class Topics_PaperOption extends PaperOption {
         $this->conf->topic_set()->sort($vs);
         $ov->set_value_data($vs, array_fill(0, count($vs), null));
         if (!empty($bad_topics)) {
-            $ov->warning($ps->_("Unknown topics ignored (%2\$s).", count($bad_topics), htmlspecialchars(join("; ", $bad_topics))));
+            $ov->warning($ps->_("<0>Unknown topics ignored (%#s)", $bad_topics));
         }
     }
     function value_save(PaperValue $ov, PaperStatus $ps) {
-        $ps->mark_diff("topics");
+        $ps->change_at($this);
         $ps->_topic_ins = $ov->value_list();
         return true;
     }
-    function parse_web(PaperInfo $prow, Qrequest $qreq) {
+    function parse_qreq(PaperInfo $prow, Qrequest $qreq) {
         $vs = [];
         foreach ($prow->conf->topic_set() as $tid => $tname) {
-            if (+$qreq["top$tid"] > 0) {
+            $v = $qreq["topics:$tid"] ?? $qreq["top$tid"] ?? ""; // backward compat
+            if ($v !== "" && $v !== "0") {
                 $vs[] = $tid;
             }
         }
@@ -73,7 +110,7 @@ class Topics_PaperOption extends PaperOption {
             $j = [];
         }
         if (!is_array($j) || $bad) {
-            return PaperValue::make_estop($prow, $this, "Validation error.");
+            return PaperValue::make_estop($prow, $this, "<0>Validation error");
         }
 
         $topicset = $prow->conf->topic_set();
@@ -86,7 +123,7 @@ class Topics_PaperOption extends PaperOption {
                     $bad_topics[] = $tk;
                 }
             } else if (!is_string($tk)) {
-                return PaperValue::make_estop($prow, $this, "Validation error.");
+                return PaperValue::make_estop($prow, $this, "<0>Validation error");
             } else if (($tk = trim($tk)) !== "") {
                 $tid = array_search($tk, $topicset->as_array(), true);
                 if ($tid !== false) {
@@ -114,8 +151,8 @@ class Topics_PaperOption extends PaperOption {
         $ov->anno["new_topics"] = $new_topics;
         return $ov;
     }
-    function echo_web_edit(PaperTable $pt, $ov, $reqov) {
-        $pt->echo_editable_option_papt($this, null, ["id" => "topics"]);
+    function print_web_edit(PaperTable $pt, $ov, $reqov) {
+        $pt->print_editable_option_papt($this, null, ["id" => "topics", "context_args" => [$this->min_count, $this->max_count]]);
         echo '<div class="papev"><ul class="ctable">';
         $ptopics = $pt->prow->topic_map();
         $topics = $this->conf->topic_set();
@@ -129,7 +166,7 @@ class Topics_PaperOption extends PaperOption {
                     $arg["data-default-checked"] = isset($ptopics[$tg->tid]);
                     $checked = in_array($tg->tid, $reqov->value_list());
                     echo '<label class="checki cteltx"><span class="checkc">',
-                        Ht::checkbox("top{$tg->tid}", 1, $checked, $arg),
+                        Ht::checkbox("topics:{$tg->tid}", 1, $checked, $arg),
                         '</span>', $topics->unparse_name_html($tg->tid), '</label>';
                 } else {
                     echo '<div class="cteltx"><span class="topicg">',
@@ -173,7 +210,7 @@ class Topics_PaperOption extends PaperOption {
                 $tname = $topics->name($tid);
                 $x = $topics->unparse_name_html($tid);
                 if ($user && $user->isPC) {
-                    $x = Ht::link($x, $this->conf->hoturl("search", ["q" => "topic:" . SearchWord::quote($tname)]), ["class" => "qq"]);
+                    $x = Ht::link($x, $this->conf->hoturl("search", ["q" => "topic:" . SearchWord::quote($tname)]), ["class" => "q"]);
                 }
                 $ts[] = $t . '">' . $x . '</li>';
                 $lenclass = TopicSet::max_topici_lenclass($lenclass, $tname);

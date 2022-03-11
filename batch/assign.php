@@ -1,5 +1,5 @@
 <?php
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+require_once(dirname(__DIR__) . "/src/siteloader.php");
 
 $arg = Getopt::rest($argv, "hn:d", ["help", "name:", "dry-run"]);
 if (isset($arg["h"]) || isset($arg["help"]) || count($arg["_"]) > 1) {
@@ -30,9 +30,7 @@ $text = convert_to_utf8($text);
 $assignset = new AssignmentSet($Conf->root_user(), true);
 $assignset->parse($text, $filename);
 if ($assignset->has_error()) {
-    foreach ($assignset->message_texts(true) as $e) {
-        fwrite(STDERR, "$e\n");
-    }
+    fwrite(STDERR, $assignset->full_feedback_text());
 } else if ($assignset->is_empty()) {
     fwrite(STDERR, "$filename: Assignment makes no changes.\n");
 } else if (isset($arg["d"]) || isset($arg["dry-run"])) {

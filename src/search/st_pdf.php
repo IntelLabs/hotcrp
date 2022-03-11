@@ -1,6 +1,6 @@
 <?php
 // search/st_pdf.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class PaperPDF_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -46,12 +46,12 @@ class PaperPDF_SearchTerm extends SearchTerm {
             return new PaperPDF_SearchTerm($srch, $dtype, false);
         }
         $cf = new CheckFormat($srch->conf);
-        $errf = $cf->spec_error_kinds($dtype === null ? DTYPE_SUBMISSION : $dtype);
+        $errf = $cf->known_fields($dtype ?? DTYPE_SUBMISSION);
         if ($dtype === null && empty($errf)) {
-            $errf = $cf->spec_error_kinds(DTYPE_FINAL);
+            $errf = $cf->known_fields(DTYPE_FINAL);
         }
         if (empty($errf)) {
-            $srch->warning($sword->source_html() . ": Format checking is not enabled.");
+            $srch->lwarning($sword, "<0>Format checking is not enabled");
             return null;
         } else if ($lword === "good" || $lword === "ok") {
             return new PaperPDF_SearchTerm($srch, $dtype, true, false);
@@ -60,7 +60,7 @@ class PaperPDF_SearchTerm extends SearchTerm {
         } else if (in_array($lword, $errf) || $lword === "error") {
             return new PaperPDF_SearchTerm($srch, $dtype, true, true, $lword);
         } else {
-            $srch->warning($sword->source_html() . ": “" . htmlspecialchars($word) . "” is not a valid error type for format checking.");
+            $srch->lwarning($sword, "<0>Format error not found");
             return null;
         }
     }
@@ -119,7 +119,7 @@ class PaperPDF_SearchTerm extends SearchTerm {
             if (!$doc || $doc->mimetype !== "application/pdf") {
                 return false;
             }
-            $this->cf->check_document($row, $doc);
+            $this->cf->check_document($doc);
             if ($this->cf->need_recheck()) {
                 if (!$this->cf_warn) {
                     $this->srch->warning("I haven’t finished analyzing the submitted PDFs. You may want to reload this page later for more precise results.");
@@ -161,7 +161,7 @@ class Pages_SearchTerm extends SearchTerm {
         if ($cm->ok()) {
             return new Pages_SearchTerm($srch, new CountMatcher($word));
         } else {
-            $srch->warning($sword->source_html() . ": Expects a page number comparison.");
+            $srch->lwarning($sword, "<0>Page number comparison expected");
             return null;
         }
     }
@@ -185,7 +185,8 @@ class Pages_SearchTerm extends SearchTerm {
             return $this->cm->test($np);
         } else if ($this->cf->need_recheck()) {
             if (!$this->cf_warn) {
-                $this->srch->warning("I haven’t finished analyzing the submitted PDFs. You may want to reload this page later for more precise results.");
+                $this->srch->warning("<0>Submitted PDFs have not been fully analyzed");
+                $this->srch->msg_at(null, "<0>Reloading this page later may give more precise results.", MessageSet::INFORM);
                 $this->cf_warn = true;
             }
             return true;

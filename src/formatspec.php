@@ -1,6 +1,6 @@
 <?php
 // formatspec.php -- spec for HotCRP PDF analysis
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class FormatSpec {
     /** @var list<array{float,float}> */
@@ -325,7 +325,12 @@ class FormatSpec {
 }
 
 interface FormatChecker {
-    function error_kinds(FormatSpec $spec);
-    function check(CheckFormat $cf, FormatSpec $spec, PaperInfo $prow, DocumentInfo $doc);
-    function report(CheckFormat $cf, FormatSpec $spec, PaperInfo $prow, DocumentInfo $doc);
+    /** @return list<string> */
+    function known_fields(FormatSpec $spec);
+    /** @return void */
+    function prepare(CheckFormat $cf, FormatSpec $spec);
+    /** @return void */
+    function check(CheckFormat $cf, FormatSpec $spec, DocumentInfo $doc);
+    /** @return ?string */
+    function report(CheckFormat $cf, FormatSpec $spec, DocumentInfo $doc);
 }

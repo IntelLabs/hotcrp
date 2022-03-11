@@ -1,6 +1,6 @@
 <?php
 // pc_topicscore.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class TopicScore_PaperColumn extends PaperColumn {
     /** @var Contact */
@@ -59,7 +59,7 @@ class TopicScore_PaperColumn extends PaperColumn {
             $rs[] = (object) $fj;
         }
         if (empty($rs)) {
-            PaperColumn::column_error($user, "No PC member matches “" . htmlspecialchars($m[1]) . "”.");
+            PaperColumn::column_error($user, "<0>PC member ‘{$m[1]}’ not found");
         }
         return $rs;
     }
