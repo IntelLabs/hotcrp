@@ -1404,12 +1404,12 @@ class UserStatus extends MessageSet {
         echo '<div class="f-mcol w-text">';
         $t = Ht::entry(
                 "firstName", 
-                $qreq->firstName ?? $user->firstName, 
+                $qreq->firstName, 
                 ["size" => 24, 
                 "autocomplete" => $us->autocomplete("given-name"), 
                 "class" => "fullw", 
                 "id" => "firstName", 
-                "data-default-value" => $qreq->firstName ?? $user->firstName]) . $us->global_profile_difference("firstName");
+                "data-default-value" => $qreq->firstName]) . $us->global_profile_difference("firstName");
 
 
 
