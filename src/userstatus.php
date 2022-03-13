@@ -1413,7 +1413,7 @@ class UserStatus extends MessageSet {
 
 
 
-        $us->print_field("firstName", "*****First name (given name)*****", $t, "f-i");
+        $us->print_field("firstName", $qreq->firstName, $t, "f-i");
 
         $t = Ht::entry("lastName", $qreq->lastName ?? $user->lastName, ["size" => 24, "autocomplete" => $us->autocomplete("family-name"), "class" => "fullw", "id" => "lastName", "data-default-value" => $qreq->lastName ?? $user->lastName]) . $us->global_profile_difference("lastName");
         $us->print_field("lastName", "Last name (family name)", $t, "f-i");
