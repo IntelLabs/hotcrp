@@ -31,7 +31,7 @@ class Session_API {
         foreach ($ms as $m) {
             $unfold = intval(substr($m[3], 1) ? : "0") === 0;
             if ($m[1] === "foldpaper" && $m[2] !== "") {
-                $x = $user->session($m[1], []);
+                $x = $user->session($m[1]) ?? [];
                 if (is_string($x)) {
                     $x = explode(" ", $x);
                 }
@@ -95,7 +95,10 @@ class Session_API {
         $curl = explode(" ", trim(ContactList::uldisplay($user)));
         foreach ($settings as $name => $setting) {
             if (($f = $user->conf->review_field($name))) {
-                $terms = [$f->short_id, $f->id];
+                $terms = [$f->short_id];
+                if ($f->main_storage !== null && $f->main_storage !== $f->short_id) {
+                    $terms[] = $f->main_storage;
+                }
             } else {
                 $terms = [$name];
             }

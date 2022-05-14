@@ -152,7 +152,7 @@ class PaperStatus extends MessageSet {
         }
         assert($doc instanceof DocumentInfo);
 
-        $d = (object) array();
+        $d = (object) [];
         if ($docid && !$this->hide_docids) {
             $d->docid = $docid;
         }
@@ -289,20 +289,27 @@ class PaperStatus extends MessageSet {
     function msg_at_option(PaperOption $o, $msg, $status) {
         return $this->msg_at($o->field_key(), $msg, $status);
     }
+
     /** @param ?string $msg
      * @return MessageItem */
     function error_at_option(PaperOption $o, $msg) {
         return $this->error_at($o->field_key(), $msg);
     }
+
     /** @param ?string $msg
      * @return MessageItem */
     function warning_at_option(PaperOption $o, $msg) {
         return $this->warning_at($o->field_key(), $msg);
     }
+
+    /** @param string $key
+     * @param mixed $value
+     * @return MessageItem */
     function syntax_error_at($key, $value) {
         error_log($this->conf->dbname . ": PaperStatus: syntax error $key " . gettype($value));
         return $this->error_at($key, "<0>Validation error [{$key}]");
     }
+
     /** @return list<MessageItem> */
     function decorated_message_list() {
         $ms = [];
@@ -556,7 +563,7 @@ class PaperStatus extends MessageSet {
         }
         foreach ((array) $ipj as $k => $v) {
             if (!isset($xpj->$k) && !isset($ikeys[$k]) && !isset($xstatus->$k)
-                && !in_array($k, ["pid", "id", "options", "status", "decision"])
+                && !in_array($k, ["pid", "id", "options", "status", "decision", "reviews"])
                 && $k[0] !== "_" && $k[0] !== "\$") {
                 $matches = $this->conf->options()->find_all($k);
                 if (count($matches) === 1) {
@@ -658,14 +665,12 @@ class PaperStatus extends MessageSet {
     private function _check_status($pj) {
         $pj_withdrawn = $pj->status->withdrawn;
         $pj_submitted = $pj->status->submitted;
-        $pj_draft = $pj->status->draft;
 
         if ($this->has_error()
             && $pj_submitted
             && !$pj_withdrawn
             && (!$this->prow || $this->prow->timeSubmitted == 0)) {
             $pj_submitted = false;
-            $pj_draft = true;
         }
 
         if (isset($pj->status->submitted_at)) {
@@ -799,7 +804,7 @@ class PaperStatus extends MessageSet {
 
     /** @param int $bit */
     function clear_conflict_values($bit) {
-        foreach ($this->_conflict_values as $lemail => &$cv) {
+        foreach ($this->_conflict_values as &$cv) {
             if (((($cv[0] & ~$cv[1]) | $cv[2]) & $bit) !== 0) {
                 $cv[1] |= $bit;
                 $cv[2] &= ~$bit;
@@ -1033,7 +1038,6 @@ class PaperStatus extends MessageSet {
         }
 
         // save parts and track diffs
-        $conf = $this->conf;
         $this->_check_fields($pj);
         $this->_check_status($pj);
         $this->_check_final_status($pj);
@@ -1114,10 +1118,8 @@ class PaperStatus extends MessageSet {
         $old_joinid = $old_joindoc ? $old_joindoc->paperStorageId : 0;
 
         $new_joinid = $this->_paper_upd["finalPaperStorageId"] ?? $this->_nnprow->finalPaperStorageId;
-        $new_dtype = DTYPE_FINAL;
         if ($new_joinid <= 1) {
             $new_joinid = $this->_paper_upd["paperStorageId"] ?? $this->_nnprow->paperStorageId;
-            $new_dtype = DTYPE_SUBMISSION;
         }
 
         if ($new_joinid == $old_joinid && $this->prow) {

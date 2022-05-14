@@ -31,12 +31,16 @@ class Si {
     private $title;
     /** @var ?string */
     public $title_pattern;
-    /** @var ?string */
-    public $group;
     /** @var ?list<string> */
-    public $tags;
+    public $pages;
+    /** @var bool */
+    private $_has_pages = false;
     /** @var null|int|float */
     public $order;
+    /** @var null|int|float */
+    public $parse_order;
+    /** @var null|int */
+    public $__source_order;
     /** @var null|false|string */
     public $hashid;
     /** @var bool */
@@ -81,19 +85,20 @@ class Si {
     static private $key_storage = [
         "autogrow" => "is_bool",
         "disabled" => "is_bool",
-        "group" => "is_string",
         "ifnonempty" => "is_string",
         "internal" => "is_bool",
         "json_values" => "is_array",
         "order" => "is_number",
+        "parse_order" => "is_number",
+        "__source_order" => "is_int",
         "parser_class" => "is_string",
+        "pages" => "is_string_list",
         "placeholder" => "is_string",
         "required" => "is_bool",
         "size" => "is_int",
         "subtype" => "is_string",
         "title" => "is_string",
         "title_pattern" => "is_string",
-        "tags" => "is_string_list",
         "type" => "is_string",
         "values" => "is_array"
     ];
@@ -155,16 +160,11 @@ class Si {
                 trigger_error("setting {$j->name}.default_value format error");
             }
         }
-        if (!$this->group && !$this->internal) {
-            trigger_error("setting {$j->name}.group missing");
-        }
 
-        if (!$this->type && $this->parser_class) {
-            $this->type = "special";
-        } else if ((!$this->type && !$this->internal) || $this->type === "none") {
-            trigger_error("setting {$j->name}.type missing");
+        if ($this->type) {
+            $this->_tclass = Sitype::get($conf, $this->type, $this->subtype);
         }
-        if (($this->_tclass = Sitype::get($conf, $this->type, $this->subtype))) {
+        if ($this->_tclass) {
             $this->_tclass->initialize_si($this);
         }
 
@@ -288,9 +288,40 @@ class Si {
         return $this->storage ?? $this->name;
     }
 
+    private function _collect_pages() {
+        $this->_has_pages = true;
+        if ($this->pages === null
+            && $this->part2 !== null
+            && $this->part2 !== ""
+            && ($psi = $this->conf->si($this->part0 . $this->part1))) {
+            $psi->_collect_pages();
+            $this->pages = $psi->pages;
+        }
+        if ($this->pages === null) {
+            error_log("no pages for {$this->name}\n" . debug_string_backtrace());
+        }
+    }
+
+    /** @return ?string */
+    function first_page() {
+        if ($this->pages === null && !$this->_has_pages) {
+            $this->_collect_pages();
+        }
+        return $this->pages[0] ?? null;
+    }
+
+    /** @param string $t
+     * @return bool */
+    function has_tag($t) {
+        if ($this->pages === null && !$this->_has_pages) {
+            $this->_collect_pages();
+        }
+        return $this->pages === null || in_array($t, $this->pages);
+    }
+
     /** @return array<string,string> */
     function hoturl_param() {
-        $param = ["group" => $this->group];
+        $param = ["group" => $this->first_page()];
         if ($this->hashid !== false) {
             $param["#"] = $this->hashid ?? $this->name;
         }
@@ -305,8 +336,7 @@ class Si {
     /** @param SettingValues $sv
      * @return string */
     function sv_hoturl($sv) {
-        if ($this->hashid !== false
-            && (!$this->group || $sv->canonical_page === $this->group)) {
+        if ($this->hashid !== false && $this->has_tag($sv->canonical_page)) {
             return "#" . urlencode($this->hashid ?? $this->name);
         } else {
             return $this->hoturl();
@@ -339,7 +369,7 @@ class Si {
 
     /** @param ?string $reqv
      * @return null|int|string */
-    function parse_vstr($reqv, SettingValues $sv) {
+    function parse_reqv($reqv, SettingValues $sv) {
         if ($reqv === null) {
             return $this->_tclass ? $this->_tclass->parse_null_vstr($this) : null;
         } else if ($this->_tclass) {
@@ -347,9 +377,9 @@ class Si {
             if ($this->placeholder === $v) {
                 $v = "";
             }
-            return $this->_tclass->parse_vstr($v, $this, $sv);
+            return $this->_tclass->parse_reqv($v, $this, $sv);
         } else {
-            throw new ErrorException("Don't know how to parse_vstr {$this->name}.");
+            throw new ErrorException("Don't know how to parse_reqv {$this->name}.");
         }
     }
 
@@ -357,134 +387,50 @@ class Si {
      * @return string */
     function base_unparse_reqv($v) {
         if ($this->_tclass) {
-            return $this->_tclass->unparse_vstr($v, $this);
+            return $this->_tclass->unparse_reqv($v, $this);
         } else {
             return (string) $v;
         }
     }
-}
 
-
-class SettingInfoSet {
-    /** @var ComponentSet
-     * @readonly */
-    private $cs;
-    /** @var array<string,Si> */
-    private $map = [];
-    /** @var array<string,list<object>> */
-    private $xmap = [];
-    /** @var list<string|list<string|object>> */
-    private $xlist = [];
-    /** @var array<string,?string> */
-    private $canonpage = ["none" => null];
-
-    function __construct(Conf $conf) {
-        $this->cs = new ComponentSet($conf->root_user(), ["etc/settinggroups.json"], $conf->opt("settingGroups"));
-        expand_json_includes_callback(["etc/settinginfo.json"], [$this, "_add_item"]);
-        if (($olist = $conf->opt("settingInfo"))) {
-            expand_json_includes_callback($olist, [$this, "_add_item"]);
-        }
-    }
-
-    function _add_item($v, $k, $landmark) {
-        if (isset($v->name_pattern)) {
-            $parts = [];
-            $pos = 0;
-            while (($pos1 = strpos($v->name_pattern, '$', $pos)) !== false) {
-                $pos2 = $pos1 + strspn($v->name_pattern, '$', $pos1);
-                assert($pos2 - $pos1 === count($parts) / 2 + 1);
-                $parts[] = substr($v->name_pattern, $pos, $pos1 - $pos);
-                $parts[] = "";
-                $pos = $pos2;
+    /** @param mixed $jv
+     * @return null|int|string */
+    function convert_jsonv($jv, SettingValues $sv) {
+        if ($this->_tclass) {
+            if (is_string($jv)) {
+                $jv = trim($jv);
+                if ($this->placeholder === $jv) {
+                    $jv = "";
+                }
             }
-            $parts[] = substr($v->name_pattern, $pos);
-            $v->parts = $parts;
-            $i = 0;
-            while ($i !== count($this->xlist) && $this->xlist[$i] !== $parts[0]) {
-                $i += 2;
-            }
-            if ($i === count($this->xlist)) {
-                array_push($this->xlist, $parts[0], []);
-            }
-            array_push($this->xlist[$i + 1], $parts[count($parts) - 1], $v);
+            return $this->_tclass->convert_jsonv($jv, $this, $sv);
         } else {
-            assert(is_string($v->name));
-            $this->xmap[$v->name][] = $v;
-        }
-        return true;
-    }
-
-    /** @param string $name
-     * @param list<string> $parts
-     * @return ?list<string> */
-    private function _match_parts($name, $parts) {
-        $nparts = count($parts);
-        $pos = strlen($parts[0]);
-        $result = [$parts[0]];
-        for ($i = 1; $i !== $nparts; $i += 2) {
-            if ($i === $nparts - 2) {
-                $npos = strlen($name) - strlen($parts[$i + 1]);
-            } else {
-                $npos = strpos($name, $parts[$i + 1], $pos);
-            }
-            if ($npos === false
-                || $npos < $pos
-                || ($m = substr($name, $pos, $npos - $pos)) === ""
-                || strpos($m, "__") !== false) {
-                return null;
-            }
-            $result[] = $m;
-            $result[] = $parts[$i + 1];
-            $pos += strlen($m) + strlen($parts[$i + 1]);
-        }
-        return $result;
-    }
-
-    /** @param string $name
-     * @param string $prefix
-     * @param list<string|object> $items */
-    private function _expand($name, $prefix, $items) {
-        $plen = strlen($prefix);
-        $nlen = strlen($name);
-        $nitems = count($items);
-        for ($i = 0; $i !== $nitems; $i += 2) {
-            $slen = strlen($items[$i]);
-            if ($plen + strlen($items[$i]) < $nlen
-                && str_ends_with($name, $items[$i])
-                && ($parts = $this->_match_parts($name, $items[$i + 1]->parts))) {
-                $jx = clone $items[$i + 1];
-                $jx->name = $name;
-                $jx->parts = $parts;
-                $this->xmap[$name][] = $jx;
-            }
+            throw new ErrorException("Don't know how to convert_jsonv {$this->name}.");
         }
     }
 
-    /** @param string $name
-     * @return ?Si */
-    function get($name) {
-        if (!array_key_exists($name, $this->map)) {
-            // expand patterns
-            $nlen = strlen($name);
-            for ($i = 0; $i !== count($this->xlist); $i += 2) {
-                if (str_starts_with($name, $this->xlist[$i])) {
-                    $this->_expand($name, $this->xlist[$i], $this->xlist[$i + 1]);
-                }
-            }
-            // create Si
-            $cs = $this->cs;
-            $jx = $cs->conf->xt_search_name($this->xmap, $name, $cs->viewer);
-            if ($jx) {
-                Conf::xt_resolve_require($jx);
-                if (($group = $jx->group ?? null)) {
-                    if (!array_key_exists($group, $this->canonpage)) {
-                        $this->canonpage[$group] = $cs->canonical_group($group) ?? $group;
-                    }
-                    $jx->group = $this->canonpage[$group];
-                }
-            }
-            $this->map[$name] = $jx ? new Si($cs->conf, $jx) : null;
+    /** @param null|int|string $v
+     * @return mixed */
+    function base_unparse_jsonv($v) {
+        if ($this->_tclass) {
+            return $this->_tclass->unparse_jsonv($v, $this);
+        } else {
+            return $v;
         }
-        return $this->map[$name];
+    }
+
+    /** @param Si $xta
+     * @param Si $xtb
+     * @return -1|0|1 */
+    static function parse_order_compare($xta, $xtb) {
+        $ap = $xta->parse_order ?? $xta->order ?? 0;
+        $ap = $ap !== false ? $ap : INF;
+        $bp = $xtb->parse_order ?? $xtb->order ?? 0;
+        $bp = $bp !== false ? $bp : INF;
+        if ($ap == $bp) {
+            $ap = $xta->__source_order ?? 0;
+            $bp = $xtb->__source_order ?? 0;
+        }
+        return $ap <=> $bp;
     }
 }

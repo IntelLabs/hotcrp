@@ -4,12 +4,17 @@
 
 /** @return string */
 function make_session_name(Conf $conf, $n) {
-    if (($n === "" || $n === null || $n === true)
-        && ($x = $conf->opt("dbName"))) {
-        $n = $x;
+    if ($n === "" || $n === null || $n === true) {
+        $n = $conf->dbname;
     }
-    if (($x = $conf->opt("confid"))) {
-        $n = preg_replace('/\*|\$\{confid\}|\$confid\b/', $x, $n);
+    if (ctype_lower($n)) {
+        return $n;
+    }
+    if (strpos($n, '${') !== false) {
+        $n = SiteLoader::substitute($n, [
+            "confid" => $conf->opt("confid"),
+            "siteclass" => $conf->opt("siteclass")
+        ]);
     }
     return preg_replace_callback('/[^-_A-Ya-z0-9]/', function ($m) {
         return "Z" . dechex(ord($m[0]));
@@ -129,12 +134,18 @@ function ensure_session($flags = 0) {
         $_SESSION[$k] = $v;
     }
 
+    // maybe update session format
+    if (!empty($_SESSION) && ($_SESSION["v"] ?? 0) < 2) {
+        UpdateSession::run();
+    }
+
     // avoid session fixation
     if (empty($_SESSION)) {
         if ($has_cookie && !($flags & ENSURE_SESSION_REGENERATE_ID)) {
             session_regenerate_id();
         }
         $_SESSION["testsession"] = false;
+        $_SESSION["v"] = 2;
     } else if (Conf::$main->_session_handler
                && is_callable([Conf::$main->_session_handler, "refresh_cookie"])) {
         call_user_func([Conf::$main->_session_handler, "refresh_cookie"], $sn, session_id());

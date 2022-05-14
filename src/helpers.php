@@ -79,40 +79,41 @@ function hoturl_post($page, $param = null) {
 }
 
 
-class JsonResult implements JsonSerializable {
+class JsonResult implements JsonSerializable, ArrayAccess {
     /** @var ?int */
     public $status;
     /** @var array<string,mixed> */
     public $content;
 
-    function __construct($values = null) {
-        if (is_int($values)) {
-            $this->status = $values;
-            if (func_num_args() === 2) {
-                $values = func_get_arg(1);
-            } else {
-                $values = null;
-            }
-        }
-        if ($values === true || $values === false) {
-            $this->content = ["ok" => $values];
-        } else if ($values === null) {
-            $this->content = [];
-        } else if (is_object($values)) {
-            if ($values instanceof JsonSerializable) {
-                $this->content = (array) $values->jsonSerialize();
-            } else {
-                assert(!($values instanceof JsonResult));
-                $this->content = (array) $values;
-            }
-        } else if (is_string($values)) {
-            assert($this->status && $this->status > 299);
-            $this->content = ["ok" => false, "error" => $values];
+    /** @param int|array<string,mixed>|\stdClass|\JsonSerializable $a1
+     * @param ?array<string,mixed> $a2 */
+    function __construct($a1, $a2 = null) {
+        if (is_int($a1)) {
+            $this->status = $a1;
         } else {
-            assert(is_associative_array($values));
-            $this->content = $values;
+            $a2 = $a1;
+        }
+        if ($a2 === true || $a2 === false) {
+            $this->content = ["ok" => $a2];
+        } else if ($a2 === null) {
+            $this->content = [];
+        } else if (is_object($a2)) {
+            if ($a2 instanceof JsonSerializable) {
+                $this->content = (array) $a2->jsonSerialize();
+            } else {
+                assert(!($a2 instanceof JsonResult));
+                $this->content = (array) $a2;
+            }
+        } else if (is_string($a2)) {
+            error_log("bad JsonResult with string " . debug_string_backtrace());
+            assert($this->status && $this->status > 299);
+            $this->content = ["ok" => false, "error" => $a2];
+        } else {
+            assert(is_associative_array($a2));
+            $this->content = $a2;
         }
     }
+
     /** @return JsonResult */
     static function make($jr, $arg2 = null) {
         if ($jr instanceof JsonResult) {
@@ -123,6 +124,52 @@ class JsonResult implements JsonSerializable {
             return new JsonResult($jr);
         }
     }
+
+    /** @param int|string $a1
+     * @param ?string $a2
+     * @return JsonResult */
+    static function make_error($a1, $a2 = null) {
+        if (!is_int($a1)) {
+            $a2 = $a1;
+            $a1 = 400;
+        }
+        if (!Ftext::is_ftext($a2)) {
+            error_log("bad ftext `{$a2}` " . debug_string_backtrace());
+        }
+        return new JsonResult($a1, ["ok" => false, "message_list" => [MessageItem::error($a2)]]);
+    }
+
+
+    #[\ReturnTypeWillChange]
+    /** @param string $offset
+     * @return bool */
+    function offsetExists($offset) {
+        return isset($this->content[$offset]);
+    }
+
+    #[\ReturnTypeWillChange]
+    /** @param string $offset
+     * @return mixed */
+    function &offsetGet($offset) {
+        return $this->content[$offset];
+    }
+
+    #[\ReturnTypeWillChange]
+    /** @param string $offset
+     * @param mixed $value
+     * @return void */
+    function offsetSet($offset, $value) {
+        $this->content[$offset] = $value;
+    }
+
+    #[\ReturnTypeWillChange]
+    /** @param string $offset
+     * @return void */
+    function offsetUnset($offset) {
+        unset($this->content[$offset]);
+    }
+
+
     function export_messages(Conf $conf) {
         $ml = [];
         foreach ($this->content["message_list"] ?? [] as $mi) {
@@ -144,6 +191,7 @@ class JsonResult implements JsonSerializable {
                 Ht::message_set()->append_item($mi);
         }
     }
+
     /** @param bool $validated */
     function emit($validated) {
         if ($this->status) {
@@ -167,6 +215,7 @@ class JsonResult implements JsonSerializable {
         header("Content-Type: application/json; charset=utf-8");
         echo json_encode_browser($this->content);
     }
+
     #[\ReturnTypeWillChange]
     function jsonSerialize() {
         return $this->content;
@@ -271,12 +320,11 @@ function _one_quicklink($id, $baseUrl, $urlrest, $listtype, $isprev) {
         . "</a>";
 }
 
-function goPaperForm($baseUrl = null, $args = array()) {
+function goPaperForm($baseUrl = null, $args = []) {
     global $Me;
     if ($Me->is_empty()) {
         return "";
     }
-    $list = Conf::$main->active_list();
     $x = Ht::form(Conf::$main->hoturl($baseUrl ? : "paper"), ["method" => "get", "class" => "gopaper"]);
     if ($baseUrl == "profile") {
         $x .= Ht::entry("u", "", ["id" => "quicklink-search", "size" => 15, "placeholder" => "User search", "aria-label" => "User search", "class" => "usersearch need-autogrow", "spellcheck" => false]);
@@ -469,9 +517,7 @@ function actionBar($mode = null, $qreq = null) {
     if ($Me->is_disabled()) {
         return "";
     }
-    $forceShow = ($Me->is_admin_force() ? "&amp;forceShow=1" : "");
 
-    $paperArg = "p=*";
     $xmode = [];
     $listtype = "p";
 
@@ -504,11 +550,12 @@ function actionBar($mode = null, $qreq = null) {
             $x .= _one_quicklink($prev, $goBase, $xmode, $listtype, true) . " ";
         }
         if ($list->description) {
+            $d = htmlspecialchars($list->description);
             $url = $list->full_site_relative_url();
             if ($url) {
-                $x .= '<a id="quicklink-list" class="ulh" href="' . htmlspecialchars(Navigation::siteurl() . $url) . "\">{$list->description}</a>";
+                $x .= '<a id="quicklink-list" class="ulh" href="' . htmlspecialchars(Navigation::siteurl() . $url) . "\">{$d}</a>";
             } else {
-                $x .= "<span id=\"quicklink-list\">{$list->description}</span>";
+                $x .= "<span id=\"quicklink-list\">{$d}</span>";
             }
         }
         if (($next = $list->neighbor_id(1)) !== false) {

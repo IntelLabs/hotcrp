@@ -159,7 +159,7 @@ class Users_Page {
             }
             $row["follow"] = empty($f) ? "none" : join(" ", $f);
             if ($user->roles & (Contact::ROLE_PC | Contact::ROLE_ADMIN | Contact::ROLE_CHAIR)) {
-                $r = array();
+                $r = [];
                 if ($user->roles & Contact::ROLE_CHAIR) {
                     $r[] = "chair";
                 }
@@ -296,13 +296,13 @@ class Users_Page {
             if (!isset($users[(int) $cid])) {
                 $users[(int) $cid] = (object) ["id" => (int) $cid, "add_tags" => [], "remove_tags" => []];
             }
-            $users[(int) $cid]->$key = array_merge($users[(int) $cid]->$key, $t1);
+            array_push($users[(int) $cid]->$key, ...$t1);
         }
 
         // apply modifications
         $us = new UserStatus($this->viewer);
         foreach ($users as $cid => $cj) {
-            $us->save($cj);
+            $us->save_user($cj);
         }
         Conf::$no_invalidate_caches = false;
         $this->conf->invalidate_caches(["pc" => true]);
@@ -420,8 +420,7 @@ class Users_Page {
             echo '<td class="pad">';
             $uldisplay = ContactList::uldisplay($this->viewer);
             foreach ($viewable_fields as $f) {
-                $checked = strpos($uldisplay, " {$f->short_id} ") !== false
-                    || strpos($uldisplay, " {$f->id} ") !== false;
+                $checked = strpos($uldisplay, " {$f->short_id} ") !== false;
                 echo Ht::checkbox("show{$f->short_id}", 1, $checked),
                     "&nbsp;", Ht::label($f->name_html),
                     Ht::hidden("has_show{$f->short_id}", 1), "<br />";
@@ -438,7 +437,7 @@ class Users_Page {
                     $ss[$k] = $v;
             }
             echo '<tr><td colspan="3"><hr class="g"><b>Sort scores by:</b> &nbsp;',
-                Ht::select("scoresort", $ss, ListSorter::canonical_long_score_sort($this->viewer->session("ulscoresort", "A"))),
+                Ht::select("scoresort", $ss, ListSorter::canonical_long_score_sort($this->viewer->session("ulscoresort") ?? "A")),
                 "</td></tr>";
         }
         echo "</table></form>";

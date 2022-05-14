@@ -59,8 +59,6 @@ class ReviewInfo implements JsonSerializable {
     public $reviewEditVersion;  // NB also used to check if `data` was loaded
     /** @var ?int */
     public $reviewWordCount;
-    /** @var ?int */
-    public $reviewFormat;
     /** @var ?string */
     private $tfields;
     /** @var ?string */
@@ -81,17 +79,17 @@ class ReviewInfo implements JsonSerializable {
 
     // scores
     // These scores are loaded from the database, but exposed only in `fields`
-    private $overAllMerit;
-    private $reviewerQualification;
-    private $novelty;
-    private $technicalMerit;
-    private $interestToCommunity;
-    private $longevity;
-    private $grammar;
-    private $likelyPresentation;
-    private $suitableForShort;
-    private $potential;
-    private $fixability;
+    private $s01;
+    private $s02;
+    private $s03;
+    private $s04;
+    private $s05;
+    private $s06;
+    private $s07;
+    private $s08;
+    private $s09;
+    private $s10;
+    private $s11;
 
     // sometimes joined
     /** @var ?string */
@@ -127,35 +125,6 @@ class ReviewInfo implements JsonSerializable {
     const RS_DELIVERED = 3;
     const RS_ADOPTED = 4;
     const RS_COMPLETED = 5;
-
-    /** @var array<non-empty-string,non-empty-string>
-     * @readonly */
-    static public $text_field_map = [
-        "paperSummary" => "t01", "commentsToAuthor" => "t02",
-        "commentsToPC" => "t03", "commentsToAddress" => "t04",
-        "weaknessOfPaper" => "t05", "strengthOfPaper" => "t06",
-        "textField7" => "t07", "textField8" => "t08"
-    ];
-    /** @var array<non-empty-string,non-empty-string>
-     * @readonly */
-    static private $score_field_map = [
-        "overAllMerit" => "s01", "reviewerQualification" => "s02",
-        "novelty" => "s03", "technicalMerit" => "s04",
-        "interestToCommunity" => "s05", "longevity" => "s06", "grammar" => "s07",
-        "likelyPresentation" => "s08", "suitableForShort" => "s09",
-        "potential" => "s10", "fixability" => "s11"
-    ];
-    // see also Signature properties in PaperInfo
-    /** @var list<?non-empty-string>
-     * @readonly */
-    static private $new_score_fields = [
-        null, "overAllMerit", "reviewerQualification", "novelty",
-        "technicalMerit", "interestToCommunity", "longevity", "grammar",
-        "likelyPresentation", "suitableForShort", "potential", "fixability"
-    ];
-    /** @var array<string,ReviewFieldInfo> */
-    static private $field_info_map = [];
-    const MIN_SFIELD = 12;
 
     const RATING_GOODMASK = 1;
     const RATING_BADMASK = 126;
@@ -198,11 +167,8 @@ class ReviewInfo implements JsonSerializable {
         "optional" => REVIEW_PC, "opt" => REVIEW_PC, "pc" => REVIEW_PC,
         "external" => REVIEW_EXTERNAL, "ext" => REVIEW_EXTERNAL
     ];
-    static private $type_revmap = [
-        REVIEW_EXTERNAL => "review", REVIEW_PC => "optional",
-        REVIEW_SECONDARY => "secondary", REVIEW_PRIMARY => "primary",
-        REVIEW_META => "metareview"
-    ];
+    // see also assign.php, script.js
+    static private $type_revmap = ["none", "external", "pc", "secondary", "primary", "meta"];
 
     /** @param string $str
      * @param bool $required
@@ -230,7 +196,11 @@ class ReviewInfo implements JsonSerializable {
     /** @param int $type
      * @return string */
     static function unparse_assigner_action($type) {
-        return self::$type_revmap[$type] ?? "clearreview";
+        if ($type <= 0) {
+            return "clearreview";
+        } else {
+            return self::$type_revmap[$type] . "review";
+        }
     }
 
 
@@ -305,9 +275,6 @@ class ReviewInfo implements JsonSerializable {
         if ($this->reviewWordCount !== null) {
             $this->reviewWordCount = (int) $this->reviewWordCount;
         }
-        if ($this->reviewFormat !== null) {
-            $this->reviewFormat = (int) $this->reviewFormat;
-        }
 
         $rform = $this->conf->review_form();
         $this->fields = $rform->order_array(null);
@@ -342,7 +309,8 @@ class ReviewInfo implements JsonSerializable {
         return $rrow;
     }
 
-    /** @param ?list<ReviewField> $scores
+    /** @param Conf $conf @unused-param
+     * @param ?list<ReviewField> $scores
      * @return string */
     static function review_signature_sql(Conf $conf, $scores = null) {
         $t = "r.reviewId, ' ', r.contactId, ' ', r.reviewToken, ' ', r.reviewType, ' ', r.reviewRound, ' ', r.requestedBy, ' ', r.reviewBlind, ' ', r.reviewModified, ' ', coalesce(r.reviewSubmitted,0), ' ', coalesce(r.reviewAuthorSeen,0), ' ', r.reviewOrdinal, ' ', r.timeDisplayed, ' ', r.timeApprovalRequested, ' ', r.reviewNeedsSubmit, ' ', r.reviewViewScore";
@@ -424,7 +392,7 @@ class ReviewInfo implements JsonSerializable {
     /** @param bool $hard
      * @return string */
     function deadline_name($hard = false) {
-        return $this->conf->review_deadline_name($this->reviewRound, $this->reviewType >= REVIEW_PC, $hard);
+        return $this->conf->review_deadline_name($this->reviewRound, $this->reviewType, $hard);
     }
 
     /** @param bool $hard
@@ -470,7 +438,7 @@ class ReviewInfo implements JsonSerializable {
     }
 
     /** @return string */
-    function type_icon() {
+    function icon_h() {
         if ($this->subject_to_approval()) {
             $title = "Subreview";
         } else {
@@ -490,6 +458,23 @@ class ReviewInfo implements JsonSerializable {
         return $t . '" title="' . $title . '"><span class="rti">'
             . ReviewForm::$revtype_icon_text[$this->reviewType]
             . '</span></span>';
+    }
+
+    /** @param Conf $conf
+     * @param int $round
+     * @return string */
+    static function make_round_h($conf, $round) {
+        if ($round > 0 && ($n = $conf->round_name($round)) !== "") {
+            $n = htmlspecialchars($n);
+            return "<span class=\"revround\" title=\"Review round\">{$n}</span>";
+        } else {
+            return "";
+        }
+    }
+
+    /** @return string */
+    function round_h() {
+        return self::make_round_h($this->conf, $this->reviewRound);
     }
 
     /** @return string */
@@ -634,34 +619,6 @@ class ReviewInfo implements JsonSerializable {
             }
         }
         $assigned[] = $c;
-    }
-
-    /** @param string $id
-     * @return ?ReviewFieldInfo */
-    static function field_info($id) {
-        $m = self::$field_info_map[$id] ?? null;
-        if (!$m && !array_key_exists($id, self::$field_info_map)) {
-            if (strlen($id) === 3 && ctype_digit(substr($id, 1))) {
-                $n = intval(substr($id, 1), 10);
-                $json_storage = $id;
-                if ($id[0] === "s" && isset(self::$new_score_fields[$n])) {
-                    $fid = self::$new_score_fields[$n];
-                    $m = new ReviewFieldInfo($fid, $id, true, $fid, null);
-                } else if ($id[0] === "s" || $id[0] === "t") {
-                    $m = new ReviewFieldInfo($id, $id, $id[0] === "s", null, $id);
-                }
-            } else if (($short_id = self::$text_field_map[$id] ?? null)) {
-                $m = new ReviewFieldInfo($short_id, $short_id, false, null, $short_id);
-            } else if (($short_id = self::$score_field_map[$id] ?? null)) {
-                $m = new ReviewFieldInfo($id, $short_id, true, $id, null);
-            }
-            if ($m) {
-                self::$field_info_map[$m->id] = self::$field_info_map[$m->short_id] = $m;
-            } else {
-                self::$field_info_map[$id] = $m;
-            }
-        }
-        return $m;
     }
 
     /** @param ?TextPregexes $reg
@@ -825,12 +782,12 @@ class ReviewInfo implements JsonSerializable {
 
     #[\ReturnTypeWillChange]
     function jsonSerialize() {
-        $j = ["confid" => $this->conf->dbname, ];
+        $j = ["confid" => $this->conf->dbname];
         foreach (get_object_vars($this) as $k => $v) {
             if ($k[0] !== "_"
                 && $v !== null
                 && !in_array($k, ["conf", "prow", "sfields", "tfields", "fields"])
-                && !isset(self::$score_field_map[$k])) {
+                && strlen($k) > 3) {
                 $j[$k] = $v;
             }
         }

@@ -72,7 +72,7 @@ class AdminHome_Page {
         // Weird URLs?
         foreach (["conferenceSite", "paperSite"] as $k) {
             if (($url = $conf->opt($k))
-                && !preg_match('`\Ahttps?://(?:[-.~\w:/?#\[\]@!$&\'()*+,;=]|%[0-9a-fA-F][0-9a-fA-F])*\z`', $url))
+                && !preg_match('/\Ahttps?:\/\/(?:[-.~\w:\/?#\[\]@!$&\'()*+,;=]|%[0-9a-fA-F][0-9a-fA-F])*\z/', $url))
                 $ml[] = new MessageItem(null, "<5>The <code>\$Opt[\"$k\"]</code> setting, ‘<code>" . htmlspecialchars($url) . "</code>’, is not a valid URL.  Edit the <code>conf/options.php</code> file to fix this problem", MessageSet::URGENT_NOTE);
         }
         // Unnotified reviews?
@@ -93,7 +93,7 @@ class AdminHome_Page {
             foreach ($conf->defined_round_list() as $i => $rname) {
                 if (!$conf->missed_review_deadline($i, true, false)
                     && $conf->setting($conf->review_deadline_name($i, true, false))) {
-                    $ml[] = new MessageItem(null, "<0>The deadline for review round " . htmlspecialchars($conf->assignment_round_option(false)) . " has passed. You may want to <a href=\"" . $conf->hoturl("settings", "group=reviews") . "\">change the round for new assignments</a> to " . htmlspecialchars($rname) . ".", MessageSet::MARKED_NOTE);
+                    $ml[] = new MessageItem(null, "<5>The deadline for review round " . htmlspecialchars($conf->assignment_round_option(false)) . " has passed. You may want to <a href=\"" . $conf->hoturl("settings", "group=reviews") . "\">change the round for new assignments</a> to " . htmlspecialchars($rname) . ".", MessageSet::MARKED_NOTE);
                     break;
                 }
             }

@@ -59,6 +59,8 @@ class CommentInfo {
     public $saved_mentions_missing;
     /** @var ?bool */
     public $notified_authors;
+    /** @var ?list<MessageItem> */
+    public $message_list;
 
     const CT_DRAFT = 1;
     const CT_BLIND = 2;
@@ -358,14 +360,15 @@ class CommentInfo {
             }
             if ($separateColors
                 && ($tags = $cr->viewable_tags($viewer))
-                && ($color = $cr->conf->tags()->color_classes($tags))) {
+                && $cr->conf->tags()->color_classes($tags)) {
                 $include = true;
                 $record = false;
             }
             if ($include) {
                 $result[] = [$cr, 1, $connector];
-                if ($record)
+                if ($record) {
                     $known_cids[$cid] = count($result) - 1;
+                }
             } else {
                 ++$result[$known_cids[$cid]][1];
             }
@@ -798,12 +801,10 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         $qv = [];
         if ($text === false) {
             if ($this->commentId) {
-                $change = true;
                 $q = "delete from PaperComment where commentId=$this->commentId";
                 $docids = [];
             }
         } else if (!$this->commentId) {
-            $change = true;
             $qa = ["contactId, paperId, commentType, comment, commentOverflow, timeModified, replyTo"];
             $qb = [$user->contactId, $this->prow->paperId, $ctype, "?", "?", Conf::$now, 0];
             if (strlen($text) <= 32000) {
@@ -832,14 +833,9 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
             $q = "insert into PaperComment (" . join(", ", $qa) . ") select " . join(", ", $qb) . "\n";
             if ($is_response) {
                 // make sure there is exactly one response
-                $q .= " from (select Paper.paperId, coalesce(commentId, 0) commentId
-                from Paper
-                left join PaperComment on (PaperComment.paperId=Paper.paperId and (commentType&" . self::CT_RESPONSE . ")!=0 and commentRound=$this->commentRound)
-                where Paper.paperId={$this->prow->paperId} limit 1) t
-        where t.commentId=0";
+                $q .= "from dual where not exists (select * from PaperComment where paperId={$this->prow->paperId} and (commentType&" . self::CT_RESPONSE . ")!=0 and commentRound={$this->commentRound})";
             }
         } else {
-            $change = ($this->commentType >= self::CT_AUTHOR) !== ($ctype >= self::CT_AUTHOR);
             if ($this->timeModified >= Conf::$now) {
                 Conf::advance_current_time($this->timeModified);
             }
@@ -964,7 +960,6 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         }
 
         // notify mentions and followers
-        $notified = [];
         if ($displayed
             && $this->commentId
             && ($this->commentType & self::CT_VISIBILITY) > self::CT_ADMINONLY
@@ -972,7 +967,6 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
             $this->analyze_mentions($user);
         }
 
-        $notify = false;
         if ($this->timeNotified === $this->timeModified) {
             if ($is_response && ($ctype & self::CT_DRAFT) !== 0) {
                 $tmpl = "@responsedraftnotify";
@@ -1011,18 +1005,16 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         }
 
         $old_data = $this->commentData;
-        $this->set_data("mentions", empty($mentions) ? null : $mentions);
+        $this->set_data("mentions", empty($desired_mentions) ? null : $desired_mentions);
         if ($this->commentData !== $old_data) {
-            $this->conf->qe("update CommentInfo set commentData=? where paperId=? and commentId=?", $this->commentData, $this->paperId, $this->commentId);
+            $this->conf->qe("update PaperComment set commentData=? where paperId=? and commentId=?", $this->commentData, $this->paperId, $this->commentId);
         }
 
         // go over mentions, send email
-        $mentions = [];
         foreach ($desired_mentions as $mxm) {
             if (($mentionee = $this->conf->cached_user_by_id($mxm[0]))
                 && !$mentionee->is_disabled()
                 && $mentionee->can_view_comment($this->prow, $this)) {
-                $mentions[] = $mxm;
                 if (!isset($this->saved_mentions[$mxm[0]])) {
                     HotCRPMailer::send_to($mentionee, "@mentionnotify", ["prow" => $this->prow, "comment_row" => $this]);
                     $this->saved_mentions[$mxm[0]] = htmlspecialchars(substr($text, $mxm[1] + 1, $mxm[2] - $mxm[1] - 1));

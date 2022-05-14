@@ -43,7 +43,7 @@ class GetReviewCSV_ListAction extends ListAction {
                         $text["reviewername"] = Text::nameo($rrow, 0);
                     }
                     foreach ($rrow->viewable_fields($viewer) as $f) {
-                        $fields[$f->id] = true;
+                        $fields[$f->short_id] = true;
                         $text[$f->name] = $f->unparse_value($rrow->fields[$f->order], ReviewField::VALUE_TRIM);
                     }
                     $items[] = $text;
@@ -59,12 +59,13 @@ class GetReviewCSV_ListAction extends ListAction {
             array_push($selection, "reviewername", "email");
         }
         foreach ($rf->all_fields() as $f) {
-            if (isset($fields[$f->id]))
+            if (isset($fields[$f->short_id]))
                 $selection[] = $f->name;
         }
         if (!empty($pids)) {
             $user->log_activity("Download reviews CSV", array_keys($pids));
         }
+        $user->set_overrides($overrides);
         return $user->conf->make_csvg($this->author_view ? "aureviews" : "reviews")
             ->select($selection)->append($items);
     }

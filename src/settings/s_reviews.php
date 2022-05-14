@@ -58,11 +58,11 @@ class Reviews_SettingRenderer {
     }
 
     static function print(SettingValues $sv) {
-        echo '<div class="form-g">';
+        echo '<hr class="form-sep">';
         $sv->print_checkbox("rev_open", "<b>Enable review editing</b>");
         $sv->print_checkbox("cmt_always", "Allow comments even if reviewing is closed");
-        echo "</div>\n";
 
+        echo '<hr class="form-sep">';
         $sv->print_radio_table("rev_blind", [Conf::BLIND_ALWAYS => "Yes, reviews are anonymous",
                    Conf::BLIND_NEVER => "No, reviewer names are visible to authors",
                    Conf::BLIND_OPTIONAL => "Depends: reviewers decide whether to expose their names"],
@@ -116,12 +116,10 @@ class Reviews_SettingRenderer {
 
         echo '<div id="roundtable">', Ht::hidden("has_tag_rounds", 1);
         $round_map = Dbl::fetch_iimap($sv->conf->ql("select reviewRound, count(*) from PaperReview group by reviewRound"));
-        $num_printed = 0;
         foreach ($roundorder as $i => $rname) {
             if ($i ? $rname !== ";" : $print_round0) {
                 self::print_round($sv, $i, $i ? $rname : "", $round_map[$i] ?? 0,
                                  $i !== 0 && count($selector) !== 1);
-                ++$num_printed;
             }
         }
         echo '</div><div id="newround" class="hidden">';
@@ -133,7 +131,7 @@ class Reviews_SettingRenderer {
             Ht::hidden("has_rev_roundtag", 1), Ht::hidden("has_extrev_roundtag", 1);
         foreach ($roundorder as $i => $rname) {
             if ($i && $rname === ";")
-                echo Ht::hidden("roundname_$i", "", array("id" => "roundname_$i")),
+                echo Ht::hidden("roundname_$i", "", ["id" => "roundname_$i"]),
                     Ht::hidden("deleteround_$i", 1, ["data-default-value" => "1"]);
         }
         Ht::stash_script('hotcrp.settings.review_round()');
@@ -155,14 +153,14 @@ class Reviews_SettingRenderer {
         $sv->print_checkbox('pcrev_any', "PC members can review any submission", ["class" => "uich js-foldup"]);
         if ($sv->conf->setting("pcrev_any")
             && $sv->conf->check_track_sensitivity(Track::UNASSREV)) {
-            echo '<p class="f-h fx">', $sv->setting_link("Current track settings", "tracks"), ' may restrict self-assigned reviews.</p>';
+            echo '<p class="f-h fx">', $sv->setting_group_link("Current track settings", "tracks"), ' may restrict self-assigned reviews.</p>';
         }
         echo "</div>\n";
 
 
         $hint = "";
         if ($sv->conf->check_track_sensitivity(Track::VIEWREVID)) {
-            $hint = '<p class="settings-ag f-h">' . $sv->setting_link("Current track settings", "tracks") . ' restrict reviewer name visibility.</p>';
+            $hint = '<p class="settings-ag f-h">' . $sv->setting_group_link("Current track settings", "tracks") . ' restrict reviewer name visibility.</p>';
         }
         $sv->print_radio_table("pc_seeblindrev", [0 => "Yes",
                 1 => "Only after completing a review for the same submission"],
@@ -176,11 +174,12 @@ class Reviews_SettingRenderer {
         }
         if ($sv->conf->check_track_sensitivity(Track::VIEWREV)
             || $sv->conf->check_track_sensitivity(Track::VIEWALLREV)) {
-            $hint .= ' ' . $sv->setting_link("Current track settings", "tracks") . ' restrict review visibility.';
+            $hint .= ' ' . $sv->setting_group_link("Current track settings", "tracks") . ' restrict review visibility.';
         }
         if ($hint !== "") {
             $hint = '<p class="settings-ag f-h">' . ltrim($hint) . '</p>';
         }
+        echo '<hr class="form-sep">';
         $sv->print_radio_table("pc_seeallrev", [
                 Conf::PCSEEREV_YES => "Yes",
                 Conf::PCSEEREV_UNLESSINCOMPLETE => "Yes, unless they haven’t completed an assigned review for the same submission",
@@ -189,14 +188,13 @@ class Reviews_SettingRenderer {
             ], 'Can PC members see <strong>review contents<span class="fx2"> and comments</span></strong> except for conflicts?',
             ["after" => $hint]);
 
-        echo '<div class="form-nearby form-g">';
+        echo '<hr class="form-nearby form-sep">';
         $sv->print_checkbox("lead_seerev", "Discussion leads can always see submitted reviews and reviewer names");
-        echo '</div>';
 
 
-        echo '<div class="form-g">';
+        echo '<hr class="form-sep">';
         $sv->print_checkbox('cmt_revid', "PC can see comments when reviews are anonymous", ["class" => "uich js-foldup", "data-fold-target" => "2", "hint_class" => "fx2"], "Commenter names are hidden when reviews are anonymous.");
-        echo "</div></div>\n";
+        echo "</div>\n";
     }
 
 
@@ -217,9 +215,10 @@ class Reviews_SettingRenderer {
                 0 => "Yes"
             ], "Can PC reviewers request external reviews?",
             ["item_class" => "uich js-foldup"]);
-        echo '<div class="fx1">';
         // echo '<p>Secondary PC reviews can be delegated to external reviewers. When the external review is complete, the secondary PC reviewer need not complete a review of their own.</p>', "\n";
 
+        echo '<div class="fx1">';
+        echo '<hr class="form-sep">';
         $label3 = "Yes, and external reviews are visible only to their requesters";
         if ($sv->conf->fetch_ivalue("select exists (select * from PaperReview where reviewType=" . REVIEW_EXTERNAL . " and reviewSubmitted>0)")) {
             $label3 = '<label for="pcrev_editdelegate_3">' . $label3 . '</label><div class="settings-ap f-hx fx">Existing ' . Ht::link("submitted external reviews", $sv->conf->hoturl("search", ["q" => "re:ext:submitted"]), ["target" => "_new"]) . ' will remain visible to others.</div>';
@@ -299,7 +298,7 @@ class Reviews_SettingRenderer {
 
 
 class Round_SettingParser extends SettingParser {
-    private $rev_round_changes = array();
+    private $rev_round_changes = [];
 
     function apply_req(SettingValues $sv, Si $si) {
         assert($si->name === "tag_rounds");

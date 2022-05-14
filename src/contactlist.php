@@ -63,7 +63,7 @@ class ContactList {
     private $_lead_data;
     /** @var array<int,int> */
     private $_shepherd_data;
-    /** @var list<ReviewField> */
+    /** @var list<Score_ReviewField> */
     private $_rfields = [];
     /** @var list<array<int,list<int>>> */
     private $_score_data;
@@ -84,7 +84,7 @@ class ContactList {
 
         $this->tagger = new Tagger($this->user);
         foreach ($this->conf->review_form()->viewable_fields($this->user) as $f) {
-            if ($f->has_options)
+            if ($f instanceof Score_ReviewField)
                 $this->_rfields[] = $f;
         }
 
@@ -321,26 +321,26 @@ class ContactList {
             usort($rows, [$this, "_sortBase"]);
             break;
         case self::FIELD_EMAIL:
-            usort($rows, array($this, "_sortEmail"));
+            usort($rows, [$this, "_sortEmail"]);
             break;
         case self::FIELD_AFFILIATION:
         case self::FIELD_AFFILIATION_ROW:
-            usort($rows, array($this, "_sortAffiliation"));
+            usort($rows, [$this, "_sortAffiliation"]);
             break;
         case self::FIELD_LASTVISIT:
-            usort($rows, array($this, "_sortLastVisit"));
+            usort($rows, [$this, "_sortLastVisit"]);
             break;
         case self::FIELD_REVIEWS:
-            usort($rows, array($this, "_sortReviews"));
+            usort($rows, [$this, "_sortReviews"]);
             break;
         case self::FIELD_LEADS:
-            usort($rows, array($this, "_sortLeads"));
+            usort($rows, [$this, "_sortLeads"]);
             break;
         case self::FIELD_SHEPHERDS:
-            usort($rows, array($this, "_sortShepherds"));
+            usort($rows, [$this, "_sortShepherds"]);
             break;
         case self::FIELD_REVIEW_RATINGS:
-            usort($rows, array($this, "_sortReviewRatings"));
+            usort($rows, [$this, "_sortReviewRatings"]);
             break;
         case self::FIELD_PAPERS:
             usort($rows, [$this, "_sort_papers"]);
@@ -350,7 +350,7 @@ class ContactList {
             break;
         default:
             $f = $this->_rfields[$this->sortField - self::FIELD_SCORE];
-            $scoresort = $this->user->session("ulscoresort", "A");
+            $scoresort = $this->user->session("ulscoresort") ?? "A";
             if (!in_array($scoresort, ["A", "V", "D"], true)) {
                 $scoresort = "A";
             }
@@ -372,7 +372,7 @@ class ContactList {
 
     /** @param int $fieldId
      * @return string */
-    function header($fieldId, $ordinal, $row = null) {
+    function header($fieldId, $row = null) {
         switch ($fieldId) {
         case self::FIELD_NAME:
             return "Name";
@@ -808,7 +808,7 @@ class ContactList {
                 || $this->limit === "req") {
                 $f = $this->_rfields[$fieldId - self::FIELD_SCORE];
                 if (($scores = $this->_score_data[$f->order][$row->contactId] ?? [])) {
-                    return $f->unparse_graph($scores, 2, 0);
+                    return $f->unparse_graph(new ScoreInfo($scores, true), 2);
                 }
             }
             return "";
@@ -832,8 +832,7 @@ class ContactList {
         if ($this->user->isPC) {
             $uldisplay = self::uldisplay($this->user);
             foreach ($this->_rfields as $i => $f) {
-                if (strpos($uldisplay, " {$f->id} ") !== false
-                    || strpos($uldisplay, " {$f->short_id} ") !== false)
+                if (strpos($uldisplay, " {$f->short_id} ") !== false)
                     $a[] = self::FIELD_SCORE + $i;
             }
         }
@@ -875,7 +874,7 @@ class ContactList {
         $lllgroups = [];
 
         // Begin linelinks
-        $types = array("nameemail" => "Names and emails");
+        $types = ["nameemail" => "Names and emails"];
         if ($this->user->privChair) {
             $types["pcinfo"] = "PC info";
         }
@@ -963,7 +962,7 @@ class ContactList {
         // get field array
         $fieldDef = [];
         $acceptable_fields = [];
-        $this->any = (object) array("sel" => false);
+        $this->any = (object) ["sel" => false];
         $ncol = 0;
         foreach ($baseFieldId as $fid) {
             if ($this->selector($fid) !== false) {
@@ -1012,7 +1011,7 @@ class ContactList {
         $anyData = [];
         $body = '';
         $extrainfo = $hascolors = false;
-        $ids = array();
+        $ids = [];
         foreach ($srows as $row) {
             if (($this->limit == "resub" || $this->limit == "extsub")
                 && (!isset($this->_rect_data[$row->contactId])
@@ -1045,7 +1044,7 @@ class ContactList {
                     if ($fdef[1] >= 3) {
                         $tt .= " class=\"fx" . ($fdef[1] - 2) . "\"";
                     }
-                    $tt .= '><em class="plx">' . $this->header($fieldId, -1, $row)
+                    $tt .= '><em class="plx">' . $this->header($fieldId, $row)
                         . ":</em> " . $d . "</div>";
                 }
             }
@@ -1082,7 +1081,7 @@ class ContactList {
         }
 
         $uldisplay = self::uldisplay($this->user);
-        $foldclasses = array();
+        $foldclasses = [];
         foreach (self::$folds as $k => $fold) {
             if (($this->have_folds[$fold] ?? null) !== null) {
                 $this->have_folds[$fold] = strpos($uldisplay, " $fold ") !== false;
@@ -1104,7 +1103,6 @@ class ContactList {
         $x .= "\">\n";
 
         $x .= "  <thead class=\"pltable\">\n  <tr class=\"pl_headrow\">\n";
-        $ord = 0;
 
         if ($this->sortable && $url) {
             $sortUrl = $url . (strpos($url, "?") ? "&amp;" : "?") . "sort=";
@@ -1117,7 +1115,7 @@ class ContactList {
                     continue;
                 }
                 $x .= "    <th class=\"pl plh pl_$fdef[0]\">";
-                $ftext = $this->header($fieldId, ++$ord);
+                $ftext = $this->header($fieldId);
                 if ($fieldId === $this->sortField) {
                     $rev = $this->reverseSort ? "" : "-";
                     $x .= '<a class="pl_sort pl_sorting' . ($this->reverseSort ? "_rev" : "_fwd")
@@ -1134,7 +1132,7 @@ class ContactList {
             foreach ($fieldDef as $fieldId => $fdef) {
                 if ($fdef[1] == 1 && isset($anyData[$fieldId])) {
                     $x .= "    <th class=\"pl plh pl_$fdef[0]\">"
-                        . $this->header($fieldId, $ord++) . "</th>\n";
+                        . $this->header($fieldId) . "</th>\n";
                 } else if ($fdef[1] == 1) {
                     $x .= "    <th class=\"pl plh pl_$fdef[0]\"></th>\n";
                 }
@@ -1160,8 +1158,8 @@ class ContactList {
                     $listtitle = "Users";
                 }
             }
-            $l = new SessionList("u/" . $listlink, $ids, $listtitle,
-                $this->conf->hoturl_raw("users", ["t" => $listlink], Conf::HOTURL_SITEREL));
+            $l = (new SessionList("u/{$listlink}", $ids, $listtitle))
+                ->set_urlbase($this->conf->hoturl_raw("users", ["t" => $listlink], Conf::HOTURL_SITEREL));
             $x .= " has-hotlist\" data-hotlist=\"" . htmlspecialchars($l->info_string());
         }
         return $x . "\">" . $body . "</tbody></table>";

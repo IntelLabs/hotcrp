@@ -16,6 +16,8 @@ class PaperContactInfo {
     /** @var int */
     public $reviewSubmitted = 0;
     /** @var int */
+    public $reviewRound = 0;
+    /** @var int */
     public $review_status = 0;    // 0 means no review
     const RS_DECLINED = 1;        // declined assigned review
     const RS_UNSUBMITTED = 2;     // review not submitted, needs submit
@@ -102,9 +104,14 @@ class PaperContactInfo {
         $this->conflictType = max($ct, $this->conflictType);
     }
 
-    private function mark_review_type($rt, $rs, $rns) {
+    /** @param int $rt
+     * @param int $rs
+     * @param int $rns
+     * @param int $rround */
+    private function mark_review_type($rt, $rs, $rns, $rround) {
         $this->reviewType = max($rt, $this->reviewType);
         $this->reviewSubmitted = max($rs, $this->reviewSubmitted);
+        $this->reviewRound = $rround;
         if ($rt > 0) {
             if ($rs > 0 || $rns == 0) {
                 $this->review_status = PaperContactInfo::RS_SUBMITTED;
@@ -115,14 +122,15 @@ class PaperContactInfo {
     }
 
     function mark_review(ReviewInfo $rrow) {
-        $this->mark_review_type($rrow->reviewType, (int) $rrow->reviewSubmitted, $rrow->reviewNeedsSubmit);
+        $this->mark_review_type($rrow->reviewType, (int) $rrow->reviewSubmitted, $rrow->reviewNeedsSubmit, $rrow->reviewRound);
     }
 
+    /** @param ?string $sig */
     private function mark_my_review_permissions($sig) {
         if ((string) $sig !== "") {
             foreach (explode(",", $sig) as $r) {
-                list($rt, $rs, $rns) = explode(" ", $r);
-                $this->mark_review_type((int) $rt, (int) $rs, (int) $rns);
+                list($rt, $rs, $rns, $rround) = explode(" ", $r);
+                $this->mark_review_type((int) $rt, (int) $rs, (int) $rns, (int) $rround);
             }
         }
     }
@@ -131,7 +139,7 @@ class PaperContactInfo {
     static function load_into(PaperInfo $prow, $user) {
         $conf = $prow->conf;
         $pid = $prow->paperId;
-        $q = "select conflictType, reviewType, reviewSubmitted, reviewNeedsSubmit";
+        $q = "select conflictType, reviewType, reviewSubmitted, reviewNeedsSubmit, reviewRound";
         $cid = $user->contactXid;
         $rev_tokens = $user->review_tokens();
         if ($cid > 0
@@ -148,10 +156,10 @@ class PaperContactInfo {
                 $row->_clear_contact_info($user);
             }
             while (($local = $result->fetch_row())) {
-                $row = $row_set->get((int) $local[4]);
-                $ci = $row->_get_contact_info((int) $local[5]);
+                $row = $row_set->get((int) $local[5]);
+                $ci = $row->_get_contact_info((int) $local[6]);
                 $ci->mark_conflict((int) $local[0]);
-                $ci->mark_review_type((int) $local[1], (int) $local[2], (int) $local[3]);
+                $ci->mark_review_type((int) $local[1], (int) $local[2], (int) $local[3], (int) $local[4]);
             }
             Dbl::free($result);
             return;
@@ -190,9 +198,9 @@ class PaperContactInfo {
             }
         }
         while ($result && ($local = $result->fetch_row())) {
-            $ci = $prow->_get_contact_info((int) $local[4]);
+            $ci = $prow->_get_contact_info((int) $local[5]);
             $ci->mark_conflict((int) $local[0]);
-            $ci->mark_review_type((int) $local[1], (int) $local[2], (int) $local[3]);
+            $ci->mark_review_type((int) $local[1], (int) $local[2], (int) $local[3], (int) $local[4]);
         }
         Dbl::free($result);
     }
@@ -468,27 +476,27 @@ class PaperInfo {
     /** @var ?string */
     public $reviewWordCountSignature;
     /** @var ?string */
-    public $overAllMeritSignature;
+    public $s01Signature;
     /** @var ?string */
-    public $reviewerQualificationSignature;
+    public $s02Signature;
     /** @var ?string */
-    public $noveltySignature;
+    public $s03Signature;
     /** @var ?string */
-    public $technicalMeritSignature;
+    public $s04Signature;
     /** @var ?string */
-    public $interestToCommunitySignature;
+    public $s05Signature;
     /** @var ?string */
-    public $longevitySignature;
+    public $s06Signature;
     /** @var ?string */
-    public $grammarSignature;
+    public $s07Signature;
     /** @var ?string */
-    public $likelyPresentationSignature;
+    public $s08Signature;
     /** @var ?string */
-    public $suitableForShortSignature;
+    public $s09Signature;
     /** @var ?string */
-    public $potentialSignature;
+    public $s10Signature;
     /** @var ?string */
-    public $fixabilitySignature;
+    public $s11Signature;
 
     /** @var ?string */
     public $commentSkeletonInfo;
@@ -693,7 +701,7 @@ class PaperInfo {
         $prow->paperTags = $tags;
         $prow->outcome = 1;
         $prow->conflictType = "0";
-        $prow->myReviewPermissions = "{$rtype} 1 0";
+        $prow->myReviewPermissions = "{$rtype} 1 0 0";
         $prow->incorporate_user($user);
         return $prow;
     }
@@ -701,7 +709,7 @@ class PaperInfo {
     /** @param string $prefix
      * @return string */
     static function my_review_permissions_sql($prefix = "") {
-        return "group_concat({$prefix}reviewType, ' ', coalesce({$prefix}reviewSubmitted,0), ' ', reviewNeedsSubmit)";
+        return "group_concat({$prefix}reviewType, ' ', coalesce({$prefix}reviewSubmitted,0), ' ', reviewNeedsSubmit, ' ', reviewRound)";
     }
 
     /** @return PermissionProblem */
@@ -1633,7 +1641,7 @@ class PaperInfo {
             $this->load_preferences();
         }
         if ($this->_prefs_array === null) {
-            $x = array();
+            $x = [];
             if ($this->allReviewerPreference !== "") {
                 $p = preg_split('/[ ,]/', $this->allReviewerPreference);
                 for ($i = 0; $i + 2 < count($p); $i += 3) {
@@ -2477,14 +2485,16 @@ class PaperInfo {
         }
     }
 
-    /** @param string $fid */
-    private function load_review_fields($fid, $maybe_null = false) {
+    /** @param string $fid
+     * @param string $main_storage
+     * @param bool $maybe_null */
+    private function load_review_fields($fid, $main_storage, $maybe_null) {
         $k = $fid . "Signature";
         $row_set = $this->_row_set ?? new PaperInfoSet($this);
         foreach ($row_set as $prow) {
             $prow->$k = "";
         }
-        $select = $maybe_null ? "coalesce($fid,'.')" : $fid;
+        $select = $maybe_null ? "coalesce($main_storage,'.')" : $main_storage;
         $result = $this->conf->qe("select paperId, group_concat($select order by reviewId) from PaperReview where paperId?a group by paperId", $row_set->paper_ids());
         while ($result && ($row = $result->fetch_row())) {
             $prow = $row_set->get((int) $row[0]);
@@ -2508,9 +2518,9 @@ class PaperInfo {
                 $this->ensure_full_reviews();
             } else {
                 $this->_reviews_have[$order] = true;
-                $k = $f->main_storage . "Signature";
+                $k = $f->short_id . "Signature";
                 if ($this->$k === null) {
-                    $this->load_review_fields($f->main_storage);
+                    $this->load_review_fields($f->short_id, $f->main_storage, false);
                 }
                 $x = explode(",", $this->$k);
                 foreach ($this->reviews_as_list() as $i => $rrow) {
@@ -2563,7 +2573,7 @@ class PaperInfo {
         if (!($this->_reviews_flags & self::REVIEW_HAS_WORDCOUNT)) {
             $this->_reviews_flags |= self::REVIEW_HAS_WORDCOUNT;
             if ($this->reviewWordCountSignature === null) {
-                $this->load_review_fields("reviewWordCount", true);
+                $this->load_review_fields("reviewWordCount", "reviewWordCount", true);
             }
             $x = explode(",", $this->reviewWordCountSignature);
             $bad_ids = [];
@@ -2761,7 +2771,6 @@ class PaperInfo {
         }
         $result = $this->conf->qe(self::fetch_comment_query()
             . " where paperId?a order by paperId, commentId", $row_set->paper_ids());
-        $comments = [];
         while (($c = CommentInfo::fetch($result, null, $this->conf))) {
             $prow = $row_set->checked_paper_by_id($c->paperId);
             $c->set_prow($prow);
@@ -2938,16 +2947,19 @@ class PaperInfo {
 
 
     /** @return array<int,int> */
-    function all_watch() {
-        if ($this->_watch_array === null) {
-            $this->_watch_array = [];
-            $result = $this->conf->qe("select contactId, watch from PaperWatch where paperId=?", $this->paperId);
-            while (($row = $result->fetch_row())) {
-                $this->_watch_array[(int) $row[0]] = (int) $row[1];
-            }
-            Dbl::free($result);
+    function load_watch() {
+        $this->_watch_array = [];
+        $result = $this->conf->qe("select contactId, watch from PaperWatch where paperId=?", $this->paperId);
+        while (($row = $result->fetch_row())) {
+            $this->_watch_array[(int) $row[0]] = (int) $row[1];
         }
+        Dbl::free($result);
         return $this->_watch_array;
+    }
+
+    /** @return array<int,int> */
+    function all_watch() {
+        return $this->_watch_array ?? $this->load_watch();
     }
 
     /** @return int */

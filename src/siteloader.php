@@ -14,7 +14,6 @@ class SiteLoader {
         "Fexpr" => "src/formula.php",
         "FormulaCall" => "src/formula.php",
         "FormatChecker" => "src/formatspec.php",
-        "GroupedExtensions" => "src/componentset.php", /* XXX backward compat */
         "HashAnalysis" => "lib/filer.php",
         "JsonSerializable" => "lib/json.php",
         "LogEntryGenerator" => "src/logentry.php",
@@ -23,22 +22,19 @@ class SiteLoader {
         "PaperInfoSet" => "src/paperinfo.php",
         "PaperOptionList" => "src/paperoption.php",
         "PaperValue" => "src/paperoption.php",
-        "ReviewField" => "src/review.php",
-        "ReviewFieldInfo" => "src/review.php",
-        "ReviewForm" => "src/review.php",
+        "ReviewFieldInfo" => "src/reviewfield.php",
         "ReviewSearchMatcher" => "src/search/st_review.php",
-        "ReviewValues" => "src/review.php",
+        "ReviewValues" => "src/reviewform.php",
         "SearchTerm" => "src/papersearch.php",
         "SearchWord" => "src/papersearch.php",
-        "SettingInfoSet" => "src/si.php",
-        "SettingParser" => "src/settingvalues.php",
         "StreamS3Result" => "lib/s3result.php",
         "TagAnno" => "lib/tagger.php",
         "TagInfo" => "lib/tagger.php",
         "TagMap" => "lib/tagger.php",
         "TextPregexes" => "lib/text.php",
         "Text_PaperOption" => "src/paperoption.php",
-        "XlsxGenerator" => "lib/xlsx.php"
+        "XlsxGenerator" => "lib/xlsx.php",
+        "dmp\\diff_match_patch" => "lib/diff_match_patch.php"
     ];
 
     static $suffix_map = [
@@ -46,6 +42,7 @@ class SiteLoader {
         "_assignable.php" => ["a_", "src/assigners"],
         "_assigner.php" => ["a_", "src/assigners"],
         "_assignmentparser.php" => ["a_", "src/assigners"],
+        "_batch.php" => ["", "batch"],
         "_capability.php" => ["cap_", "src/capabilities"],
         "_fexpr.php" =>  ["f_", "src/formulas"],
         "_helptopic.php" => ["h_", "src/help"],
@@ -58,7 +55,7 @@ class SiteLoader {
         "_searchterm.php" => ["st_", "src/search"],
         "_settingrenderer.php" => ["s_", "src/settings"],
         "_settingparser.php" => ["s_", "src/settings"],
-        "_sitype.php" => ["s_", "src/settings"],
+        "_sitype.php" => ["si_", "src/settings"],
         "_tester.php" => ["t_", "test"],
         "_userinfo.php" => ["u_", "src/userinfo"]
     ];
@@ -101,7 +98,32 @@ class SiteLoader {
         return [];
     }
 
+    /** @param string $s
+     * @param array<string,string> $expansions
+     * @param int $pos
+     * @return string */
+    static function substitute($s, $expansions, $pos = 0) {
+        while (($pos = strpos($s, '${', $pos)) !== false) {
+            $rbrace = strpos($s, '}', $pos + 2);
+            if ($rbrace !== false
+                && ($key = substr($s, $pos + 2, $rbrace - $pos - 2)) !== ""
+                && array_key_exists($key, $expansions)) {
+                $value = $expansions[$key];
+                if ($value !== false && $value !== null) {
+                    $s = substr($s, 0, $pos) . $value . substr($s, $rbrace + 1);
+                    $pos += strlen($value);
+                } else {
+                    return "";
+                }
+            } else {
+                $pos += 2;
+            }
+        }
+        return $s;
+    }
+
     /** @param string|list<string> $files
+     * @param array<string,string> $expansions
      * @return list<string> */
     static function expand_includes($files, $expansions = []) {
         global $Opt;
@@ -129,26 +151,19 @@ class SiteLoader {
 
         $results = [];
         foreach ($files as $f) {
-            if (strpos((string) $f, '$') !== false) {
-                foreach ($expansions as $k => $v) {
-                    if ($v !== false && $v !== null) {
-                        $f = preg_replace("/\\\$\\{{$k}\\}|\\\${$k}\\b/", $v, $f);
-                    } else if (preg_match("/\\\$\\{{$k}\\}|\\\${$k}\\b/", $f)) {
-                        $f = "";
-                        break;
-                    }
-                }
+            $f = (string) $f;
+            if ($f !== "" && ($pos = strpos($f, '${')) !== false) {
+                $f = self::substitute($f, $expansions, $pos);
             }
-            if ((string) $f === "") {
+            if ($f === "") {
                 continue;
             }
-            $matches = [];
             $ignore_not_found = $globby = false;
             if ($f[0] === "?") {
                 $ignore_not_found = true;
                 $f = substr($f, 1);
             }
-            if (preg_match('/[\[\]\*\?\{\}]/', $f)) {
+            if (strpbrk($f, "[]*?{}") !== false) {
                 $ignore_not_found = $globby = true;
             }
             $matches = self::expand_includes_once($f, $includepath, $globby);
@@ -177,8 +192,12 @@ class SiteLoader {
         }
     }
 
-    static function read_main_options() {
-        $file = defined("HOTCRP_OPTIONS") ? HOTCRP_OPTIONS : self::$root . "/conf/options.php";
+    /** @param ?string $file */
+    static function read_main_options($file = null) {
+        $file = $file ?? (defined("HOTCRP_OPTIONS") ? HOTCRP_OPTIONS : "conf/options.php");
+        if (!str_starts_with($file, "/")) {
+            $file = self::$root . "/{$file}";
+        }
         self::read_options_file($file);
     }
 

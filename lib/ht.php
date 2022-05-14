@@ -3,12 +3,19 @@
 // Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Ht {
+    /** @var string */
     public static $img_base = "";
+    /** @var string */
     private static $_script_open = "<script";
+    /** @var int */
     private static $_controlid = 0;
+    /** @var int */
     private static $_lastcontrolid = 0;
+    /** @var string */
     private static $_stash = "";
+    /** @var bool */
     private static $_stash_inscript = false;
+    /** @var array<string,true> */
     private static $_stash_map = [];
     /** @var ?MessageSet */
     private static $_msgset = null;
@@ -35,6 +42,7 @@ class Ht {
         "optionstyles" => self::ATTR_SKIP,
         "readonly" => self::ATTR_BOOL,
         "required" => self::ATTR_BOOL,
+        "selected" => self::ATTR_BOOL,
         "spellcheck" => self::ATTR_BOOLTEXT,
         "type" => self::ATTR_SKIP
     ];
@@ -70,6 +78,8 @@ class Ht {
                     $x .= ($v ? " $k" : "");
                 } else if ($t === self::ATTR_BOOLTEXT && is_bool($v)) {
                     $x .= " $k=\"" . ($v ? "true" : "false") . "\"";
+                } else if ($v === "") {
+                    $x .= " $k";
                 } else {
                     $x .= " $k=\"" . str_replace("\"", "&quot;", $v) . "\"";
                 }
@@ -182,70 +192,51 @@ class Ht {
             unset($js["disabled"]);
         }
 
-        $optionstyles = $js["optionstyles"] ?? null;
         $x = $optgroup = "";
-        $first_value = $has_selected = false;
-        foreach ($opt as $value => $info) {
+        $first_value = null;
+        $has_selected = false;
+        foreach ($opt as $key => $info) {
             if (is_array($info) && isset($info[0]) && $info[0] === "optgroup") {
-                $info = (object) ["type" => "optgroup", "label" => $info[1] ?? null];
-            } else if (is_array($info)) {
-                $info = (object) $info;
+                $info = ["type" => "optgroup", "label" => $info[1] ?? null];
+            } else if (is_object($info)) {
+                $info = (array) $info;
             } else if (is_scalar($info)) {
-                $info = (object) ["label" => $info];
-                if (is_array($disabled) && isset($disabled[$value])) {
-                    $info->disabled = $disabled[$value];
+                $info = ["label" => $info];
+                if (is_array($disabled) && isset($disabled[$key])) {
+                    $info["disabled"] = $disabled[$key];
                 }
-                if ($optionstyles && isset($optionstyles[$value])) {
-                    $info->style = $optionstyles[$value];
-                }
-            }
-            if (isset($info->value)) {
-                $value = $info->value;
             }
 
             if ($info === null) {
                 $x .= '<option label=" " disabled></option>';
-            } else if (isset($info->type) && $info->type === "optgroup") {
+            } else if (($info["type"] ?? null) === "optgroup") {
                 $x .= $optgroup;
-                if ($info->label) {
-                    $x .= '<optgroup label="' . htmlspecialchars($info->label) . '">';
+                if ($info["label"] ?? null) {
+                    $x .= '<optgroup label="' . htmlspecialchars($info["label"]) . '">';
                     $optgroup = "</optgroup>";
                 } else {
                     $optgroup = "";
                 }
             } else {
-                $x .= '<option';
-                if ($info->id ?? null) {
-                    $x .= " id=\"{$info->id}\"";
-                }
-                $x .= ' value="' . htmlspecialchars((string) $value) . '"';
-                if ($first_value === false) {
-                    $first_value = $value;
+                $label = $info["label"];
+                unset($info["label"]);
+                $info["value"] = $info["value"] ?? (string) $key;
+                if (!isset($first_value)) {
+                    $first_value = $info["value"];
                 }
                 if ($selected !== null
-                    && strcmp((string) $value, $selected) === 0
+                    && strcmp($info["value"], $selected) === 0
                     && !$has_selected) {
-                    $x .= ' selected';
+                    $info["selected"] = true;
                     $has_selected = true;
                 }
-                if ($info->disabled ?? false) {
-                    $x .= ' disabled';
-                }
-                if ($info->class ?? false) {
-                    $x .= " class=\"{$info->class}\"";
-                }
-                if ($info->style ?? false) {
-                    $x .= ' style="' . htmlspecialchars($info->style) . '"';
-                }
-                $x .= '>' . $info->label . '</option>';
+                $x .= '<option' . self::extra($info) . ">{$label}</option>";
             }
         }
 
-        if ($selected === null || !isset($opt[$selected])) {
-            $selected = key($opt);
-        }
         $t = '<span class="select"><select name="' . $name . '"' . self::extra($js);
-        if (!isset($js["data-default-value"])) {
+        if (!isset($js["data-default-value"])
+            && ($has_selected || isset($first_value))) {
             $t .= ' data-default-value="' . htmlspecialchars($has_selected ? $selected : $first_value) . '"';
         }
         return "{$t}>{$x}{$optgroup}</select></span>";
@@ -405,33 +396,37 @@ class Ht {
         return "<textarea name=\"{$name}\"{$jst}>{$vt}</textarea>";
     }
 
-    static function actions($actions, $js = []) {
+    /** @param list<string|list<string>> $actions
+     * @param ?array<string,mixed> $js
+     * @return string */
+    static function actions($actions, $js = null) {
         if (empty($actions)) {
             return "";
         }
         $actions = array_values($actions);
-        $js = $js ? : array();
+        $js = $js ?? [];
         if (!isset($js["class"])) {
             $js["class"] = "aab";
         }
         $t = "<div" . self::extra($js) . ">";
-        foreach ($actions as $i => $a) {
-            if ($a !== "") {
+        foreach ($actions as $i => $action) {
+            $a = is_array($action) ? $action : [$action];
+            if ((string) $a[0] !== "") {
                 $t .= '<div class="aabut';
                 if ($i + 1 < count($actions) && $actions[$i + 1] === "") {
                     $t .= " aabutsp";
                 }
-                if (is_array($a) && count($a) > 2 && (string) $a[2] !== "") {
+                if (count($a) > 2 && (string) $a[2] !== "") {
                     $t .= " {$a[2]}";
                 }
-                $t .= '">' . (is_array($a) ? $a[0] : $a);
-                if (is_array($a) && count($a) > 1 && (string) $a[1] !== "") {
+                $t .= "\">{$a[0]}";
+                if (count($a) > 1 && (string) $a[1] !== "") {
                     $t .= "<div class=\"hint\">{$a[1]}</div>";
                 }
                 $t .= '</div>';
             }
         }
-        return $t . "</div>\n";
+        return $t . "</div>";
     }
 
     /** @param string|list<string> $html
@@ -677,7 +672,7 @@ class Ht {
             && preg_match('/\A<(?:p|div|form|ul|ol|dl|blockquote|hr)\b/i', $s);
     }
 
-    /** @param list<string>|string $msg
+    /** @param string $msg
      * @param int|string $status */
     static function msg($msg, $status) {
         if (is_int($status)) {

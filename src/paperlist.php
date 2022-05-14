@@ -99,31 +99,21 @@ class PaperListTableRender {
 class PaperListReviewAnalysis {
     /** @var PaperInfo */
     private $prow;
-    /** @var ?ReviewInfo */
-    public $rrow = null;
-    /** @var string */
-    public $round = "";
-    /** @param ?ReviewInfo $rrow */
+    /** @var ReviewInfo */
+    public $rrow;
+    /** @param ReviewInfo $rrow */
     function __construct($rrow, PaperInfo $prow) {
         $this->prow = $prow;
-        if ($rrow->reviewId) {
-            $this->rrow = $rrow;
-            if ($rrow->reviewRound) {
-                $this->round = htmlspecialchars($prow->conf->round_name($rrow->reviewRound));
-            }
-        }
+        $this->rrow = $rrow;
     }
     /** @param bool $includeLink
      * @return string */
     function icon_html($includeLink) {
-        $t = $this->rrow->type_icon();
+        $t = $this->rrow->icon_h();
         if ($includeLink) {
             $t = $this->wrap_link($t);
         }
-        if ($this->round) {
-            $t .= '<span class="revround" title="Review round">&nbsp;' . $this->round . "</span>";
-        }
-        return $t;
+        return $t . $this->rrow->round_h();
     }
     /** @return string */
     function icon_text() {
@@ -131,8 +121,8 @@ class PaperListReviewAnalysis {
         if ($this->rrow->reviewType) {
             $x = ReviewForm::$revtype_names[$this->rrow->reviewType] ?? "";
         }
-        if ($x !== "" && $this->round) {
-            $x .= ":" . $this->round;
+        if ($x !== "" && $this->rrow->reviewRound > 0) {
+            $x .= ":" . $this->rrow->conf->round_name($this->rrow->reviewRound);
         }
         return $x;
     }
@@ -140,17 +130,13 @@ class PaperListReviewAnalysis {
      * @param ?string $klass
      * @return string */
     function wrap_link($html, $klass = null) {
-        if ($this->rrow) {
-            if ($this->rrow->reviewStatus >= ReviewInfo::RS_COMPLETED) {
-                $href = $this->prow->hoturl(["#" => "r" . $this->rrow->unparse_ordinal_id()]);
-            } else {
-                $href = $this->prow->reviewurl(["r" => $this->rrow->unparse_ordinal_id()]);
-            }
-            $k = $klass ? " class=\"{$klass}\"" : "";
-            return "<a{$k} href=\"{$href}\">{$html}</a>";
+        if ($this->rrow->reviewStatus >= ReviewInfo::RS_COMPLETED) {
+            $href = $this->prow->hoturl(["#" => "r" . $this->rrow->unparse_ordinal_id()]);
         } else {
-            return $html;
+            $href = $this->prow->reviewurl(["r" => $this->rrow->unparse_ordinal_id()]);
         }
+        $k = $klass ? " class=\"{$klass}\"" : "";
+        return "<a{$k} href=\"{$href}\">{$html}</a>";
     }
 }
 
@@ -263,11 +249,13 @@ class PaperList implements XtContext {
     /** @var ?CheckFormat */
     public $check_format;
 
-    // collected during render and exported to caller
+    // collected during render
     /** @var int */
-    public $count; // also exported to columns access: 1 more than row index
+    public $count; // exported to caller and columns; equals 1 more than row index
     /** @var ?array<string,bool> */
     private $_has;
+    /** @var int */
+    private $_bulkwarn_count;
 
     /** @var bool */
     static public $include_stash = true;
@@ -362,7 +350,7 @@ class PaperList implements XtContext {
         case "conflictassign":
             return "id title authors aufull potentialconflict revtype[basicheader] editconf[basicheader] linkto[assign]";
         case "pf":
-            return "sel id title topicscore revtype editmypref[topicscore]";
+            return "sel id title status topicscore revtype editmypref[topicscore]";
         case "reviewers":
             return "sel[selected] id title status linkto[assign]";
         case "reviewersSel":
@@ -586,7 +574,6 @@ class PaperList implements XtContext {
      * @param ?int $origin
      * @param int $sort_subset */
     private function set_view_list($groups, $origin, $sort_subset) {
-        $has_sort = false;
         foreach (PaperSearch::view_generator($groups) as $akd) {
             if ($akd[0] !== "sort" && $sort_subset === -1) {
                 $this->set_view($akd[1], substr($akd[0], 0, 4), $origin, $akd[2]);
@@ -1212,9 +1199,10 @@ class PaperList implements XtContext {
         }
     }
 
-    /** @return PaperListReviewAnalysis */
-    function make_review_analysis($xrow, PaperInfo $row) {
-        return new PaperListReviewAnalysis($xrow, $row);
+    /** @param ReviewInfo $rrow
+     * @return PaperListReviewAnalysis */
+    function make_review_analysis($rrow, PaperInfo $row) {
+        return new PaperListReviewAnalysis($rrow, $row);
     }
 
 
@@ -1397,6 +1385,14 @@ class PaperList implements XtContext {
             $this->row_attr["data-tags"] = trim($this->row_tags);
         }
 
+        // warn about download?
+        if (!$this->user->privChair
+            && $this->user->isPC
+            && $this->user->needs_bulk_download_warning($row)) {
+            $this->row_attr["data-bulkwarn"] = "";
+            ++$this->_bulkwarn_count;
+        }
+
         // row classes
         $trclass = [];
         $cc = "";
@@ -1529,8 +1525,7 @@ class PaperList implements XtContext {
         return '<a class="' . $sort_class . '" rel="nofollow" href="' . $sort_url . '">' . $t . '</a>';
     }
 
-    /** @param PaperListTableRender $rstate */
-    private function _analyze_folds($rstate) {
+    private function _analyze_folds() {
         $classes = &$this->table_attr["class"];
         $jscol = [];
         $has_sel = $has_statistics = false;
@@ -1570,8 +1565,7 @@ class PaperList implements XtContext {
         $rstate->split_ncol = count($rstate->groupstart) - 1;
 
         $rownum_marker = "<span class=\"pl_rownum fx6\">";
-        $rownum_len = strlen($rownum_marker);
-        $nbody = array("<tr>");
+        $nbody = ["<tr>"];
         $tbody_class = "pltable" . ($rstate->hascolors ? " pltable-colored" : "");
         for ($i = 1; $i < count($rstate->groupstart); ++$i) {
             $nbody[] = '<td class="plsplit_col top" width="' . (100 / $rstate->split_ncol) . '%"><div class="plsplit_col"><table width="100%">';
@@ -1600,6 +1594,7 @@ class PaperList implements XtContext {
     private function _prepare() {
         $this->_has = [];
         $this->count = 0;
+        $this->_bulkwarn_count = 0;
         $this->need_render = false;
         $this->_vcolumns = [];
     }
@@ -1795,7 +1790,7 @@ class PaperList implements XtContext {
     }
 
     /** @return ?string */
-    private function _listDescription() {
+    private function _list_description() {
         switch ($this->_report_id) {
         case "reviewAssignment":
             return "Review assignments";
@@ -1812,7 +1807,7 @@ class PaperList implements XtContext {
     /** @return SessionList */
     function session_list_object() {
         assert($this->_groups !== null);
-        return $this->search->create_session_list_object($this->paper_ids(), $this->_listDescription(), $this->sortdef());
+        return $this->search->create_session_list_object($this->paper_ids(), $this->_list_description(), $this->sortdef());
     }
 
     /** @return PaperListTableRender */
@@ -1907,7 +1902,7 @@ class PaperList implements XtContext {
         }
 
         // collect row data
-        $body = array();
+        $body = [];
         $grouppos = empty($this->_groups) ? -1 : 0;
         $need_render = false;
         foreach ($rows as $row) {
@@ -1936,6 +1931,11 @@ class PaperList implements XtContext {
         foreach ($this->_vcolumns as $fdef) {
             $this->mark_has($fdef->name, $fdef->has_content);
         }
+        if ($this->_bulkwarn_count >= 4
+            && !isset($this->table_attr["data-bulkwarn-ftext"])
+            && ($m = $this->conf->_i("submission_bulk_warning", "")) !== "") {
+            $this->table_attr["data-bulkwarn-ftext"] = Ftext::ensure($m, 5);
+        }
 
         // statistics rows
         $tfoot = "";
@@ -1944,7 +1944,7 @@ class PaperList implements XtContext {
         }
 
         // analyze folds
-        $this->_analyze_folds($rstate);
+        $this->_analyze_folds();
 
         // header cells
         if (($this->_table_decor & (self::DECOR_HEADER | self::DECOR_EVERYHEADER)) !== 0) {

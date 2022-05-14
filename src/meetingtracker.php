@@ -142,9 +142,11 @@ class MeetingTracker {
     /** @param Qrequest $qreq */
     static function trackerstatus_api(Contact $user, $qreq = null, $prow = null) {
         $tracker = self::lookup($user->conf);
-        json_exit(["ok" => true,
-                   "tracker_status" => $tracker->status(),
-                   "tracker_status_at" => $tracker->position_at]);
+        json_exit([
+            "ok" => true,
+            "tracker_status" => $tracker->status(),
+            "tracker_status_at" => $tracker->position_at
+        ]);
     }
 
     /** @return int|false */
@@ -566,7 +568,6 @@ class MeetingTracker {
         Dbl::free($result);
 
         foreach ($tis as $ti_index => $ti) {
-            $papers = [];
             foreach ($ti->pids ?? [] as $pid) {
                 $prow = $prows->get($pid);
                 $ti->papers[] = $p = (object) [];
@@ -699,7 +700,12 @@ class MeetingTracker_Config implements JsonSerializable {
     /** @var bool */
     public $hide_conflicts;
 
-    /** @return MeetingTracker_Config */
+    /** @param int $trackerid
+     * @param SessionList $xlist
+     * @param float $start_at
+     * @param int $position
+     * @param float $position_at
+     * @return MeetingTracker_Config */
     static function make(Contact $user, $trackerid, $xlist,
                          $start_at, $position, $position_at) {
         $tc = new MeetingTracker_Config;

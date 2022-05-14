@@ -1,30 +1,13 @@
 <?php
-require_once(dirname(__DIR__) . "/src/siteloader.php");
+// savepapers.php -- HotCRP command-line paper modification script
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-$arg = (new Getopt)->long("n:,name:", "f[],filter[]", "r,reviews", "q,quiet",
-    "disable-users,disable", "match-title", "ignore-pid", "ignore-errors", "add-topics",
-    "no-log", "help,h")->parse($argv);
-if (isset($arg["help"])
-    || count($arg["_"]) > 1
-    || (count($arg["_"]) && $arg["_"][0] !== "-" && $arg["_"][0][0] === "-")) {
-    fwrite(STDOUT, "Usage: php batch/savepapers.php [-n CONFID] [OPTIONS] FILE
-
-Options include:
-  --quiet                Don't print progress information.
-  --ignore-errors        Don't exit after first error.
-  --disable-users        Newly created users are disabled.
-  --match-title          Match papers by title if no `pid`.
-  --ignore-pid           Ignore `pid` elements in JSON.
-  --reviews              Save JSON reviews.
-  --add-topics           Add undefined topics to conference.
-  --no-log               Don't add to the action log.
-  -f, --filter FUNCTION  Pass through FUNCTION.\n");
-    exit(0);
+if (realpath($_SERVER["PHP_SELF"]) === __FILE__) {
+    require_once(dirname(__DIR__) . "/src/init.php");
+    exit(SavePapers_Batch::run_args($argv));
 }
 
-require_once(SiteLoader::find("src/init.php"));
-
-class BatchSavePapers {
+class SavePapers_Batch {
     /** @var Conf */
     public $conf;
     /** @var Contact */
@@ -73,6 +56,7 @@ class BatchSavePapers {
         $this->tf = new ReviewValues($conf->review_form(), ["no_notify" => true]);
     }
 
+    /** @return $this */
     function set_args($arg) {
         $this->quiet = isset($arg["q"]);
         $this->ignore_errors = isset($arg["ignore-errors"]);
@@ -91,9 +75,10 @@ class BatchSavePapers {
             }
             $this->filters[] = $f;
         }
+        return $this;
     }
 
-    /** @return string|false */
+    /** @return string */
     function set_file($file) {
         // allow uploading a whole zip archive
         $zipfile = null;
@@ -104,29 +89,30 @@ class BatchSavePapers {
             $content = false;
             $this->ziparchive = new ZipArchive;
             $zipfile = $file;
-            $this->errprefix = "$file: ";
+            $this->errprefix = "{$file}: ";
         } else {
             $content = file_get_contents($file);
             $this->document_directory = dirname($file) . "/";
-            $this->errprefix = "$file: ";
+            $this->errprefix = "{$file}: ";
         }
 
         if (!$this->ziparchive
             && str_starts_with($content, "\x50\x4B\x03\x04")) {
             if (!($tmpdir = tempdir())) {
-                throw new Exception("Cannot create temporary directory");
-            } else if (file_put_contents("$tmpdir/data.zip", $content) !== strlen($content)) {
-                throw new Exception("$tmpdir/data.zip: Cannot write file");
+                throw new CommandLineException("{$this->errprefix}Cannot create temporary directory");
+            } else if (file_put_contents("{$tmpdir}/data.zip", $content) !== strlen($content)) {
+                throw new CommandLineException("{$this->errprefix}{$tmpdir}/data.zip: Cannot write file");
             }
             $this->ziparchive = new ZipArchive;
-            $zipfile = "$tmpdir/data.zip";
+            $zipfile = "{$tmpdir}/data.zip";
             $this->document_directory = null;
         }
+
         if ($this->ziparchive) {
             if ($this->ziparchive->open($zipfile) !== true) {
-                throw new Exception("{$this->errprefix}Invalid zip");
+                throw new CommandLineException("{$this->errprefix}Invalid zip");
             } else if ($this->ziparchive->numFiles == 0) {
-                throw new Exception("{$this->errprefix}Empty zipfile");
+                throw new CommandLineException("{$this->errprefix}Empty zipfile");
             }
             // find common directory prefix
             $slashpos = strrpos($this->ziparchive->getNameIndex(0), "/");
@@ -165,13 +151,17 @@ class BatchSavePapers {
             if (count($data_filename) === 0 && count($json_filename) === 1) {
                 $data_filename = $json_filename;
             } else if (count($data_filename) !== 1) {
-                throw new Exception("Should contain exactly one `*-data.json` file");
+                throw new CommandLineException("{$this->errprefix}Should contain exactly one `*-data.json` file");
             }
             $content = $this->ziparchive->getFromName($data_filename[0]);
             $this->errprefix = ($this->errprefix ? $file : "<stdin>") . "/" . $data_filename[0] . ": ";
         }
 
-        return $content;
+        if (is_string($content)) {
+            return $content;
+        } else {
+            throw new CommandLineException("{$this->errprefix}Read error");
+        }
     }
 
     function on_document_import($docj, PaperOption $o, PaperStatus $pstatus) {
@@ -312,8 +302,7 @@ class BatchSavePapers {
             fwrite(STDERR, "{$this->errprefix}invalid JSON, expected array of objects\n");
             ++$this->nerrors;
         } else {
-            $jp = is_object($jp) ? (array) $jp : $jp;
-            foreach (is_object($jp) ? get_object_vars($jp) : $jp as &$j) {
+            foreach (is_object($jp) ? [$jp] : $jp as $j) {
                 $this->run_one(clone $j);
                 if ($this->nerrors && !$this->ignore_errors) {
                     break;
@@ -327,16 +316,32 @@ class BatchSavePapers {
             return 0;
         }
     }
-}
 
-$bf = new BatchSavePapers($Conf);
-$bf->set_args($arg);
-try {
-    if (($content = $bf->set_file(count($arg["_"]) ? $arg["_"][0] : "-")) === false) {
-        throw new Exception("Read error");
+    /** @return int */
+    static function run_args($argv) {
+        $arg = (new Getopt)->long(
+            "name:,n: !",
+            "config: !",
+            "help,h !",
+            "r,reviews Save reviews as well as paper information",
+            "f[],filter[] =FUNCTION Pass JSON through FUNCTION",
+            "q,quiet Don’t print progress information",
+            "ignore-errors Don’t exit after first error",
+            "disable-users,disable Disable all newly created users",
+            "ignore-pid Ignore `pid` JSON elements",
+            "match-title Match papers by title if no `pid`",
+            "add-topics Add all referenced topics to conference",
+            "no-log Don’t modify the action log"
+        )->helpopt("help")
+         ->description("Change papers as specified by FILE, a JSON object or array of objects.
+Usage: php batch/savepapers.php [OPTIONS] [FILE]")
+         ->maxarg(1)
+         ->otheropt(false)
+         ->parse($argv);
+
+        $conf = initialize_conf($arg["config"] ?? null, $arg["name"] ?? null);
+        $bf = (new SavePapers_Batch($conf))->set_args($arg);
+        $content = $bf->set_file(count($arg["_"]) ? $arg["_"][0] : "-");
+        return $bf->run($content);
     }
-    exit($bf->run($content));
-} catch (Exception $exception) {
-    fwrite(STDERR, $bf->errprefix . $exception->getMessage() . "\n");
-    exit(1);
 }

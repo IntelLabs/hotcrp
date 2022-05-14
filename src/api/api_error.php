@@ -10,7 +10,7 @@ class Error_API {
                 && preg_match('/MSIE [78]|MetaSr/', $_SERVER["HTTP_USER_AGENT"]))
             || preg_match('/(?:moz|safari|chrome)-extension/', $errormsg . ($qreq->stack ?? ""))
             || strpos($errormsg, "Uncaught ReferenceError: hotcrp") !== false) {
-            return new JsonResult(true);
+            return new JsonResult(["ok" => true]);
         }
         $url = $qreq->url ?? "";
         if (preg_match(',[/=]((?:script|jquery)[^/&;]*[.]js),', $url, $m)) {
@@ -32,9 +32,12 @@ class Error_API {
         if (isset($_SERVER["REMOTE_ADDR"])) {
             $suffix .= ", host " . $_SERVER["REMOTE_ADDR"];
         }
-        error_log("JS error: $url$errormsg$suffix");
+        error_log("JS error: {$url}{$errormsg}{$suffix}");
+        if ($qreq->detail) {
+            error_log("JS error: {$url}detail " . substr($qreq->detail, 0, 200));
+        }
         if (($stacktext = $qreq->stack)) {
-            $stack = array();
+            $stack = [];
             foreach (explode("\n", $stacktext) as $line) {
                 $line = trim($line);
                 if ($line === "" || $line === $errormsg || "Uncaught $line" === $errormsg) {
@@ -51,6 +54,6 @@ class Error_API {
             }
             error_log("JS error: {$url}via " . join(" ", $stack));
         }
-        return new JsonResult(true);
+        return new JsonResult(["ok" => true]);
     }
 }

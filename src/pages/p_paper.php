@@ -206,13 +206,6 @@ class Paper_Page {
         // submit paper if no error so far
         $_GET["paperId"] = $_GET["p"] = $this->qreq->paperId = $this->qreq->p = $this->ps->paperId;
 
-        if ($action === "final") {
-            $submitkey = "timeFinalSubmitted";
-            $storekey = "finalPaperStorageId";
-        } else {
-            $submitkey = "timeSubmitted";
-            $storekey = "paperStorageId";
-        }
         if ($is_new) {
             $new_prow->anno["is_new"] = true;
         }
@@ -275,7 +268,7 @@ class Paper_Page {
         } else if ($is_new) {
             $this->ps->splice_msg($msgpos++, $conf->_("<0>Registered submission as #%d", $new_prow->paperId), MessageSet::SUCCESS);
         } else {
-            $t = $action === "final" ? "<0>Updated final version %#s" : "<0>Updated submission %#s";
+            $t = $action === "final" ? "<0>Updated final version (changed %#s)" : "<0>Updated submission (changed %#s)";
             $chf = array_map(function ($f) { return $f->edit_title(); }, $this->ps->change_fields());
             $this->ps->splice_msg($msgpos++, $conf->_($t, $chf), MessageSet::SUCCESS);
         }
@@ -401,7 +394,7 @@ class Paper_Page {
         $this->pt = $pt = new PaperTable($this->user, $this->qreq, $this->prow);
         if ($pt->can_view_reviews()
             || $pt->mode === "re"
-            || ($this->prow->paperId > 0 && $this->user->can_edit_review($this->prow))) {
+            || ($this->prow->paperId > 0 && $this->user->can_edit_some_review($this->prow))) {
             $pt->resolve_review(false);
         }
         $pt->resolve_comments();

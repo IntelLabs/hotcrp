@@ -37,13 +37,25 @@ class Ftext {
         return [null, $s];
     }
 
+    /** @param string $s
+     * @param int $default_format
+     * @return string */
+    static function ensure($s, $default_format) {
+        if (self::is_ftext($s) !== false) {
+            return $s;
+        } else {
+            return "<{$default_format}>{$s}";
+        }
+    }
+
     /** @param string $ftext
      * @param int $want_format
      * @return string */
     static function unparse_as($ftext, $want_format) {
         list($format, $s) = self::parse($ftext);
         if (($format ?? 0) === 5 && $want_format !== 5) {
-            return htmlspecialchars_decode(preg_replace_callback('/<(\/?)(a|b|i|u|strong|em|code|samp|pre|tt|span)(?=[>\s]).*?>/i',
+            // XXX <p>, <ul>, <ol>
+            return html_entity_decode(preg_replace_callback('/<\s*(\/?)\s*(a|b|i|u|strong|em|code|samp|pre|tt|span|br)(?=[>\s]).*?>/i',
                 function ($m) {
                     $tag = strtolower($m[2]);
                     if ($tag === "code" || $tag === "samp" || $tag === "tt") {
@@ -56,10 +68,12 @@ class Ftext {
                         return "*";
                     } else if ($tag === "u") {
                         return "_";
+                    } else if ($tag === "br") {
+                        return "\n";
                     } else {
                         return "";
                     }
-                }, $s));
+                }, $s), ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, "UTF-8");
         } else if (($format ?? 5) !== 5 && $want_format === 5) {
             return htmlspecialchars($s);
         } else {

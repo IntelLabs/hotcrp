@@ -47,7 +47,8 @@ class Dbl_Result {
     }
     /** @template T
      * @param class-string<T> $class_name
-     * @return ?T */
+     * @return ?T
+     * @suppress PhanUnusedPublicNoOverrideMethodParameter */
     function fetch_object($class_name = "stdClass", $params = []) {
         return null;
     }
@@ -99,6 +100,56 @@ class Dbl_MultiResult {
     }
 }
 
+class Dbl_ConnectionParams {
+    /** @var string */
+    public $host;
+    /** @var int */
+    public $port;
+    /** @var ?string */
+    public $user;
+    /** @var ?string */
+    public $password;
+    /** @var ?string */
+    public $socket;
+    /** @var ?string */
+    public $name;
+
+    /** @return string */
+    function sanitized_dsn() {
+        $t = "mysql://";
+        if ($this->user || $this->password) {
+            $t .= urlencode($this->user ?? "NOUSER") . ($this->password ? ":PASSWORD@" : "@");
+        }
+        return $t . urlencode($this->host ?? "localhost") . "/" . urlencode($this->name);
+    }
+
+    /** @return ?\mysqli */
+    function connect() {
+        assert($this->name);
+        if ($this->socket) {
+            $dblink = new mysqli($this->host, $this->user, $this->password, "", $this->port, $this->socket);
+        } else if ($this->port !== null) {
+            $dblink = new mysqli($this->host, $this->user, $this->password, "", $this->port);
+        } else {
+            $dblink = new mysqli($this->host, $this->user, $this->password);
+        }
+        if ($dblink->connect_errno || mysqli_connect_errno()) {
+            return null;
+        } else if (!$dblink->select_db($this->name)) {
+            $dblink->close();
+            return null;
+        } else {
+            // We send binary strings to MySQL, so we don't want warnings
+            // about non-UTF-8 data
+            $dblink->set_charset("binary");
+            // The necessity of the following line is explosively terrible
+            // (the default is 1024/!?))(U#*@$%&!U
+            $dblink->query("set group_concat_max_len=4294967295");
+            return $dblink;
+        }
+    }
+}
+
 class Dbl {
     const F_RAW = 1;
     const F_APPLY = 2;
@@ -112,6 +163,7 @@ class Dbl {
 
     /** @var int */
     static public $nerrors = 0;
+    /** @var ?\mysqli */
     static public $default_dblink;
     /** @var callable(\mysqli,string) */
     static private $error_handler = "Dbl::default_error_handler";
@@ -119,11 +171,13 @@ class Dbl {
     static private $query_log = false;
     /** @var false|string */
     static private $query_log_key = false;
-    static private $query_log_file = null;
+    /** @var ?string */
+    static private $query_log_file;
     /** @var bool */
     static public $check_warnings = true;
     /** @var bool */
     static public $verbose = false;
+    /** @var string */
     static public $landmark_sanitizer = "/^Dbl::/";
 
     /** @return bool */
@@ -132,94 +186,88 @@ class Dbl {
     }
 
     /** @param array $opt
-     * @return ?string */
-    static function make_dsn($opt) {
+     * @return ?Dbl_ConnectionParams */
+    static function parse_connection_params($opt) {
+        $cp = new Dbl_ConnectionParams;
+        if (isset($opt["confid"]) && !isset($opt["dbName"]) && !isset($opt["dsn"])) {
+            $opt["dbName"] = $opt["confid"];
+        }
         if (isset($opt["dsn"])) {
-            if (is_string($opt["dsn"])) {
-                return $opt["dsn"];
+            $dsn = is_string($opt["dsn"]) ? $opt["dsn"] : "";
+            if (preg_match('/^mysql:\/\/([^:@\/]*)\/(.*)/', $dsn, $m)) {
+                $cp->host = urldecode($m[1]);
+                $cp->name = urldecode($m[2]);
+            } else if (preg_match('/^mysql:\/\/([^:@\/]*)@([^\/]*)\/(.*)/', $dsn, $m)) {
+                $cp->user = urldecode($m[1]);
+                $cp->host = urldecode($m[2]);
+                $cp->name = urldecode($m[3]);
+            } else if (preg_match('/^mysql:\/\/([^:@\/]*):([^@\/]*)@([^\/]*)\/(.*)/', $dsn, $m)) {
+                $cp->user = urldecode($m[1]);
+                $cp->password = urldecode($m[2]);
+                $cp->host = urldecode($m[3]);
+                $cp->name = urldecode($m[4]);
+            } else {
+                return null;
             }
+        } else if (isset($opt["dbName"])
+                   && is_string($opt["dbName"])
+                   && !(isset($opt["dbUser"]) && !is_string($opt["dbUser"]))
+                   && !(isset($opt["dbPassword"]) && !is_string($opt["dbPassword"]))
+                   && !(isset($opt["dbHost"]) && !is_string($opt["dbHost"]))) {
+            $cp->name = $opt["dbName"];
+            $cp->user = $opt["dbUser"] ?? $cp->name;
+            $cp->password = $opt["dbPassword"] ?? $cp->name;
+            $cp->host = $opt["dbHost"] ?? "localhost";
         } else {
-            $name = $opt["dbName"] ?? null;
-            $user = $opt["dbUser"] ?? $name;
-            $password = $opt["dbPassword"] ?? $name;
-            $host = $opt["dbHost"] ?? "localhost";
-            if (is_string($user)
-                && is_string($password)
-                && is_string($host)
-                && is_string($name)) {
-                return "mysql://" . urlencode($user) . ":" . urlencode($password) . "@" . urlencode($host) . "/" . urlencode($name);
+            return null;
+        }
+        if (isset($opt["confid"]) && is_string($opt["confid"])) {
+            $cp->name = str_replace('${confid}', $opt["confid"], $cp->name);
+            if ($cp->user !== null) {
+                $cp->user = str_replace('${confid}', $opt["confid"], $cp->user);
+            }
+            if ($cp->password !== null) {
+                $cp->password = str_replace('${confid}', $opt["confid"], $cp->password);
             }
         }
-        return null;
-    }
-
-    /** @param string $dsn
-     * @return string */
-    static function sanitize_dsn($dsn) {
-        return preg_replace('{\A(\w+://[^/:]*:)[^\@/]+([\@/])}', '$1PASSWORD$2', $dsn);
-    }
-
-    /** @param string $dsn
-     * @return array{?\mysqli,?string} */
-    static function connect_dsn($dsn, $noconnect = false) {
-        global $Opt;
-
-        $dbhost = $dbuser = $dbpass = $dbname = $dbport = null;
-        if ($dsn && preg_match('/^mysql:\/\/([^:@\/]*)\/(.*)/', $dsn, $m)) {
-            $dbhost = urldecode($m[1]);
-            $dbname = urldecode($m[2]);
-        } else if ($dsn && preg_match('/^mysql:\/\/([^:@\/]*)@([^\/]*)\/(.*)/', $dsn, $m)) {
-            $dbhost = urldecode($m[2]);
-            $dbuser = urldecode($m[1]);
-            $dbname = urldecode($m[3]);
-        } else if ($dsn && preg_match('/^mysql:\/\/([^:@\/]*):([^@\/]*)@([^\/]*)\/(.*)/', $dsn, $m)) {
-            $dbhost = urldecode($m[3]);
-            $dbuser = urldecode($m[1]);
-            $dbpass = urldecode($m[2]);
-            $dbname = urldecode($m[4]);
+        if (($cp->name ?? "") === ""
+            || $cp->name === "0"
+            || $cp->name === "mysql"
+            || substr($cp->name, -7) === "_schema") {
+            return null;
         }
-        if (!$dbname || $dbname === "mysql" || substr($dbname, -7) === "_schema") {
+        if (isset($opt["dbSocket"]) && is_string($opt["dbSocket"])) {
+            $cp->socket = $opt["dbSocket"];
+        }
+        if ($cp->port === null) {
+            $cp->port = $cp->socket ? (int) ini_get("mysqli.default_port") : 0;
+        }
+        $cp->host = $cp->host ?? ini_get("mysqli.default_host");
+        $cp->user = $cp->user ?? ini_get("mysqli.default_user");
+        $cp->password = $cp->password ?? ini_get("mysqli.default_pw");
+        return $cp;
+    }
+
+    /** @param array<string,mixed>|Dbl_ConnectionParams $opt
+     * @return array{?\mysqli,?string}
+     * @deprecated */
+    static function connect($opt, $noconnect = false) {
+        $cp = is_array($opt) ? self::parse_connection_params($opt) : $opt;
+        if (!$cp) {
             return [null, null];
         } else if ($noconnect) {
-            return [null, $dbname];
-        }
-
-        $dbsock = $Opt["dbSocket"] ?? null;
-        if ($dbport === null) {
-            $dbport = $dbsock ? (int) ini_get("mysqli.default_port") : 0;
-        }
-        if ($dbpass === null) {
-            $dbpass = ini_get("mysqli.default_pw");
-        }
-        if ($dbuser === null) {
-            $dbuser = ini_get("mysqli.default_user");
-        }
-        if ($dbhost === null) {
-            $dbhost = ini_get("mysqli.default_host");
-        }
-
-        if ($dbsock) {
-            $dblink = new mysqli($dbhost, $dbuser, $dbpass, "", $dbport, $dbsock);
-        } else if ($dbport !== null) {
-            $dblink = new mysqli($dbhost, $dbuser, $dbpass, "", $dbport);
+            return [null, $cp->name];
         } else {
-            $dblink = new mysqli($dbhost, $dbuser, $dbpass);
+            return [$cp->connect(), $cp->name];
         }
+    }
 
-        if ($dblink->connect_errno || mysqli_connect_errno()) {
-            return [null, $dbname];
-        } else if (!$dblink->select_db($dbname)) {
-            $dblink->close();
-            return [null, $dbname];
-        } else {
-            // We send binary strings to MySQL, so we don't want warnings
-            // about non-UTF-8 data
-            $dblink->set_charset("binary");
-            // The necessity of the following line is explosively terrible
-            // (the default is 1024/!?))(U#*@$%&!U
-            $dblink->query("set group_concat_max_len=4294967295");
-            return [$dblink, $dbname];
-        }
+    /** @param string $dsn
+     * @return array{?\mysqli,?string}
+     * @deprecated */
+    static function connect_dsn($dsn, $noconnect = false) {
+        /** @phan-suppress-next-line PhanDeprecatedFunction */
+        return self::connect(self::parse_connection_params(["dsn" => $dsn]), $noconnect);
     }
 
     /** @param \mysqli $dblink */
@@ -301,7 +349,6 @@ class Dbl {
             } else if ($nextch === "U") {
                 $U_mysql8 = $U_mysql8 ?? (strpos($dblink->server_info, "Maria") === false
                                           && $dblink->server_version >= 80020);
-                $ql = substr($qstr, 0, $strpos);
                 if (substr($qstr, $nextpos + 1, 1) === "(") {
                     $rparen = strpos($qstr, ")", $nextpos + 2);
                     $name = substr($qstr, $nextpos + 2, $rparen - $nextpos - 2);
@@ -333,10 +380,9 @@ class Dbl {
                 $nextch = substr($qstr, $nextpos, 1);
                 $simpleargs = false;
             } else {
-                do {
-                    $thisarg = $argpos;
-                    ++$argpos;
-                } while (isset($usedargs[$thisarg]));
+                for (++$argpos; isset($usedargs[$argpos - 1]); ++$argpos) {
+                }
+                $thisarg = $argpos - 1;
             }
             if (!array_key_exists($thisarg, $argv)) {
                 trigger_error(self::landmark() . ": query '$original_qstr' argument " . (is_int($thisarg) ? $thisarg + 1 : $thisarg) . " not set");
@@ -358,7 +404,7 @@ class Dbl {
                 if ($arg === null) {
                     $arg = [];
                 } else if (is_int($arg) || is_float($arg) || is_string($arg)) {
-                    $arg = array($arg);
+                    $arg = [$arg];
                 }
                 foreach ($arg as $x) {
                     if (!is_int($x) && !is_float($x)) {
@@ -490,7 +536,7 @@ class Dbl {
 
     /** @return Dbl_Result */
     static function do_query_on($dblink, $args, $flags) {
-        list($ignored_dblink, $qstr, $argv) = self::query_args($args, $flags, true);
+        list($unused_dblink, $qstr, $argv) = self::query_args($args, $flags, true);
         return self::do_query_with($dblink, $qstr, $argv, $flags);
     }
 
@@ -758,7 +804,7 @@ class Dbl {
     /** @return list<mixed> */
     static function fetch_first_columns(/* $result | [$dblink,] $query, ... */) {
         $result = self::do_make_result(func_get_args());
-        $x = array();
+        $x = [];
         while ($result && ($row = $result->fetch_row())) {
             $x[] = $row[0];
         }
@@ -769,7 +815,7 @@ class Dbl {
     /** @return array<string,mixed> */
     static function fetch_map(/* $result | [$dblink,] $query, ... */) {
         $result = self::do_make_result(func_get_args());
-        $x = array();
+        $x = [];
         while ($result && ($row = $result->fetch_row())) {
             $x[$row[0]] = count($row) == 2 ? $row[1] : array_slice($row, 1);
         }
@@ -780,7 +826,7 @@ class Dbl {
     /** @return array<int,?int> */
     static function fetch_iimap(/* $result | [$dblink,] $query, ... */) {
         $result = self::do_make_result(func_get_args());
-        $x = array();
+        $x = [];
         while ($result && ($row = $result->fetch_row())) {
             assert(count($row) == 2);
             $x[(int) $row[0]] = ($row[1] === null ? null : (int) $row[1]);
@@ -815,7 +861,9 @@ class Dbl {
         throw new Exception("Dbl::compare_and_swap failure on query `" . Dbl::format_query_args($dblink, $value_query, $value_query_args) . "`");
     }
 
-    static function log_queries($limit, $file = false) {
+    /** @param null|bool|float $limit
+     * @param ?string $file */
+    static function log_queries($limit, $file = null) {
         if (is_float($limit)) {
             $limit = $limit >= 1 || ($limit > 0 && mt_rand() < $limit * mt_getrandmax());
         }

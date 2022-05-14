@@ -7,10 +7,12 @@ class Assignable {
     public $type;
     /** @var int */
     public $pid;
+
     /** @return self */
     function fresh() {
         return new Assignable;
     }
+
     /** @param Assignable $q
      * @return bool */
     function match($q) {
@@ -400,8 +402,8 @@ class AssignmentState extends MessageSet {
     }
     /** @param int|list<int> $pids */
     function fetch_prows($pids, $initial_load = false) {
-        $pids = is_array($pids) ? $pids : array($pids);
-        $fetch_pids = array();
+        $pids = is_array($pids) ? $pids : [$pids];
+        $fetch_pids = [];
         foreach ($pids as $pid) {
             if (!isset($this->prows[$pid]) && !isset($this->pid_attempts[$pid]))
                 $fetch_pids[] = $pid;
@@ -1188,6 +1190,17 @@ class AssignmentSet {
             return [$this->astate->none_user()];
         }
 
+        // check for `userid`/`uid`
+        if (($req["uid"] ?? "") !== "") {
+            if (ctype_digit($req["uid"])
+                && ($u = $this->astate->user_by_id($req["uid"]))) {
+                return [$u];
+            } else {
+                $this->error("<0>User ID ‘" . $req["uid"] . "’ not found");
+                return null;
+            }
+        }
+
         // move all usable identification data to email, firstName, lastName
         if (isset($req["name"])) {
             self::apply_user_parts($req, Text::split_name($req["name"]));
@@ -1207,13 +1220,12 @@ class AssignmentSet {
         $last = $req["lastName"];
         $email = trim((string) $req["email"]);
         $lemail = strtolower($email);
-        $special = null;
+        $special = "";
         if ($lemail) {
             $special = $lemail;
         } else if (!$first && $last && strpos(trim($last), " ") === false) {
             $special = trim(strtolower($last));
         }
-        $xspecial = $special;
 
         // check special: missing, "none", "any", "pc", "me", PC tag, "external"
         if ($special === "any" || $special === "all") {
@@ -1222,7 +1234,8 @@ class AssignmentSet {
             return "missing";
         } else if ($special === "none") {
             return [$this->astate->none_user()];
-        } else if (preg_match('/\A(?:(anonymous\d*)|new-?anonymous|anonymous-?new)\z/', $special, $m)) {
+        } else if ($special !== ""
+                   && preg_match('/\A(?:(anonymous\d*)|new-?anonymous|anonymous-?new)\z/', $special, $m)) {
             return isset($m[1]) && $m[1] ? $m[1] : "anonymous-new";
         }
         if ($special && !$first && (!$lemail || !$last)) {
@@ -1242,8 +1255,8 @@ class AssignmentSet {
         }
 
         // check for precise email match on existing contact (common case)
-        if ($lemail && ($contact = $this->astate->user_by_email($email, false))) {
-            return [$contact];
+        if ($lemail && ($u = $this->astate->user_by_email($email, false))) {
+            return [$u];
         }
 
         // check PC list
@@ -1299,6 +1312,8 @@ class AssignmentSet {
         }
     }
 
+    /** @param list<string> $req
+     * @return bool */
     static private function is_csv_header($req) {
         return !!preg_grep('/\A(?:action|assignment|paper|pid|paperid|id)\z/i', $req);
     }
@@ -1325,7 +1340,8 @@ class AssignmentSet {
         }
 
         foreach ([["action", "assignment", "type"],
-                  ["paper", "pid", "paperid", "id", "search"],
+                  ["paper", "pid", "paperid", "paper_id", "id", "search"],
+                  ["uid", "userid", "user_id"],
                   ["firstName", "firstname", "first_name", "first", "givenname", "given_name"],
                   ["lastName", "lastname", "last_name", "last", "surname", "familyname", "family_name"],
                   ["reviewtype", "review_type"],
@@ -1380,18 +1396,23 @@ class AssignmentSet {
         }
     }
 
+    /** @param string $coldesc
+     * @param bool $force */
     function hide_column($coldesc, $force = false) {
         if (!isset($this->unparse_columns[$coldesc]) || $force) {
             $this->unparse_columns[$coldesc] = false;
         }
     }
 
+    /** @param string $coldesc
+     * @param bool $force */
     function show_column($coldesc, $force = false) {
         if (!isset($this->unparse_columns[$coldesc]) || $force) {
             $this->unparse_columns[$coldesc] = true;
         }
     }
 
+    /** @param string $line */
     function parse_csv_comment($line) {
         if (preg_match('/\A#\s*hotcrp_assign_display_search\s*(\S.*)\s*\z/', $line, $m)) {
             $this->unparse_search = $m[1];
@@ -1684,7 +1705,7 @@ class AssignmentSet {
 
         // create assigners for difference
         $this->assigners_pidhead = $pidtail = [];
-        foreach ($this->astate->diff() as $pid => $difflist) {
+        foreach ($this->astate->diff() as $difflist) {
             foreach ($difflist as $item) {
                 try {
                     $this->astate->set_landmark($item->landmark);
@@ -1718,7 +1739,7 @@ class AssignmentSet {
 
     /** @return list<string> */
     function assigned_types() {
-        $types = array();
+        $types = [];
         foreach ($this->assigners as $assigner) {
             $types[$assigner->type] = true;
         }

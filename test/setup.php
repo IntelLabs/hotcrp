@@ -11,6 +11,7 @@ ini_set("display_errors", "stderr");
 ini_set("assert.exception", "1");
 
 require_once(SiteLoader::find("src/init.php"));
+initialize_conf();
 
 
 // Record mail in MailChecker.
@@ -93,7 +94,7 @@ class MailChecker {
     static function check_db($name = null) {
         if ($name) {
             xassert(isset(self::$messagedb[$name]));
-            xassert_eqq(count(self::$preps), count(self::$messagedb[$name]));
+            xassert_eqq(count(self::$messagedb[$name]), count(self::$preps));
             $mdb = self::$messagedb[$name];
         } else {
             xassert(!empty(self::$preps));
@@ -146,7 +147,7 @@ class MailChecker {
                 ++Xassert::$nsuccess;
             } else if ($index !== false) {
                 $have = $haves[$index];
-                error_log(assert_location() . ": Mail mismatch: " . var_export($have, true) . " !== " . var_export($want, true));
+                error_log(assert_location() . ": Mail mismatch: " . var_export($want, true) . " !== " . var_export($have, true));
                 $havel = explode("\n", $have);
                 $wantl = explode("\n", $want);
                 fwrite(STDERR, "... line {$badline} differs near {$havel[$badline-1]}\n... expected {$wantl[$badline-1]}\n");
@@ -185,7 +186,8 @@ class MailChecker {
                 if (!isset(self::$messagedb[$m[1]])) {
                     self::$messagedb[$m[1]] = [];
                 }
-                if (trim($m[2]) !== "") {
+                if (trim($body) !== "") {
+                    $body = preg_replace('/^\\\\\\*/m', "*", $body);
                     self::$messagedb[$m[1]][] = [$header, $body];
                 }
             }
@@ -500,7 +502,7 @@ function tag_normalize_compare($a, $b) {
 /** @param PaperInfo $prow
  * @return string */
 function paper_tag_normalize($prow) {
-    $t = array();
+    $t = [];
     $pcm = $prow->conf->pc_members();
     foreach (explode(" ", $prow->all_tags_text()) as $tag) {
         if (($twiddle = strpos($tag, "~")) > 0
@@ -543,8 +545,12 @@ function xassert_assign_fail($who, $what, $override = false) {
 /** @param int $maxstatus */
 function xassert_paper_status(PaperStatus $ps, $maxstatus = MessageSet::PLAIN) {
     if (!xassert($ps->problem_status() <= $maxstatus)) {
-        foreach ($ps->problem_list() as $mx) {
-            error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
+        foreach ($ps->message_list() as $mx) {
+            if ($mx->status === MessageSet::INFORM && $mx->message) {
+                error_log("!     {$mx->message}");
+            } else {
+                error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
+            }
         }
     }
 }
@@ -570,7 +576,7 @@ function xassert_paper_status_saved_nonrequired(PaperStatus $ps, $maxstatus = Me
 
 /** @param Contact $user
  * @param ?PaperInfo $prow
- * @return array */
+ * @return object */
 function call_api($fn, $user, $qreq, $prow) {
     if (!($qreq instanceof Qrequest)) {
         $qreq = new Qrequest("POST", $qreq);
@@ -578,7 +584,7 @@ function call_api($fn, $user, $qreq, $prow) {
     }
     $uf = $user->conf->api($fn, $user, $qreq->method());
     $jr = $user->conf->call_api_on($uf, $fn, $user, $qreq, $prow);
-    return $jr->content;
+    return (object) $jr->content;
 }
 
 /** @param int|PaperInfo $prow
@@ -702,13 +708,13 @@ class TestRunner {
         Conf::$main->load_settings();
     }
 
-    static function reset_db() {
+    static function reset_db($rebuild = false) {
         $conf = Conf::$main;
         $timer = new ProfileTimer;
         MailChecker::clear();
 
         // Initialize from an empty database.
-        self::reset_schema($conf->dblink, SiteLoader::find("src/schema.sql"));
+        self::reset_schema($conf->dblink, SiteLoader::find("src/schema.sql"), $rebuild);
         $timer->mark("schema");
 
         // No setup phase.
@@ -718,7 +724,7 @@ class TestRunner {
 
         // Contactdb.
         if (($cdb = $conf->contactdb())) {
-            self::reset_schema($cdb, SiteLoader::find("test/cdb-schema.sql"));
+            self::reset_schema($cdb, SiteLoader::find("test/cdb-schema.sql"), $rebuild);
             $cdb->query("insert into Conferences set dbname='" . $cdb->real_escape_string($conf->dbname) . "'");
             Contact::$props["demoBirthday"] = Contact::PROP_CDB | Contact::PROP_NULL | Contact::PROP_INT | Contact::PROP_IMPORT;
         }
@@ -738,7 +744,7 @@ class TestRunner {
         $ok = true;
         foreach ($json->contacts as $c) {
             $us->notify = in_array("pc", $c->roles ?? []);
-            $user = $us->save($c);
+            $user = $us->save_user($c);
             if ($user) {
                 MailChecker::check_db("create-{$c->email}");
             } else {
@@ -772,7 +778,9 @@ class TestRunner {
     static function go($testo) {
         $ro = new ReflectionObject($testo);
         foreach ($ro->getMethods() as $m) {
-            if (str_starts_with($m->name, "test_"))
+            if (str_starts_with($m->name, "test")
+                && strlen($m->name) > 4
+                && ($m->name[4] === "_" || ctype_upper($m->name[4])))
                 $testo->{$m->name}();
         }
     }

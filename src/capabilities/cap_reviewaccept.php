@@ -59,7 +59,7 @@ class ReviewAccept_Capability {
                 Dbl::free($result);
             }
             if (!$rrow && $user->contactId) {
-                $result = $user->conf->qe("select * from PaperReview where refusedReviewId=? order by timeRefused desc limit 1", $uf->match_data[1]);
+                $result = $user->conf->qe("select * from PaperReviewRefused where refusedReviewId=? order by timeRefused desc limit 1", $uf->match_data[1]);
                 $refused = ReviewRefusalInfo::fetch($result);
                 Dbl::free($result);
             }
@@ -73,11 +73,11 @@ class ReviewAccept_Capability {
                     new MessageItem(null, "<0>Bad review link", MessageSet::ERROR),
                     new MessageItem(null, $t, MessageSet::INFORM)
                 ]);
+                error_log("bad review acceptor {$uf->name}: "
+                          . (!$tok || $tok->capabilityType !== TokenInfo::REVIEWACCEPT
+                             ? "not found"
+                             : "created {$tok->timeCreated}, used {$tok->timeUsed}, invalid {$tok->timeInvalid}, expired {$tok->timeExpires}, user {$tok->contactId}"));
             }
-            error_log("bad review acceptor {$uf->name}: "
-                      . (!$tok || $tok->capabilityType !== TokenInfo::REVIEWACCEPT
-                         ? "not found"
-                         : "created {$tok->timeCreated}, used {$tok->timeUsed}, invalid {$tok->timeInvalid}, expired {$tok->timeExpires}, user {$tok->contactId}"));
         }
     }
 

@@ -24,6 +24,12 @@ if (!window.JSON || !window.JSON.parse) {
     window.JSON = {parse: $.parseJSON};
 }
 
+var __last_json_parse;
+function parse_json(s) {
+    __last_json_parse = s;
+    return JSON.parse(s);
+}
+
 if (typeof Object.assign !== "function") {
     Object.defineProperty(Object, "assign", {
         value: function assign(target, rest) {
@@ -302,6 +308,8 @@ function log_jserror(errormsg, error, noconsole) {
         errormsg = {"error": error.toString()};
     } else if (typeof errormsg === "string")
         errormsg = {"error": errormsg};
+    if (errormsg.error && /JSON/.test(errormsg.error) && __last_json_parse)
+        errormsg.detail = __last_json_parse.substring(0, 200);
     if (error && error.fileName && !errormsg.url)
         errormsg.url = error.fileName;
     if (error && error.lineNumber && !errormsg.lineno)
@@ -366,7 +374,7 @@ $(document).ajaxError(function (event, jqxhr, options, httperror) {
     var data;
     if (jqxhr.responseText && jqxhr.responseText.charAt(0) === "{") {
         try {
-            data = JSON.parse(jqxhr.responseText);
+            data = parse_json(jqxhr.responseText);
         } catch (e) {
         }
     }
@@ -418,7 +426,7 @@ $.ajaxPrefilter(function (options, originalOptions, jqxhr) {
         if (/application\/json/.test(jqxhr.getResponseHeader("Content-Type") || "")
             && jqxhr.responseText) {
             try {
-                rjson = JSON.parse(jqxhr.responseText);
+                rjson = parse_json(jqxhr.responseText);
             } catch (e) {
             }
         }
@@ -1009,7 +1017,7 @@ try {
 }
 wstorage.json = function (is_session, key) {
     var x = wstorage(is_session, key);
-    return x ? JSON.parse(x) : false;
+    return x ? parse_json(x) : false;
 };
 wstorage.site = function (is_session, key, value) {
     if (siteinfo.base !== "/")
@@ -1160,20 +1168,8 @@ function hoturl(page, options) {
     return siteinfo.site_relative + x.t + anchor;
 }
 
-function hoturl_post(page, options) {
-    if (typeof options === "string")
-        options += (options ? "&" : "") + "post=" + siteinfo.postvalue;
-    else
-        options = $.extend({post: siteinfo.postvalue}, options);
-    return hoturl(page, options);
-}
-
 function hoturl_html(page, options) {
     return escape_html(hoturl(page, options));
-}
-
-function hoturl_post_html(page, options) {
-    return escape_html(hoturl_post(page, options));
 }
 
 function url_absolute(url, loc) {
@@ -1200,17 +1196,6 @@ function hoturl_absolute_base() {
     if (!siteinfo.absolute_base)
         siteinfo.absolute_base = url_absolute(siteinfo.base);
     return siteinfo.absolute_base;
-}
-
-function hoturl_post_go(page, options) {
-    var form = document.createElement("form");
-    form.setAttribute("method", "post");
-    form.setAttribute("enctype", "multipart/form-data");
-    form.setAttribute("accept-charset", "UTF-8");
-    form.action = hoturl_post(page, options);
-    form.appendChild(hidden_input("____empty____", "1"));
-    document.body.appendChild(form);
-    form.submit();
 }
 
 function hoturl_get_form(action) {
@@ -1275,9 +1260,10 @@ function onto(context, format, text) {
     }
     try {
         render_with(context, renderers[format] || renderers[0], text);
-    } catch (e) {
-        log_jserror("do_render format ".concat(format, ": ", e.toString()), e);
+    } catch (err) {
+        log_jserror("do_render format ".concat(format, ": ", err.toString()), err);
         render_with(context, renderers[0], text);
+        delete renderers[format];
     }
     $(context).trigger("renderText");
 }
@@ -1561,7 +1547,7 @@ function input_set_default_value(elt, val) {
     // 2021 Chrome workaround
     if (elt.name && elt.form && (upd = elt.form.elements.____updates____)) {
         try {
-            j = JSON.parse(upd.value || "{}");
+            j = parse_json(upd.value || "{}");
         } catch (e) {
             j = {};
         }
@@ -1626,7 +1612,7 @@ $(function () {
         var upd = this.elements.____updates____, j, n, e, e2, i;
         if (upd && upd.value) {
             try {
-                j = JSON.parse(upd.value);
+                j = parse_json(upd.value);
                 for (n in j)
                     if ((e = this.elements[n])) {
                         if (e.type === "checkbox")
@@ -2196,7 +2182,7 @@ function prepare_info(elt, info) {
     var xinfo = elt.getAttribute("data-tooltip-info");
     if (xinfo) {
         if (typeof xinfo === "string" && xinfo.charAt(0) === "{")
-            xinfo = JSON.parse(xinfo);
+            xinfo = parse_json(xinfo);
         else if (typeof xinfo === "string")
             xinfo = {builder: xinfo};
         info = $.extend(xinfo, info);
@@ -2738,7 +2724,7 @@ function tracker_paper_columns(tr, idx, wwidth) {
         t += ' colspan="2"';
     t += '>';
     if (paper.title) {
-        var f = paper.format ? ' ptitle need-format" data-format="' + paper.format : "";
+        var f = paper.format ? ' need-format" data-format="' + paper.format : "";
         var title = paper.title;
         if (wwidth <= 500 && title.length > 40)
             title = title.replace(/^(\S+\s+\S+\s+\S+).*$/, "$1").substring(0, 50) + "…";
@@ -2799,7 +2785,8 @@ function tracker_html(tr) {
 }
 
 function display_tracker() {
-    var mne = $$("tracker"), mnspace = $$("tracker-space"), t, i, e;
+    var mne = $$("tracker"), mnspace = $$("tracker-space"),
+        mnpl = $("nav.pslcard-nav")[0], t, i, e;
 
     // tracker button
     if ((e = $$("tracker-connect-btn"))) {
@@ -2826,6 +2813,9 @@ function display_tracker() {
         }
         if (mnspace)
             mnspace.parentNode.removeChild(mnspace);
+        if (mnpl)
+            mnpl.style.top = null;
+        removeClass(document.body, "has-tracker");
         return;
     }
 
@@ -2845,6 +2835,7 @@ function display_tracker() {
         $(window).on("resize", display_tracker);
         had_tracker_display = true;
     }
+    addClass(document.body, "has-tracker");
 
     tracker_has_format = false;
     if (dl.tracker.ts) {
@@ -2864,6 +2855,8 @@ function display_tracker() {
             render_text.on_page();
     }
     mnspace.style.height = mne.offsetHeight + "px";
+    if (mnpl)
+        mnpl.style.top = (mne.offsetHeight + 104) + "px";
     if (dl.tracker)
         tracker_show_elapsed();
 }
@@ -2920,7 +2913,7 @@ handle_ui.on("js-tracker", function (event) {
         if (tr.start_at)
             hc.push('<div class="entryi"><label>Elapsed time</label><span class="trackerdialog-elapsed" data-start-at="' + tr.start_at + '"></span></div>');
         try {
-            var j = JSON.parse(tr.listinfo || "null"), ids, pos;
+            var j = parse_json(tr.listinfo || "null"), ids, pos;
             if (j && j.ids && (ids = decode_session_list_ids(j.ids))) {
                 if (tr.papers
                     && tr.papers[tr.paper_offset]
@@ -3098,7 +3091,7 @@ var comet_store = (function () {
         return function () { return false; };
 
     function make_site_status(v) {
-        var x = v && JSON.parse(v);
+        var x = v && parse_json(v);
         if (!x || typeof x !== "object")
             x = {};
         if (!x.updated_at
@@ -3337,14 +3330,13 @@ function fold_storage() {
         $(".need-fold-storage").each(fold_storage);
     } else {
         removeClass(this, "need-fold-storage");
-        var sn = this.getAttribute("data-fold-storage"), smap, k, v, flip = false,
-            spfx = this.getAttribute("data-fold-storage-prefix") || "";
+        var sn = this.getAttribute("data-fold-storage"), smap, k, v, flip = false;
         if (sn.charAt(0) === "-") {
             sn = sn.substring(1);
             flip = true;
         }
         if (sn.charAt(0) === "{" || sn.charAt(0) === "[") {
-            smap = JSON.parse(sn) || {};
+            smap = parse_json(sn) || {};
         } else {
             var m = this.className.match(/\bfold(\d*)[oc]\b/),
                 n = m[1] === "" ? 0 : +m[1];
@@ -3353,9 +3345,9 @@ function fold_storage() {
         }
         sn = wstorage.json(true, "fold") || wstorage.json(false, "fold") || {};
         for (k in smap) {
-            if (sn[spfx + smap[k]]) {
+            if (sn[smap[k]]) {
                 foldup.call(this, null, {f: false, n: +k});
-            } else if (sn[spfx + smap[k]] != null) {
+            } else if (sn[smap[k]] != null) {
                 foldup.call(this, null, {f: true, n: +k});
             }
         }
@@ -3369,12 +3361,9 @@ function fold_session_for(foldnum, type) {
         flip = true;
     }
     if (s && (s.charAt(0) === "{" || s.charAt(0) === "[")) {
-        s = (JSON.parse(s) || {})[foldnum];
+        s = (parse_json(s) || {})[foldnum];
     }
-    if (s && this.hasAttribute("data-fold-" + type + "-prefix")) {
-        s = this.getAttribute("data-fold-" + type + "-prefix") + s;
-    }
-    return [s, flip];
+    return s ? [s, flip] : null;
 }
 
 function fold(elt, dofold, foldnum) {
@@ -3509,7 +3498,6 @@ function foldup(event, opts) {
 
 handle_ui.on("js-foldup", foldup);
 handle_ui.on("unfold.js-unfold-focus", function (event) {
-    console.log(event);
     if (!event.which.nofocus)
         focus_within(this, ".fx" + (event.which.n || "") + " *");
 });
@@ -3702,29 +3690,125 @@ handle_ui.on("js-keydown-enter-submit", function (event) {
 });
 
 
+// review types
+var review_types = (function () {
+var canon = [
+        null, "none", "external", "pc", "secondary",
+        "primary", "meta", "conflict", "author", "declined"
+    ],
+    tmap = {
+        "0": 1, "none": 1,
+        "1": 2, "ext": 2, "external": 2,
+        "2": 3, "opt": 3, "optional": 3, "pc": 3,
+        "3": 4, "sec": 4, "secondary": 4,
+        "4": 5, "pri": 5, "primary": 5,
+        "5": 6, "meta": 6,
+        "-1": 7, "conflict": 7,
+        "-2": 8, "author": 8,
+        "-3": 9, "declined": 9
+    },
+    selectors = [
+        null, "None", "External", "Optional", "Secondary",
+        "Primary", "Metareview", "Conflict", "Author", "Declined"
+    ],
+    tooltips = [
+        null, "No review", "External review", "Optional PC review", "Secondary review",
+        "Primary review", "Metareview", "Conflict", "Author", "Declined"
+    ],
+    icon_texts = [
+        null, "", "E", "P", "2",
+        "1", "M", "C", "A", "−" /* MINUS SIGN */
+    ];
+function parse(s) {
+    var t = tmap[s] || 0;
+    if (t === 0 && s.endsWith("review")) {
+        t = tmap[s.substring(0, s.length - 6)] || 0;
+    }
+    return t;
+}
+return {
+    parse: function (s) {
+        return canon[parse(s)];
+    },
+    unparse_selector: function (s) {
+        return selectors[parse(s)];
+    },
+    unparse_assigner_action: function (s) {
+        var t = parse(s);
+        if (t === 1) {
+            return "clearreview";
+        } else if (t >= 2 && t <= 6) {
+            return t + "review";
+        } else if (t === 7) {
+            return "conflict";
+        } else {
+            return null;
+        }
+    },
+    make_icon: function (s, xc) {
+        var t = parse(s), span_rto, span_rti;
+        if (t > 1) {
+            span_rto = document.createElement("span");
+            span_rto.className = "rto rt" + canon[t] + (xc || "");
+            span_rti = document.createElement("span");
+            span_rto.appendChild(span_rti);
+            span_rti.className = "rti";
+            span_rti.textContent = icon_texts[t];
+            span_rti.title = tooltips[t];
+            return span_rto;
+        } else {
+            return null;
+        }
+    },
+    unparse_icon_html: function (s, xc) {
+        var t = parse(s);
+        if (t > 1) {
+            return '<span class="rto rt'.concat(
+                canon[t], xc || "", '"><span class="rti" title="', tooltips[t],
+                '">', icon_texts[t], '</span></span>');
+        } else {
+            return "";
+        }
+    }
+};
+})();
+
 // assignment selection
 (function ($) {
-function make_radio(name, value, html, revtype) {
+function make_radio(name, value, text, revtype) {
     var rname = "assrev" + name, id = rname + "_" + value,
-        t = '<div class="assignment-ui-choice checki"><label><span class="checkc">'
-        + '<input type="radio" name="' + rname + '" value="' + value + '" id="' + id + '" class="assignment-ui-radio';
-    if (value == revtype)
-        t += ' want-focus" checked';
-    else
-        t += '"';
-    t += '></span>';
-    if (value != 0)
-        t += '<span class="rto rt' + value + '"><span class="rti">' + ["C", "", "E", "P", "2", "1", "M"][value + 1] + '</span></span>&nbsp;';
-    if (value == revtype)
-        t += '<u>' + html + '</u>';
-    else
-        t += html;
-    return t + '</label></div>';
+        div = document.createElement("div"),
+        label = document.createElement("label"),
+        span_checkc = document.createElement("span"),
+        input = document.createElement("input");
+    div.className = "assignment-ui-choice checki";
+    div.appendChild(label);
+    label.appendChild(span_checkc);
+    span_checkc.className = "checkc";
+    span_checkc.appendChild(input);
+    input.type = "radio";
+    input.name = rname;
+    input.value = value;
+    input.id = id;
+    if (value == revtype) {
+        input.className = "assignment-ui-radio want-focus";
+        input.checked = input.defaultChecked = true;
+        var u = document.createElement("u");
+        u.append(text);
+        text = u;
+    } else {
+        input.className = "assignment-ui-radio";
+    }
+    if (value != 0) {
+        label.append(review_types.make_icon(value), " ");
+    }
+    label.append(text);
+    return div;
 }
-function make_round_selector(name, revtype, $a) {
+function append_round_selector(name, revtype, $a, ctr) {
     var $as = $a.closest(".has-assignment-set"), rounds;
     try {
-        rounds = JSON.parse($as.attr("data-review-rounds") || "[]");
+        rounds = parse_json($as.attr("data-review-rounds") || "[]");
     } catch (e) {
         rounds = [];
     }
@@ -3735,16 +3819,26 @@ function make_round_selector(name, revtype, $a) {
         else
             around = $as[0].getAttribute("data-default-review-round");
         around = around || "unnamed";
-        t += '<div class="assignment-ui-round fx2">Round:&nbsp; <span class="select"><select name="rev_round' + name + '" data-default-value="' + around + '">';
-        for (var i = 0; i < rounds.length; ++i) {
-            t += '<option value="' + rounds[i] + '"';
+        var div = document.createElement("div"),
+            span = document.createElement("span"),
+            select = document.createElement("select"),
+            i, option;
+        div.className = "assignment-ui-round fx2";
+        span.className = "select";
+        select.name = "rev_round" + name;
+        select.setAttribute("data-default-value", around);
+        for (i = 0; i !== rounds.length; ++i) {
+            option = document.createElement("option");
+            option.value = rounds[i];
+            option.textContent = rounds[i];
+            select.appendChild(option);
             if (rounds[i] == around)
-                t += " selected";
-            t += '>' + rounds[i] + '</option>';
+                select.selectedIndex = i;
         }
-        t += '</select></span></div>';
+        span.appendChild(select);
+        div.append("Round:  ", span);
+        ctr.appendChild(div);
     }
-    return t;
 }
 function revtype_change(event) {
     close_unnecessary(event);
@@ -3764,7 +3858,7 @@ function close_unnecessary(event) {
 function setup($a) {
     var $as = $a.closest(".has-assignment-set");
     if ($as.hasClass("need-assignment-change")) {
-        $as.on("change", "input.assignment-ui-radio", revtype_change)
+        $as.on("change click", "input.assignment-ui-radio", revtype_change)
             .removeClass("need-assignment-change");
     }
 }
@@ -3778,19 +3872,22 @@ handle_ui.on("js-assignment-fold", function (event) {
             var name = $a.attr("data-pid") + "u" + $a.attr("data-uid"),
                 revtype = +$a.attr("data-review-type"),
                 conftype = +$a.attr("data-conflict-type"),
-                revinprogress = $a[0].hasAttribute("data-review-in-progress");
-            $x = $('<div class="has-assignment-ui fold2' + (revtype > 0 ? "o" : "c") + '">'
-                + '<div class="assignment-ui-options">'
-                + make_radio(name, 4, "Primary", revtype)
-                + make_radio(name, 3, "Secondary", revtype)
-                + make_radio(name, 2, "Optional", revtype)
-                + make_radio(name, 5, "Metareview", revtype)
-                + (revinprogress ? "" :
-                   make_radio(name, -1, "Conflict", conftype > 0 ? -1 : 0)
-                   + make_radio(name, 0, "None", revtype || conftype ? -1 : 0))
-                + '</div>'
-                + make_round_selector(name, revtype, $a)
-                + '</div>').appendTo($a);
+                revinprogress = $a[0].hasAttribute("data-review-in-progress"),
+                div_container = document.createElement("div"),
+                div_options = document.createElement("div");
+            div_container.className = "has-assignment-ui fold2" + (revtype > 0 ? "o" : "c");
+            div_container.appendChild(div_options);
+            div_options.className = "assignment-ui-options";
+            div_options.append(make_radio(name, 4, "Primary", revtype),
+                make_radio(name, 3, "Secondary", revtype),
+                make_radio(name, 2, "Optional", revtype),
+                make_radio(name, 5, "Metareview", revtype));
+            append_round_selector(name, revtype, $a, div_options);
+            if (!revinprogress) {
+                div_options.append(make_radio(name, -1, "Conflict", conftype > 0 ? -1 : 0),
+                    make_radio(name, 0, "None", revtype || conftype ? -1 : 0));
+            }
+            $a.append(div_container);
         }
         $a.addClass("foldo").removeClass("foldc");
         focus_within($x[0]);
@@ -4319,6 +4416,7 @@ return {
         item.href = href;
         item.content_function = typeof content === "function" ? content : default_content_fn;
         item.content_function(item);
+        return item;
     },
     merge: function (idelt, item) {
         var elt = fe(idelt);
@@ -4457,7 +4555,7 @@ tooltip.add_builder("rf-description", function (info) {
                 d += "<div class=\"od\">Choices are:</div>";
                 for (si = 0, vo = fieldj.score_info.value_order();
                      si < vo.length; ++si)
-                    d += "<div class=\"od\"><strong class=\"rev_num " + fieldj.score_info.className(vo[si]) + "\">" + fieldj.score_info.unparse(vo[si]) + ".</strong>&nbsp;" + escape_html(fieldj.options[vo[si] - 1]) + "</div>";
+                    d += "<div class=\"od\"><strong class=\"rev_num " + fieldj.score_info.className(vo[si]) + "\">" + fieldj.score_info.unparse(vo[si]) + ".</strong>&nbsp;" + escape_html(fieldj.options[vo[si] - 1] || "") + "</div>";
             }
             info = $.extend({content: d, anchor: "w"}, info);
         }
@@ -4488,7 +4586,8 @@ function render_review_body(rrow) {
         }
 
         t = t.concat('<div class="rf rfd', display, '" data-rf="', f.uid,
-            '"><div class="revvt"><h3 class="revfn">', f.name_html);
+            '"><div class="revvt"><h3 class="rfehead"><label class="revfn">',
+            f.name_html, '</label>');
         x = f.visibility;
         if (x == "audec" && hotcrp_status && hotcrp_status.myperm
             && hotcrp_status.myperm.some_author_can_view_decision) {
@@ -4507,7 +4606,7 @@ function render_review_body(rrow) {
         } else if (rrow[f.uid] && (x = f.score_info.parse(rrow[f.uid]))) {
             t += '<p class="revv revscore"><span class="revscorenum">' +
                 f.score_info.unparse_revnum(x) + ' </span><span class="revscoredesc">' +
-                escape_html(f.options[x - 1]) + '</span></p>';
+                escape_html(f.options[x - 1] || "") + '</span></p>';
         } else {
             t += '<p class="revv revnoscore">' + (f.required ? "Unknown" : "No entry") + '</p>';
         }
@@ -4701,13 +4800,11 @@ function add_review(rrow) {
             revname = '<span title="' + rrow.reviewer_email + '">' + revname + '</span>';
     }
     if (rrow.rtype) {
-        revname += (revname ? " " : "") + '<span class="rto rt' + rrow.rtype +
-            (rrow.submitted || rrow.approved ? "" : " rtinc") +
-            (rrow.subreview ? " rtsubrev" : "") +
-            '" title="' + rtype_info[rrow.rtype][1] +
-            '"><span class="rti">' + rtype_info[rrow.rtype][0] + '</span></span>';
+        var xc = (rrow.submitted || rrow.approved ? "" : " rtinc") +
+            (rrow.subreview ? " rtsubrev" : "");
+        revname += (revname ? " " : "") + review_types.unparse_icon_html(rrow.rtype, xc);
         if (rrow.round)
-            revname += ' <span class="revround" title="Review round">' + escape_html(rrow.round) + '</span>';
+            revname += '<span class="revround" title="Review round">' + escape_html(rrow.round) + '</span>';
     }
     if (rrow.modified_at) {
         revtime = '<time class="revtime" datetime="' + (new Date(rrow.modified_at * 1000)).toISOString() + '">' + rrow.modified_at_text + '</time>';
@@ -4765,7 +4862,7 @@ return {
             f.uid = f.uid || i;
             f.name_html = escape_html(f.name);
             if (f.options)
-                f.score_info = make_score_info(f.options.length, f.option_letter, f.scheme || f.option_class_prefix);
+                f.score_info = make_score_info(f.options.length, f.start || f.option_letter, f.scheme);
             formj[f.uid] = f;
         }
         form_order = $.map(formj, function (v) { return v; });
@@ -4778,10 +4875,13 @@ return {
 
 // comments
 window.papercomment = (function ($) {
-var vismap = {rev: "hidden from authors",
-              pc: "hidden from authors and external reviewers",
-              admin: "shown only to administrators"};
-var cmts = {}, has_unload = false, resp_rounds = {},
+var vismap = {
+        rev: "hidden from authors",
+        pc: "hidden from authors and external reviewers",
+        admin: "shown only to administrators"
+    },
+    emojiregex = /^(?:(?:\ud83c[\udde6-\uddff]\ud83c[\udde6-\uddff]|(?:(?:[\u231a\u231b\u23e9-\u23ec\u23f0\u23f3\u25fd\u25fe\u2614\u2615\u2648-\u2653\u267f\u2693\u26a1\u26aa\u26ab\u26bd\u26be\u26c4\u26c5\u26ce\u26d4\u26ea\u26f2\u26f3\u26f5\u26fa\u26fd\u2705\u270a\u270b\u2728\u274c\u274e\u2753-\u2755\u2757\u2795-\u2797\u27b0\u27bf\u2b1b\u2b1c\u2b50\u2b55]|\ud83c[\udc04\udccf\udd8e\udd91-\udd9a\udde6-\uddff\ude01\ude1a\ude2f\ude32-\ude36\ude38-\ude3a\ude50\ude51\udf00-\udf20\udf2d-\udf35\udf37-\udf7c\udf7e-\udf93\udfa0-\udfca\udfcf-\udfd3\udfe0-\udff0\udff4\udff8-\udfff]|\ud83d[\udc00-\udc3e\udc40\udc42-\udcfc\udcff-\udd3d\udd4b-\udd4e\udd50-\udd67\udd7a\udd95\udd96\udda4\uddfb-\ude4f\ude80-\udec5\udecc\uded0-\uded2\uded5-\uded7\udedd-\udedf\udeeb\udeec\udef4-\udefc\udfe0-\udfeb\udff0]|\ud83e[\udd0c-\udd3a\udd3c-\udd45\udd47-\uddff\ude70-\ude74\ude78-\ude7c\ude80-\ude86\ude90-\udeac\udeb0-\udeba\udec0-\udec5\uded0-\uded9\udee0-\udee7\udef0-\udef6])\ufe0f?|(?:[\u0023\u002a\u0030-\u0039\u00a9\u00ae\u203c\u2049\u2122\u2139\u2194-\u2199\u21a9\u21aa\u2328\u23cf\u23ed-\u23ef\u23f1\u23f2\u23f8-\u23fa\u24c2\u25aa\u25ab\u25b6\u25c0\u25fb\u25fc\u2600-\u2604\u260e\u2611\u2618\u261d\u2620\u2622\u2623\u2626\u262a\u262e\u262f\u2638-\u263a\u2640\u2642\u265f\u2660\u2663\u2665\u2666\u2668\u267b\u267e\u2692\u2694-\u2697\u2699\u269b\u269c\u26a0\u26a7\u26b0\u26b1\u26c8\u26cf\u26d1\u26d3\u26e9\u26f0\u26f1\u26f4\u26f7-\u26f9\u2702\u2708\u2709\u270c\u270d\u270f\u2712\u2714\u2716\u271d\u2721\u2733\u2734\u2744\u2747\u2763\u2764\u27a1\u2934\u2935\u2b05-\u2b07\u3030\u303d\u3297\u3299]|\ud83c[\udd70\udd71\udd7e\udd7f\ude02\ude37\udf21\udf24-\udf2c\udf36\udf7d\udf96\udf97\udf99-\udf9b\udf9e\udf9f\udfcb-\udfce\udfd4-\udfdf\udff3\udff5\udff7]|\ud83d[\udc3f\udc41\udcfd\udd49\udd4a\udd6f\udd70\udd73-\udd79\udd87\udd8a-\udd8d\udd90\udda5\udda8\uddb1\uddb2\uddbc\uddc2-\uddc4\uddd1-\uddd3\udddc-\uddde\udde1\udde3\udde8\uddef\uddf3\uddfa\udecb\udecd-\udecf\udee0-\udee5\udee9\udef0\udef3])\ufe0f)\u20e3?(?:\ud83c[\udffb-\udfff]|(?:\udb40[\udc20-\udc7e])+\udb40\udc7f)?(?:\u200d(?:(?:[\u231a\u231b\u23e9-\u23ec\u23f0\u23f3\u25fd\u25fe\u2614\u2615\u2648-\u2653\u267f\u2693\u26a1\u26aa\u26ab\u26bd\u26be\u26c4\u26c5\u26ce\u26d4\u26ea\u26f2\u26f3\u26f5\u26fa\u26fd\u2705\u270a\u270b\u2728\u274c\u274e\u2753-\u2755\u2757\u2795-\u2797\u27b0\u27bf\u2b1b\u2b1c\u2b50\u2b55]|\ud83c[\udc04\udccf\udd8e\udd91-\udd9a\udde6-\uddff\ude01\ude1a\ude2f\ude32-\ude36\ude38-\ude3a\ude50\ude51\udf00-\udf20\udf2d-\udf35\udf37-\udf7c\udf7e-\udf93\udfa0-\udfca\udfcf-\udfd3\udfe0-\udff0\udff4\udff8-\udfff]|\ud83d[\udc00-\udc3e\udc40\udc42-\udcfc\udcff-\udd3d\udd4b-\udd4e\udd50-\udd67\udd7a\udd95\udd96\udda4\uddfb-\ude4f\ude80-\udec5\udecc\uded0-\uded2\uded5-\uded7\udedd-\udedf\udeeb\udeec\udef4-\udefc\udfe0-\udfeb\udff0]|\ud83e[\udd0c-\udd3a\udd3c-\udd45\udd47-\uddff\ude70-\ude74\ude78-\ude7c\ude80-\ude86\ude90-\udeac\udeb0-\udeba\udec0-\udec5\uded0-\uded9\udee0-\udee7\udef0-\udef6])\ufe0f?|(?:[\u0023\u002a\u0030-\u0039\u00a9\u00ae\u203c\u2049\u2122\u2139\u2194-\u2199\u21a9\u21aa\u2328\u23cf\u23ed-\u23ef\u23f1\u23f2\u23f8-\u23fa\u24c2\u25aa\u25ab\u25b6\u25c0\u25fb\u25fc\u2600-\u2604\u260e\u2611\u2618\u261d\u2620\u2622\u2623\u2626\u262a\u262e\u262f\u2638-\u263a\u2640\u2642\u265f\u2660\u2663\u2665\u2666\u2668\u267b\u267e\u2692\u2694-\u2697\u2699\u269b\u269c\u26a0\u26a7\u26b0\u26b1\u26c8\u26cf\u26d1\u26d3\u26e9\u26f0\u26f1\u26f4\u26f7-\u26f9\u2702\u2708\u2709\u270c\u270d\u270f\u2712\u2714\u2716\u271d\u2721\u2733\u2734\u2744\u2747\u2763\u2764\u27a1\u2934\u2935\u2b05-\u2b07\u3030\u303d\u3297\u3299]|\ud83c[\udd70\udd71\udd7e\udd7f\ude02\ude37\udf21\udf24-\udf2c\udf36\udf7d\udf96\udf97\udf99-\udf9b\udf9e\udf9f\udfcb-\udfce\udfd4-\udfdf\udff3\udff5\udff7]|\ud83d[\udc3f\udc41\udcfd\udd49\udd4a\udd6f\udd70\udd73-\udd79\udd87\udd8a-\udd8d\udd90\udda5\udda8\uddb1\uddb2\uddbc\uddc2-\uddc4\uddd1-\uddd3\udddc-\uddde\udde1\udde3\udde8\uddef\uddf3\uddfa\udecb\udecd-\udecf\udee0-\udee5\udee9\udef0\udef3])\ufe0f)\u20e3?(?:\ud83c[\udffb-\udfff]|(?:\udb40[\udc20-\udc7e])+\udb40\udc7f)?)*)*[ \t]*){1,3}$/,
+    cmts = {}, has_unload = false, resp_rounds = {},
     twiddle_start = siteinfo.user && siteinfo.user.cid ? siteinfo.user.cid + "~" : "###";
 
 function unparse_tag(tag, strip_value) {
@@ -4994,7 +5094,7 @@ function visibility_change() {
     if (would_auvis) {
         vis.firstChild.textContent = "Author discussion";
     } else {
-        vis.firstChild.textContent = "Author discussion*";
+        vis.firstChild.textContent = "Future author discussion";
     }
     if (hint) {
         var m = [], elt;
@@ -5083,6 +5183,10 @@ function activate_editing_messages(cj, form) {
         } else if (cj.draft) {
             append_feedback_to(ul, {message: "<0>The response deadline has passed and this draft response will not be shown to reviewers.", status: 2});
         }
+    }
+    if (siteinfo.user
+        && (siteinfo.user.is_actas || (siteinfo.user.session_users || []).length > 1)) {
+        append_feedback_to(ul, {message: "<0>Commenting as " + siteinfo.user.email, status: -4});
     }
     if (ul.firstChild) {
         form.parentElement.insertBefore(ul, form);
@@ -5445,6 +5549,7 @@ function render_comment_text(format, value, response, textj, chead) {
         }
     }
     render_text.onto(textj[0], format, value);
+    toggleClass(textj[0], "emoji-only", emojiregex.test(value));
 }
 
 function render_preview(evt, format, value, dest) {
@@ -5907,17 +6012,21 @@ demand_load.emoji_codes = demand_load.make(function (resolve, reject) {
         var all = v.lists.all = Object.keys(v.emoji);
         all.sort();
 
+        var i, w, u, u2, wp;
         v.wordsets = {};
-        for (var i = 0; i !== all.length; ++i) {
-            var w = all[i], u = w.indexOf("_");
+        for (i = 0; i !== all.length; ++i) {
+            w = all[i];
+            u = w.indexOf("_");
             if (u === 6 && /^(?:family|couple)/.test(w))
                 continue;
             while (u > 0) {
-                var u2 = w.indexOf("_", u+1),
-                    wp = w.substring(u+1, u2 < 0 ? w.length : u2);
-                v.wordsets[wp] = v.wordsets[wp] || [];
-                if (v.wordsets[wp].indexOf(w) < 0)
-                    v.wordsets[wp].push(w);
+                u2 = w.indexOf("_", u+1);
+                wp = w.substring(u+1, u2 < 0 ? w.length : u2);
+                if (wp !== "with" && wp !== "and" && wp !== "in") {
+                    v.wordsets[wp] = v.wordsets[wp] || [];
+                    if (v.wordsets[wp].indexOf(w) < 0)
+                        v.wordsets[wp].push(w);
+                }
                 u = u2;
             }
         }
@@ -5932,7 +6041,7 @@ demand_load.emoji_codes = demand_load.make(function (resolve, reject) {
 });
 
 (function () {
-var people_regex = /(?:[\u261d\u26f9\u270a-\u270d]|\ud83c[\udf85\udfc2-\udfc4\udfc7\udfca-\udfcc]|\ud83d[\udc42-\udc43\udc46-\udc50\udc66-\udc78\udc7c\udc81-\udc83\udc85-\udc87\udc8f\udc91\udcaa\udd74-\udd75\udd7a\udd90\udd95-\udd96\ude45-\ude47\ude4b-\ude4f\udea3\udeb4-\udeb6\udec0\udecc]|\ud83e[\udd0f\udd18-\udd1f\udd26\udd30-\udd39\udd3c-\udd3e\uddb5-\uddb6\uddb8-\uddb9\uddbb\uddcd-\uddcf\uddd1-\udddd])/g;
+var people_regex = /(?:[\u261d\u26f9\u270a-\u270d]|\ud83c[\udf85\udfc2-\udfc4\udfc7\udfca-\udfcc]|\ud83d[\udc42-\udc43\udc46-\udc50\udc66-\udc78\udc7c\udc81-\udc83\udc85-\udc87\udc8f\udc91\udcaa\udd74-\udd75\udd7a\udd90\udd95-\udd96\ude45-\ude47\ude4b-\ude4f\udea3\udeb4-\udeb6\udec0\udecc]|\ud83e[\udd0c\udd0f\udd18-\udd1f\udd26\udd30-\udd39\udd3c-\udd3e\udd77\uddb5-\uddb6\uddb8-\uddb9\uddbb\uddcd-\uddcf\uddd1-\udddd\udec3-\udec5\udef0-\udef6])/;
 
 function combine(sel, list, i, j) {
     while (i < j) {
@@ -5954,49 +6063,52 @@ function select_from(sel, s, list) {
     }
 }
 
-function apply_modifier(sel, mod, v) {
-    var modmatch = v.modifier_words, all = mod === ".";
-    if (!all) {
-        modmatch = [];
-        for (var j = 0; j !== v.modifier_words.length; ++j)
-            if (v.modifier_words[j].substring(0, mod.length - 1) === mod.substring(1))
-                modmatch.push(v.modifier_words[j]);
-    }
-    if (modmatch.length === 0)
-        return;
-    for (var i = 0; i !== sel.length; ) {
-        var code = sel[i];
-        all ? ++i : sel.splice(i, 1);
-        people_regex.lastIndex = 0;
-        if (people_regex.test(v.emoji[code])) {
-            for (var j = 0; j < modmatch.length; ++j) {
-                var mcode = code + "." + modmatch[j];
-                if (!v.emoji[mcode])
-                    v.emoji[mcode] = v.emoji[code].replace(people_regex, "$&" + v.modifiers[modmatch[j]]);
-                sel.splice(i, 0, mcode);
-                ++i;
+function complete_list(v, sel, modifiers) {
+    var res = [], i, j, code, compl, mod;
+    for (i = 0; i !== sel.length; ++i) {
+        code = sel[i];
+        compl = v.completion[code];
+        if (!compl) {
+            compl = v.completion[code] = {
+                s: ":".concat(code, ":"),
+                r: v.emoji[code],
+                no_space: true,
+                sh: '<span class="nw">'.concat(v.emoji[code], " :", code, ":</span>")
+            };
+        }
+        res.push(compl);
+        if (modifiers && people_regex.test(compl.r)) {
+            for (j = 0; j !== v.modifier_words.length; ++j) {
+                mod = v.modifier_words[j];
+                res.push({
+                    s: ":".concat(code, "-", mod, ":"),
+                    r: compl.r + v.emoji[mod],
+                    no_space: true,
+                    sh: '<span class="nw">'.concat(compl.r, v.emoji[mod], " :", code, "-", mod, ":</span>"),
+                    hl_length: 2 + code.length + mod.length,
+                    shorter_hl: ":".concat(code, ":")
+                });
             }
-            if (all && sel.length > 40)
-                break;
         }
     }
+    return res;
 }
 
 demand_load.emoji_completion = function (start) {
     return demand_load.emoji_codes().then(function (v) {
-        var sel, i, code, ch, basic = v.lists.basic,
-            period = start.indexOf("."), modifier = null;
-        start = start.replace(/:$/, "").replace(/-/g, "_");
-        if (period > 0) {
-            modifier = start.substring(period);
-            start = start.substring(0, period);
+        var sel, i, code, compl, ch, basic = v.lists.basic, m;
+        start = start.replace(/:$/, "");
+        if ((m = /^(-?[^\-]+)-/.exec(start))
+            && (ch = v.emoji[m[1]])
+            && people_regex.test(ch)) {
+            return complete_list(v, [m[1]], true);
         }
         if (start === "") {
             sel = basic.slice();
         } else {
             sel = [];
             for (i = 0; i !== basic.length; ++i) {
-                if (basic[i].substring(0, start.length) === start)
+                if (basic[i].startsWith(start))
                     sel.push(basic[i]);
             }
             sel = select_from(sel, start, v.lists.common);
@@ -6009,21 +6121,7 @@ demand_load.emoji_completion = function (start) {
                 combine(sel, ysel, 0, ysel.length);
             }
         }
-        if (modifier)
-            apply_modifier(sel, modifier, v);
-        for (i = 0; i !== sel.length; ++i) {
-            code = sel[i];
-            if (!v.completion[code]) {
-                v.completion[code] = {
-                    s: ":" + code + ":",
-                    r: v.emoji[code],
-                    no_space: true,
-                    sh: '<span class="nw">' + v.emoji[code] + " :" + code + ":</span>"
-                };
-            }
-            sel[i] = v.completion[code];
-        }
-        return sel;
+        return complete_list(v, sel, false);
     });
 };
 })();
@@ -6107,31 +6205,39 @@ function make_suggestions(precaret, postcaret, options) {
         lengths = [precaret.length, postcaret.length, (options.suffix || "").length];
 
     return function (tlist) {
-        var res = [], best = null,
+        var res = [], best = null, i,
             can_highlight = lregion.length >= (filter || "x").length,
             titem, text, ltext, rl, last_text;
 
-        for (var i = 0; i < tlist.length; ++i) {
+        for (i = 0; i < tlist.length; ++i) {
             titem = completion_item(tlist[i]);
             text = titem.s;
             ltext = case_sensitive ? text : text.toLowerCase();
             rl = titem.reqlen || 0;
 
-            if ((filter === null
-                 || ltext.substr(0, filter.length) === filter)
+            if ((filter === null || ltext.startsWith(filter))
                 && (rl === 0
                     || (lregion.length >= rl
-                        && ltext.substr(0, rl) === lregion.substr(0, rl)))
+                        && lregion.startsWith(ltext.substr(0, rl))))
                 && (last_text === null || last_text !== text)) {
                 if (can_highlight
-                    && ltext.substr(0, lregion.length) === lregion
+                    && ltext.startsWith(lregion)
                     && (best === null
                         || (titem.pri || 0) > (res[best].pri || 0)
                         || ltext.length === lregion.length)) {
                     best = res.length;
+                    if (titem.hl_length
+                        && lregion.length < titem.hl_length
+                        && titem.shorter_hl) {
+                        best = 0;
+                        while (best < res.length && res[best].s !== titem.shorter_hl)
+                            ++best;
+                    }
                 }
                 res.push(titem);
                 last_text = text;
+                if (res.length === options.max_items)
+                    break;
             }
         }
 
@@ -6145,13 +6251,13 @@ var suggest = (function () {
 var builders = {};
 
 function suggest() {
-    var elt = this, hintdiv, suggdata, hintlist,
+    var elt = this, hintdiv, hintinfo, suggdata,
         blurring = false, hiding = false, lastkey = false, lastpos = false,
         wasnav = 0, spacestate = -1;
 
     function kill() {
         hintdiv && hintdiv.remove();
-        hintdiv = hintlist = null;
+        hintdiv = hintinfo = null;
         blurring = hiding = lastkey = lastpos = false;
         wasnav = 0;
     }
@@ -6205,15 +6311,16 @@ function suggest() {
         }
 
         var i, clist = cinfo.list, same_list = false;
-        if (hintlist && hintlist.length === clist.length) {
-            for (same_list = true, i = 0; i !== hintlist.length; ++i) {
-                if (hintlist[i] !== clist[i]) {
+        if (hintinfo && hintinfo.list && hintinfo.list.length === clist.length) {
+            for (same_list = true, i = 0; i !== clist.length; ++i) {
+                if (hintinfo.list[i] !== clist[i]) {
                     same_list = false;
                     break;
                 }
             }
         }
-        hintlist = clist;
+        hintinfo = cinfo;
+        hintinfo.pcpos = precaretpos;
 
         var div;
         if (!same_list) {
@@ -6251,7 +6358,6 @@ function suggest() {
         var $pos = shadow.find("span").geometry(), soff = shadow.offset();
         $pos = geometry_translate($pos, -soff.left - $elt.scrollLeft(), -soff.top + 4 - $elt.scrollTop());
         hintdiv.near($pos, elt);
-        hintdiv.self().data("autocompletePos", [precaretpos, cinfo.lengths]);
         shadow.remove();
     }
 
@@ -6273,40 +6379,41 @@ function suggest() {
     }
 
     function do_complete(complete_elt) {
-        var text;
+        var repl;
         if (complete_elt.hasAttribute("data-replacement"))
-            text = complete_elt.getAttribute("data-replacement");
+            repl = complete_elt.getAttribute("data-replacement");
         else if (complete_elt.firstChild.nodeType === Node.TEXT_NODE)
-            text = complete_elt.textContent;
+            repl = complete_elt.textContent;
         else {
             var n = complete_elt.firstChild;
-            while (n && n.className !== "s9t")
+            while (n.className !== "s9t")
                 n = n.nextSibling;
-            text = n.textContent;
+            repl = n.textContent;
         }
 
-        var poss = hintdiv.self().data("autocompletePos"),
-            val = elt.value,
-            startPos = poss[0],
-            endPos = startPos + poss[1][0] + poss[1][1] + poss[1][2],
+        var val = elt.value,
+            startPos = hintinfo.pcpos,
+            endPos = startPos + hintinfo.lengths[0] + hintinfo.lengths[1] + hintinfo.lengths[2],
             space;
-        if (poss[1][2])
-            text += val.substring(endPos - poss[1][2], endPos);
-        else if ((space = text.indexOf(" ")) > 0) {
+        if (hintinfo.lengths[2])
+            repl += val.substring(endPos - hintinfo.lengths[2], endPos);
+        else if ((space = repl.indexOf(" ")) > 0) {
             // If user completes when caret is at e.g. `Jor|dan Peele`, skip over `Peele`
-            while (space < text.length && val.charCodeAt(endPos) === text.charCodeAt(space))
+            while (space < repl.length && val.charCodeAt(endPos) === repl.charCodeAt(space))
                 ++space, ++endPos;
         }
-        var outPos = startPos + text.length;
+        var outPos = startPos + repl.length;
         if (hasClass(complete_elt, "s9nsp")) {
             spacestate = -1;
         } else {
             ++outPos;
             if (endPos === val.length || /\S/.test(val.charAt(endPos)))
-                text += " ";
+                repl += " ";
             spacestate = complete_elt.closest(".s9smartpunc") ? outPos : -1;
         }
-        elt.setRangeText(text, startPos, endPos, "end");
+        elt.setRangeText(repl, startPos, endPos, "end");
+        if (hintinfo.postreplace)
+            hintinfo.postreplace(elt, repl, startPos);
         $(elt).trigger("input");
     }
 
@@ -6365,15 +6472,14 @@ function suggest() {
         var k = event_key(evt), m = event_modkey(evt), result = true,
             pspacestate = spacestate;
         if (k === "Escape" && !m) {
-            if (hintdiv) {
-                var poss = hintdiv.self().data("autocompletePos");
+            if (hintinfo) {
+                hiding = this.value.substring(hintinfo.pcpos, hintinfo.pcpos + hintinfo.lengths[0]);
                 kill();
-                hiding = this.value.substring(poss[0], poss[0] + poss[1][0]);
                 evt.stopImmediatePropagation();
             }
         } else if ((k === "Tab" || k === "Enter") && !m && hintdiv) {
             var $active = hintdiv.self().find(".s9y");
-            if ((k !== "Enter" || lastkey !== "Backspace") && $active.length)
+            if ($active.length)
                 do_complete($active[0]);
             kill();
             if ($active.length || this.selectionEnd !== this.value.length) {
@@ -6497,11 +6603,19 @@ suggest.add_builder("pc-tags", function (elt) {
     }
 });
 
+function suggest_emoji_postreplace(elt, repl, startPos) {
+    var m;
+    if (/^\uD83C[\uDFFB-\uDFFF]$/.test(repl)
+        && (m = /(?:\u200D\u2640\uFE0F?|\u200D\uD83E[\uDDB0-\uDDB3])+$/.exec(elt.value.substring(0, startPos)))) {
+        elt.setRangeText(repl + m[0], startPos - m[0].length, startPos + repl.length, "end");
+    }
+}
+
 suggest.add_builder("suggest-emoji", function (elt) {
     var x = completion_split(elt), m;
-    if (x && (m = x[0].match(/(?:^|[\s(\u20e3-\u23ff\u2600-\u27ff\ufe0f\udc00-\udfff]):((?:|[-+]|[-+]1|[-_0-9a-zA-Z]+)(\.[0-9a-zA-Z]*|):?)$/))
+    if (x && (m = x[0].match(/(?:^|[\s(\u20e3-\u23ff\u2600-\u27ff\ufe0f\udc00-\udfff]):((?:|\+|\+?[-_0-9a-zA-Z]+):?)$/))
         && /^(?:$|[\s)\u20e3-\u23ff\u2600-\u27ff\ufe0f\ud83c-\ud83f])/.test(x[1])) {
-        return demand_load.emoji_completion(m[1].toLowerCase()).then(make_suggestions(":" + m[1], "", {case_sensitive_items: true, min_columns: 4, region_trimmer: /\..*$/}));
+        return demand_load.emoji_completion(m[1].toLowerCase()).then(make_suggestions(":" + m[1], "", {case_sensitive_items: true, max_items: 8, postreplace: suggest_emoji_postreplace}));
     }
 });
 
@@ -6830,7 +6944,7 @@ $(document).on("collectState", function (event, state) {
         return;
     var data = state.sortpl = {hotlist: tbl.getAttribute("data-hotlist")};
     var groups = tbl.getAttribute("data-groups");
-    if (groups && (groups = JSON.parse(groups)) && groups.length)
+    if (groups && (groups = parse_json(groups)) && groups.length)
         data.groups = groups;
     if (!href_sorter(state.href)) {
         var active_href = $(tbl).children("thead").find("a.pl_sorting_fwd").attr("href");
@@ -7659,20 +7773,21 @@ function render_assignment_selector() {
     var prow = prownear(this),
         conflict = hasClass(this, "conflict"),
         sel = document.createElement("select"),
-        rts = ["0", "None", "4", "Primary", "3", "Secondary", "2", "Optional", "5", "Metareview", "-1", "Conflict"],
+        rts = ["none", "primary", "secondary", "pc", "meta", "conflict"],
         asstext = this.getAttribute("data-assignment"),
         revtype, m = asstext.match(/^(\S+) (\S+)(.*)$/);
+    m[2] = review_types.parse(m[2]);
     sel.name = "assrev" + prow.getAttribute("data-pid") + "u" + m[1];
     sel.setAttribute("data-default-value", m[2]);
     sel.className = "uich js-assign-review";
     sel.tabIndex = 2;
-    for (var i = 0; i < rts.length; i += 2) {
-        if (!conflict || rts[i] === "0" || rts[i] === "-1" || rts[i] === "conflict") {
+    for (var i = 0; i < rts.length; ++i) {
+        if (!conflict || rts[i] === "none" || rts[i] === "conflict") {
             var opt = document.createElement("option");
             opt.value = rts[i];
-            opt.text = rts[i + 1];
+            opt.text = review_types.unparse_selector(rts[i]);
             opt.defaultSelected = opt.selected = m[2] === rts[i];
-            if (m[3] && rts[i] === "0")
+            if (m[3] && rts[i] === "none")
                 opt.disabled = true;
             sel.add(opt, null);
         }
@@ -8127,7 +8242,7 @@ function initialize() {
     self = $("table.pltable")[0];
     if (!self)
         return false;
-    var fs = JSON.parse(self.getAttribute("data-columns"));
+    var fs = parse_json(self.getAttribute("data-columns"));
     for (var i = 0; i !== fs.length; ++i)
         add_field(fs[i]);
 };
@@ -8383,10 +8498,25 @@ handle_ui.on("js-check-format", function () {
 $(function () {
 var failures = 0;
 function background_format_check() {
-    var needed = $(".need-format-check"), pid, m, tstart;
-    if (!needed.length)
+    var allneeded = [], needed, pid, m, tstart, i, wg = $(window).geometry();
+    $(".need-format-check").each(function () {
+        var ng = $(this).geometry(),
+            d = wg.bottom < ng.top ? ng.top - wg.bottom : wg.top - ng.bottom;
+        allneeded.push([Math.sqrt(1 + Math.max(d, 0)), this]);
+    });
+    if (!allneeded.length)
         return;
-    needed = needed[Math.floor(Math.random() * needed.length)];
+    allneeded.sort(function (a, b) {
+        return a[0] > b[0] ? 1 : (a[0] < b[0] ? -1 : 0);
+    });
+    for (i = m = 0; i !== 8 && i !== allneeded.length; ++i) {
+        m += 1 / allneeded[i][0];
+        allneeded[i][0] = m;
+    }
+    m *= Math.random();
+    for (i = 0; i !== allneeded.length - 1 && m >= allneeded[i][0]; ++i) {
+    }
+    needed = allneeded[i][1];
     removeClass(needed, "need-format-check");
     tstart = now_msec();
     function next(ok) {
@@ -8415,6 +8545,15 @@ function background_format_check() {
             success: function (data) {
                 if (data && data.ok)
                     needed.parentNode.replaceChild(document.createTextNode(data.npages), needed);
+                next(data && data.ok);
+            }
+        });
+    } else if (hasClass(needed, "is-nwords")
+               && (pid = needed.closest("[data-pid]"))) {
+        $.ajax(hoturl("api/formatcheck", {p: pid.getAttribute("data-pid"), dtype: needed.getAttribute("data-dtype") || "0", soft: 1}), {
+            success: function (data) {
+                if (data && data.ok)
+                    needed.parentNode.replaceChild(document.createTextNode(data.nwords), needed);
                 next(data && data.ok);
             }
         });
@@ -8955,7 +9094,7 @@ edit_conditions.pc_conflict = function (ec, form) {
 
 function run_edit_conditions() {
     var f = this.closest("form"),
-        ec = JSON.parse(this.getAttribute("data-edit-condition")),
+        ec = parse_json(this.getAttribute("data-edit-condition")),
         off = !evaluate_edit_condition(ec, f),
         link = navsidebar.get(this);
     toggleClass(this, "hidden", off);
@@ -8977,9 +9116,10 @@ function add_pslitem_header() {
     }
     if (id) {
         var xt = header_text(l),
-            e = xt ? navsidebar.set(this.parentElement, escape_html(xt), "#" + id) : null;
-        if (e) {
-            var ise = hasClass(this, "has-error"), isw = hasClass(this, "has-warning");
+            item = xt ? navsidebar.set(this.parentElement, escape_html(xt), "#" + id) : null;
+        if (item) {
+            var e = item.element, ise = hasClass(this, "has-error"),
+                isw = hasClass(this, "has-warning");
             toggleClass(e.firstChild, "is-diagnostic", ise || isw);
             toggleClass(e.firstChild, "is-error", ise);
             toggleClass(e.firstChild, "is-warning", isw);
@@ -9027,7 +9167,7 @@ return {
             .find(".has-edit-condition").each(run_edit_conditions);
     },
     evaluate_edit_condition: function (ec) {
-        return evaluate_edit_condition(typeof ec === "string" ? JSON.parse(ec) : ec, $("#form-paper")[0]);
+        return evaluate_edit_condition(typeof ec === "string" ? parse_json(ec) : ec, $("#form-paper")[0]);
     },
     load: function () {
         var f = document.getElementById("form-paper");
@@ -9514,6 +9654,38 @@ handle_ui.on("js-assign-list-action", function () {
     });
 });
 
+function handle_submit_list_bulkwarn(table, chkval, bgform, event) {
+    var chki = table.querySelectorAll("tr.pl[data-bulkwarn]"), i, n = 0;
+    for (i = 0; i !== chki.length && n < 4; ++i) {
+        if (chkval.indexOf(chki[i].getAttribute("data-pid")) >= 0)
+            ++n;
+    }
+    if (n >= 4) {
+        var hc = popup_skeleton({near: event.target});
+        hc.push('<div class="container"></div>');
+        hc.push_actions([
+            '<button type="button" name="bsubmit" class="btn-primary">Download</button>',
+            '<button type="button" name="cancel">Cancel</button>'
+        ]);
+        var $d = hc.show(false), m = table.getAttribute("data-bulkwarn-ftext");
+        if (m === null || m === "") {
+            m = "<5><p>Some program committees discourage reviewers from downloading submissions in bulk. Are you sure you want to continue?</p>";
+        }
+        render_text.onto($d.find(".container")[0], "f", m);
+        $d.on("closedialog", function () {
+            bgform && document.body.removeChild(bgform);
+        });
+        $d.on("click", "button[name=bsubmit]", function (event) {
+            bgform.submit();
+            bgform = null;
+            $d.close();
+        });
+        hc.show();
+        return false;
+    } else
+        return true;
+}
+
 handle_ui.on("js-submit-list", function (event) {
     // choose action
     var form = this, fn, fnbutton, e, ne, i, es, t;
@@ -9558,7 +9730,7 @@ handle_ui.on("js-submit-list", function (event) {
         if (e.className === "is-background-form")
             document.body.removeChild(e);
     }
-    var bgform, action = form.action;
+    var bgform, action = form.action, need_bulkwarn = false;
     if (fnbutton && fnbutton.hasAttribute("formaction"))
         action = fnbutton.getAttribute("formaction");
     if (fnbutton && fnbutton.getAttribute("formmethod") === "get" && chkval.length < 20) {
@@ -9580,6 +9752,7 @@ handle_ui.on("js-submit-list", function (event) {
     bgform.className = "is-background-form";
     if (fnbutton && fnbutton.hasAttribute("formtarget"))
         bgform.setAttribute("target", fnbutton.getAttribute("formtarget"));
+    document.body.appendChild(bgform);
     if (chkval)
         bgform.appendChild(hidden_input("p", chkval.join(" ")));
     if (isdefault)
@@ -9598,11 +9771,16 @@ handle_ui.on("js-submit-list", function (event) {
                     e.files = es[i].files;
                 } else
                     bgform.appendChild(hidden_input(es[i].name, es[i].value));
+                if (es[i].hasAttribute("data-bulkwarn")
+                    || (es[i].tagName === "SELECT"
+                        && es[i].selectedIndex >= 0
+                        && es[i].options[es[i].selectedIndex].hasAttribute("data-bulkwarn")))
+                    need_bulkwarn = true;
             }
         }
     }
-    document.body.appendChild(bgform);
-    bgform.submit();
+    if (!need_bulkwarn || handle_submit_list_bulkwarn(table, chkval, bgform, event))
+        bgform.submit();
     event.preventDefault();
 });
 
@@ -9618,25 +9796,33 @@ handle_ui.on("js-unfold-pcselector", function () {
 
 
 handle_ui.on("js-assign-review", function (event) {
-    var form, m;
+    var form = this.form, m;
     if (event.type !== "change"
         || !(m = /^assrev(\d+)u(\d+)$/.exec(this.name))
-        || ((form = this.form)
-            && form.autosave
-            && !form.autosave.checked))
+        || (form && form.autosave && !form.autosave.checked))
         return;
-    var self = this, data, value;
+    var self = this, ass = [], value = self.value;
     if (self.tagName === "SELECT") {
-        var round = form.rev_round;
-        data = {kind: "a", rev_round: round ? round.value : ""};
-        value = self.value;
+        var rt = "clear", ct = false;
+        if (value.indexOf("conflict") >= 0) {
+            ct = value;
+        } else if (value !== "none") {
+            rt = value;
+        }
+        ass.push(
+            {pid: +m[1], uid: +m[2], action: rt + "review"},
+            {pid: +m[1], uid: +m[2], action: "conflict", conflict: ct}
+        );
+        if (form.rev_round && rt !== "clear") {
+            ass[0].round = form.rev_round.value;
+        }
     } else {
-        data = {kind: "c"};
-        value = self.checked ? -1 : 0;
+        ass.push(
+            {pid: +m[1], uid: +m[2], action: "conflict", conflict: self.checked}
+        );
     }
-    data["pcs" + m[2]] = value;
-    $.post(hoturl("=assign", {p: m[1], update: 1, ajax: 1}),
-        data, function (rv) {
+    $.post(hoturl("=api/assign", {p: m[1]}),
+        {assignments: JSON.stringify(ass)}, function (rv) {
             input_set_default_value(self, value);
             minifeedback(self, rv);
             form_highlight(form, self);
@@ -9765,8 +9951,9 @@ window.Hotlist = function (s) {
     this.obj = null;
     if (this.str && this.str.charAt(0) === "{") {
         try {
-            this.obj = JSON.parse(this.str);
-        } catch (e) {}
+            this.obj = parse_json(this.str);
+        } catch (e) {
+        }
     }
 };
 Hotlist.at = function (elt) {
@@ -9885,7 +10072,6 @@ function row_click(evt) {
             window.location = href;
         } else {
             var w = window.open(href, "_blank");
-            w && w.blur();
             window.focus();
         }
     }
@@ -9950,7 +10136,7 @@ $(function () {
         $(".quicklinks").each(function () {
             var info = Hotlist.at(this.closest(".has-hotlist")), ids, pos, page, mode;
             try {
-                mode = JSON.parse(this.getAttribute("data-link-params") || "{}");
+                mode = parse_json(this.getAttribute("data-link-params") || "{}");
             } catch (e) {
                 mode = {};
             }
@@ -10016,7 +10202,7 @@ function populate_pcselector(pcs) {
     removeClass(this, "need-pcselector");
     var optids = this.getAttribute("data-pcselector-options") || "*";
     if (optids.charAt(0) === "[")
-        optids = JSON.parse(optids);
+        optids = parse_json(optids);
     else
         optids = optids.split(/[\s,]+/);
     var selected = this.getAttribute("data-pcselector-selected"), selindex = -1;
@@ -10110,7 +10296,7 @@ var scheme_info = {
 
 function make_fm9(n, max, rev, categorical) {
     if (n <= 1 || max <= 1) {
-        return function (i) { return rev ? max : 1; };
+        return function (i) { return rev ? 1 : max; };
     } else if (categorical) {
         return function (i) {
             var x = Math.round(+i - 1) % max;
@@ -10194,6 +10380,8 @@ function rgb_array_for(svx) {
 }
 
 function make_info(n, c, sv) {
+    if (c === 1)
+        c = null;
     var unparse = c ? make_letter_unparser(n, c) : numeric_unparser,
         sci = scheme_info[sv],
         fm9 = make_fm9(n, sci[1], !sci[2] !== !c, (sci[0] & 2) !== 0),
@@ -10222,7 +10410,7 @@ function make_info(n, c, sv) {
             if (val >= 1 && val <= n)
                 return '<strong class="rev_num sv '.concat(svk, fm9(val), '">', unparse(val), '.</strong>');
             else
-                return '(???)';
+                return '<strong class="rev_num">?'.concat(numeric_unparser(val), '.</strong>');
         },
         parse: c ? make_letter_parser(n, c) : numeric_parser,
         value_order: function () {
@@ -10242,7 +10430,7 @@ return function (n, c, sv) {
     sv = sv && scheme_info[sv] ? sv : "sv";
     var name = "".concat(n, "/", c || "", "/", sv);
     if (!info[name])
-        info[name] = make_info(n, c || "", sv);
+        info[name] = make_info(n || 1, c || "", sv);
     return info[name];
 };
 })(jQuery);

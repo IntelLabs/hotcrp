@@ -18,7 +18,7 @@ class Revpref_ListAction extends ListAction {
     }
     static function render_set(PaperList $pl) {
         return ["<b> preferences:</b> &nbsp;"
-            . Ht::entry("pref", "", array("class" => "want-focus js-autosubmit", "size" => 4, "data-submit-fn" => "setpref"))
+            . Ht::entry("pref", "", ["class" => "want-focus js-autosubmit", "size" => 4, "data-submit-fn" => "setpref"])
             . $pl->action_submit("setpref")];
     }
     /** @param ?string $reviewer
@@ -60,7 +60,6 @@ class Revpref_ListAction extends ListAction {
             "paper" => true, "title" => true, "email" => $not_me, "preference" => true,
             "notes" => false, "authors" => false, "abstract" => !!$extended, "topics" => false
         ];
-        $has_conflict = false;
         $texts = [];
         foreach ($ssel->paper_set($user, ["topics" => 1, "reviewerPreference" => 1]) as $prow) {
             if ($not_me && !$user->allow_administer($prow)) {

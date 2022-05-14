@@ -209,7 +209,7 @@ class Home_Page {
     }
 
     /** @param Conf $conf
-     * @return list<ReviewField> */
+     * @return list<Score_ReviewField> */
     private function default_review_fields($conf) {
         $this->_rfs = $this->_rfs ?? $conf->review_form()->highlighted_main_scores();
         return $this->_rfs;
@@ -271,7 +271,7 @@ class Home_Page {
             $q = "select count(reviewId) num_submitted";
             $scores = [];
             foreach ($rfs as $rf) {
-                $q .= ", group_concat(coalesce({$rf->main_storage},'')) {$rf->id}Scores";
+                $q .= ", group_concat(coalesce({$rf->main_storage},'')) {$rf->short_id}Scores";
                 $scores[] = [];
             }
             $result = Dbl::qe_raw("$q from ContactInfo left join PaperReview on (PaperReview.contactId=ContactInfo.contactId and PaperReview.reviewSubmitted is not null)
@@ -500,12 +500,14 @@ class Home_Page {
 
         $startable = $conf->time_start_paper();
         if ($startable && !$user->has_email()) {
-            echo '<em class="deadline">', $conf->unparse_setting_deadline_span("sub_reg"), "</em><br />\n<small>You must sign in to start a submission.</small>";
+            echo '<p><em class="deadline">', $conf->unparse_setting_deadline_span("sub_reg"), "</em><br>\n<small>You must sign in to start a submission.</small></p>";
         } else if ($startable || $user->privChair) {
-            echo '<strong><a href="', $conf->hoturl("paper", "p=new"), '">New submission</a></strong> <em class="deadline">(', $conf->unparse_setting_deadline_span("sub_reg"), ")</em>";
-            if ($user->privChair) {
-                echo '<br><span class="hint">As an administrator, you can start a submission regardless of deadlines and on behalf of others.</span>';
-            }
+            $url = $conf->hoturl("paper", "p=new");
+            $dl = $conf->unparse_setting_deadline_span("sub_reg");
+            echo Ht::actions([
+                ["<a class=\"btn\" href=\"{$url}\">New submission</a>", $startable ? "" : "(admin only)"],
+                ["<em class=\"deadline\">{$dl}</em>"]
+            ], ["class" => "aab mt-0 mb-0 align-items-baseline"]);
         }
 
         $plist = null;
@@ -518,7 +520,7 @@ class Home_Page {
             }
         }
 
-        $deadlines = array();
+        $deadlines = [];
         if ($plist && $plist->has("need_submit")) {
             if (!$conf->time_finalize_paper(null)) {
                 // Be careful not to refer to a future deadline; perhaps an admin
@@ -560,12 +562,8 @@ class Home_Page {
         if (!empty($deadlines)) {
             if ($plist && !$plist->is_empty()) {
                 echo '<hr class="g">';
-            } else if ($startable || $user->privChair) {
-                echo "<br>";
             }
-            echo '<em class="deadline">',
-                join("</em><br>\n<em class=\"deadline\">", $deadlines),
-                "</em>";
+            echo '<p>', join("<br>\n", $deadlines), "</p>";
         }
 
         echo "</div>\n";

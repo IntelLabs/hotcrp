@@ -66,7 +66,7 @@ const TAG_REGEX = '~?~?' . TAG_REGEX_NOTWIDDLE;
 const TAG_MAXLEN = 80;
 const TAG_INDEXBOUND = 2147483646;
 
-global $Conf, $Now;
+global $Conf;
 
 require_once("siteloader.php");
 require_once(SiteLoader::find("lib/navigation.php"));
@@ -81,6 +81,9 @@ require_once(SiteLoader::find("src/contact.php"));
 Conf::set_current_time(microtime(true));
 if (defined("HOTCRP_TESTHARNESS")) {
     Conf::$test_mode = true;
+}
+if (PHP_SAPI === "cli") {
+    set_exception_handler("Multiconference::batch_exception_handler");
 }
 
 
@@ -98,24 +101,27 @@ if (PHP_VERSION_ID < 80000
 
 function expand_json_includes_callback($includelist, $callback) {
     $includes = [];
-    foreach (is_array($includelist) ? $includelist : [$includelist] as $k => $str) {
+    foreach (is_array($includelist) ? $includelist : [$includelist] as $k => $v) {
+        if ($v === null || $v === false || $v === "") {
+            continue;
+        }
         $expandable = null;
-        if (is_string($str)) {
-            if (str_starts_with($str, "@")) {
-                $expandable = substr($str, 1);
-            } else if (!str_starts_with($str, "{")
-                       && (!str_starts_with($str, "[") || !str_ends_with(rtrim($str), "]"))
-                       && !ctype_space($str[0])) {
-                $expandable = $str;
+        if (is_string($v)) {
+            if (str_starts_with($v, "@")) {
+                $expandable = substr($v, 1);
+            } else if (!str_starts_with($v, "{")
+                       && (!str_starts_with($v, "[") || !str_ends_with(rtrim($v), "]"))
+                       && !ctype_space($v[0])) {
+                $expandable = $v;
             }
         }
-        if ($expandable) {
+        if ($expandable !== null) {
             foreach (SiteLoader::expand_includes($expandable) as $f) {
                 if (($x = file_get_contents($f)))
                     $includes[] = [$x, $f];
             }
         } else {
-            $includes[] = [$str, "entry $k"];
+            $includes[] = [$v, "entry $k"];
         }
     }
     foreach ($includes as $xentry) {
@@ -145,27 +151,31 @@ function expand_json_includes_callback($includelist, $callback) {
 }
 
 
-function initialize_conf() {
+/** @param ?string $config_file
+ * @param ?string $confid
+ * @return Conf */
+function initialize_conf($config_file = null, $confid = null) {
     global $Opt;
     $Opt = $Opt ?? [];
     if (!($Opt["loaded"] ?? null)) {
-        SiteLoader::read_main_options();
-        if ($Opt["multiconference"] ?? null) {
-            Multiconference::init();
+        SiteLoader::read_main_options($config_file);
+        if ($confid !== null) {
+            $Opt["confid"] = $confid;
+        } else if ($Opt["multiconference"] ?? null) {
+            Multiconference::init($confid);
         }
         if ($Opt["include"] ?? null) {
             SiteLoader::read_included_options();
         }
     }
-    if (!($Opt["loaded"] ?? null) || ($Opt["missing"] ?? null)) {
+    if ($Opt["missing"] ?? null) {
         Multiconference::fail_bad_options();
     }
     if ($Opt["dbLogQueries"] ?? null) {
         Dbl::log_queries($Opt["dbLogQueries"], $Opt["dbLogQueryFile"] ?? null);
     }
 
-
-    // Allow lots of memory
+    // allow lots of memory
     if (!($Opt["memoryLimit"] ?? null) && ini_get_bytes("memory_limit") < (128 << 20)) {
         $Opt["memoryLimit"] = "128M";
     }
@@ -173,8 +183,7 @@ function initialize_conf() {
         ini_set("memory_limit", $Opt["memoryLimit"]);
     }
 
-
-    // Create the conference
+    // create the conference
     if (!($Opt["__no_main"] ?? false)) {
         if (!Conf::$main) {
             Conf::set_main_instance(new Conf($Opt, true));
@@ -183,20 +192,23 @@ function initialize_conf() {
             Multiconference::fail_bad_database();
         }
     }
+
+    return Conf::$main;
 }
 
 
 /** @param NavigationState $nav
  * @param int $uindex
- * @param int $nusers */
-function initialize_user_redirect($nav, $uindex, $nusers) {
+ * @param int $nusers
+ * @param bool $cookie */
+function initialize_user_redirect($nav, $uindex, $nusers, $cookie) {
     if ($nav->page === "api") {
         if ($nusers === 0) {
             json_exit(["ok" => false, "error" => "You have been signed out"]);
         } else {
             json_exit(["ok" => false, "error" => "Bad user specification"]);
         }
-    } else if ($_SERVER["REQUEST_METHOD"] === "GET") {
+    } else if ($_SERVER["REQUEST_METHOD"] === "GET" || $_SERVER["REQUEST_METHOD"] === "HEAD") {
         $page = $nav->base_absolute();
         if ($nusers > 0) {
             $page = "{$page}u/$uindex/";
@@ -204,7 +216,11 @@ function initialize_user_redirect($nav, $uindex, $nusers) {
         if ($nav->page !== "index" || $nav->path !== "") {
             $page = "{$page}{$nav->page}{$nav->php_suffix}{$nav->path}";
         }
-        Navigation::redirect_absolute($page . $nav->query);
+        $page .= $nav->query;
+        if ($cookie) {
+            Conf::$main->set_cookie("hc-uredirect-" . Conf::$now, $page, Conf::$now + 20);
+        }
+        Navigation::redirect_absolute($page);
     } else {
         Conf::$main->error_msg("<0>You have been signed out from this account");
     }
@@ -297,7 +313,7 @@ function initialize_request() {
             if (str_starts_with($nav->query, "&")) {
                 $nav->query = "?" . substr($nav->query, 1);
             }
-            initialize_user_redirect($nav, $uindex, count($userset));
+            initialize_user_redirect($nav, $uindex, count($userset), !isset($_GET["i"]));
         }
     } else if (str_starts_with($nav->shifted_path, "u/")) {
         $uindex = $usercount === 0 ? -1 : (int) substr($nav->shifted_path, 2);
@@ -305,7 +321,7 @@ function initialize_request() {
     if ($uindex >= 0 && $uindex < $usercount) {
         $trueemail = $userset[$uindex];
     } else if ($uindex !== 0) {
-        initialize_user_redirect($nav, 0, $usercount);
+        initialize_user_redirect($nav, 0, $usercount, false);
     }
 
     if (isset($_GET["i"])
@@ -347,10 +363,9 @@ function initialize_request() {
         && isset($_SESSION["login_bounce"])
         && !isset($_SESSION["testsession"])) {
         $lb = $_SESSION["login_bounce"];
-        if ($lb[0] == $conf->dsn
+        if ($lb[0] === $conf->dbname
             && $lb[2] !== "index"
-            && $lb[2] == Navigation::page()) {
-            assert($qreq instanceof Qrequest);
+            && $lb[2] === Navigation::page()) {
             foreach ($lb[3] as $k => $v) {
                 if (!isset($qreq[$k]))
                     $qreq[$k] = $v;
@@ -377,6 +392,3 @@ function initialize_request() {
         $_SESSION["addrs"] = $as;
     }
 }
-
-
-initialize_conf();
