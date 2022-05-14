@@ -13,13 +13,13 @@ class NavigationState {
     /** @var string */
     public $server;             // "PROTOCOL://HOST[:PORT]"
     /** @var string */
-    public $site_path;          // "/SITEPATH/"; always ends in /
-    /** @var string */
-    public $site_path_relative; // "/SITEPATH/", "../"+, or ""
-    /** @var string */
-    public $base_path;          // "/BASEPATH/"; always ends in /; prefix of $site_path
+    public $base_path;          // "/BASEPATH/"; always ends in /
     /** @var string */
     public $base_path_relative; // "/BASEPATH/", "../"+, or ""
+    /** @var string */
+    public $site_path;          // "/SITEPATH/"; always ends in /; suffix of $site_path
+    /** @var string */
+    public $site_path_relative; // "/SITEPATH/", "../"+, or ""
     /** @var string */
     public $page;               // "PAGE" or "index" (.php suffix stripped)
     /** @var string */
@@ -464,12 +464,8 @@ class Navigation {
 <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />
 <meta http-equiv=\"Content-Script-Type\" content=\"text/javascript\" />
 <title>Redirection</title>
-<script>location=", json_encode($url), ";</script>
-<script type=\"text/javascript\" src=\"https://appleid.cdn.apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js\"></script>
-</head>
-<body>
-<p>You should be redirected <a href=\"", htmlspecialchars($url), "\">to here</a>.</p>
-</body></html>\n";
+<script>location=", json_encode($url), ";</script></head>
+<body><p>You should be redirected <a href=\"", htmlspecialchars($url), "\">to here</a>.</p></body></html>\n";
         exit();
     }
 }

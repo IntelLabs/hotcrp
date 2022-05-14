@@ -412,7 +412,7 @@ function get($var, $idx, $default = null) {
 /** @param mixed $a */
 function array_to_object_recursive($a) {
     if (is_array($a) && is_associative_array($a)) {
-        $o = (object) array();
+        $o = (object) [];
         foreach ($a as $k => $v) {
             if ($k !== "")
                 $o->$k = array_to_object_recursive($v);
@@ -468,7 +468,8 @@ function json_object_replace($j, $updates, $nullable = false) {
 
 function caller_landmark($position = 1, $skipfunction_re = null) {
     if (is_string($position)) {
-        list($position, $skipfunction_re) = array(1, $position);
+        $skipfunction_re = $position;
+        $position = 1;
     }
     $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
     $fname = null;
@@ -495,15 +496,20 @@ function assert_callback() {
 }
 //assert_options(ASSERT_CALLBACK, "assert_callback");
 
-/** @return string */
-function debug_string_backtrace() {
-    $s = preg_replace_callback('/^\#(\d+)/m', function ($m) {
-        return "#" . ($m[1] - 1);
-    }, (new Exception)->getTraceAsString());
+/** @param ?Throwable $ex
+ * @return string */
+function debug_string_backtrace($ex = null) {
+    $s = ($ex ?? new Exception)->getTraceAsString();
+    if (!$ex) {
+        $s = substr($s, strpos($s, "\n") + 1);
+        $s = preg_replace_callback('/^\#(\d+)/m', function ($m) {
+            return "#" . ($m[1] - 1);
+        }, $s);
+    }
     if (SiteLoader::$root) {
         $s = str_replace(SiteLoader::$root, "[" . (Conf::$main ? Conf::$main->dbname : "HotCRP") . "]", $s);
     }
-    return substr($s, strpos($s, "\n") + 1);
+    return $s;
 }
 
 
@@ -559,6 +565,21 @@ function tempdir($mode = 0700) {
         }
     }
     return false;
+}
+
+
+function error_get_last_as_exception($prefix) {
+    $msg = preg_replace('/.*: /', "", error_get_last()["message"]);
+    return new RuntimeException($prefix . $msg);
+}
+
+/** @return string */
+function file_get_contents_throw($filename) {
+    $s = @file_get_contents($filename);
+    if ($s === false) {
+        throw error_get_last_as_exception("{$filename}: ");
+    }
+    return $s;
 }
 
 

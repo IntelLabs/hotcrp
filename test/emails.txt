@@ -1240,8 +1240,16 @@ To: Jane Chair <chair@_.com>
 Subject: [Testconf I] Comment for #2 "Small Forwarding Tables for Fast
  Routing..."
 
-A comment for Test Conference I (Testconf I) submission #2 has been
-posted. For the most up-to-date comments, or to unsubscribe from email
+Comment @1 by Mary Baker <mgbaker@cs.stanford.edu>
+---------------------------------------------------------------------------
+test
+
+
+\***************************************************************************
+
+
+You’re following comments for Test Conference I (Testconf I) submission
+#2. For the most up-to-date comments, or to unsubscribe from email
 notification, see the submission site.
 
 * Title: Small Forwarding Tables for Fast Routing Lookups
@@ -1251,11 +1259,30 @@ Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
 
 - Testconf I Submissions
+******** test01-comment6
+To: Jane Chair <chair@_.com>
+Subject: [Testconf I] Mentioned for #2 "Small Forwarding Tables for Fast
+ Routing..."
 
-Comment @1 by Mary Baker <mgbaker@cs.stanford.edu>
+Comment @3 by Mary Baker <mgbaker@cs.stanford.edu>
 ---------------------------------------------------------------------------
-test
+third test, @Jane Chair
 
+
+\***************************************************************************
+
+
+You were mentioned in this comment for Test Conference I (Testconf I)
+submission #2. For the most up-to-date comments, see the submission
+site.
+
+* Title: Small Forwarding Tables for Fast Routing Lookups
+* Site: http://hotcrp.lcdf.org/test/paper/2
+
+Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
+concerns.
+
+- Testconf I Submissions
 ******** test01-review2A
 To: Jane Chair <chair@_.com>
 Subject: [Testconf I] Submitted review #2A "Small Forwarding Tables for Fast
@@ -1400,8 +1427,8 @@ Paper summary
 -------------
 No summary
 
-Comments for author
--------------------
+Comments for authors
+--------------------
 No comments
 
 ******** test06-17external
@@ -1444,8 +1471,8 @@ Paper summary
 -------------
 Hi
 
-Comments for author
--------------------
+Comments for authors
+--------------------
 Bye
 
 ******** test06-17lixia
@@ -1488,8 +1515,8 @@ Paper summary
 -------------
 Radical
 
-Comments for author
--------------------
+Comments for authors
+--------------------
 Nonradical
 
 ******** test06-external2-request17
@@ -1733,8 +1760,8 @@ Paper summary
 -------------
 Summary V
 
-Comments for author
--------------------
+Comments for authors
+--------------------
 Comments V
 
 ******** test05-reject14-2
@@ -1784,7 +1811,7 @@ Paper summary
 -------------
 Summary V
 
-Comments for author
--------------------
+Comments for authors
+--------------------
 Comments V
 

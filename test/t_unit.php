@@ -40,34 +40,34 @@ class Unit_Tester {
     }
 
     function test_escape_like() {
-        xassert_eqq(Dbl::fetch_ivalue("select '1' like binary ? from dual", Dbl::escape_like("1")), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '%' like binary ? from dual", Dbl::escape_like("%")), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '!' like binary ? from dual", Dbl::escape_like("%")), 0);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ? from dual", "\\", Dbl::escape_like("\\")), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ? from dual", "\n", Dbl::escape_like("\n")), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ? from dual", "\\x", Dbl::escape_like("\\x")), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ? from dual", "xx", Dbl::escape_like("\\x")), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select '1' like cast(? as binary) from dual", Dbl::escape_like("1")), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '%' like cast(? as binary) from dual", Dbl::escape_like("%")), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '!' like cast(? as binary) from dual", Dbl::escape_like("%")), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(? as binary) from dual", "\\", Dbl::escape_like("\\")), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(? as binary) from dual", "\n", Dbl::escape_like("\n")), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(? as binary) from dual", "\\x", Dbl::escape_like("\\x")), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(? as binary) from dual", "xx", Dbl::escape_like("\\x")), 0);
 
-        xassert_eqq(Dbl::fetch_ivalue("select '1' like binary ?l from dual", "1"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '1' like binary ?l from dual", 1), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '%' like binary ?l from dual", "%"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '!' like binary ?l from dual", "%"), 0);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ?l from dual", "\\", "\\"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ?l from dual", "\n", "\n"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ?l from dual", "\\x", "\\x"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ?l from dual", "xx", "\\x"), 0);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ?l from dual", "xx", "%x"), 0);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary ? from dual", "xx", "%x"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '1' like cast(?l as binary) from dual", "1"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '1' like cast(?l as binary) from dual", 1), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '%' like cast(?l as binary) from dual", "%"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '!' like cast(?l as binary) from dual", "%"), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(?l as binary) from dual", "\\", "\\"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(?l as binary) from dual", "\n", "\n"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(?l as binary) from dual", "\\x", "\\x"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(?l as binary) from dual", "xx", "\\x"), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(?l as binary) from dual", "xx", "%x"), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast(? as binary) from dual", "xx", "%x"), 1);
 
-        xassert_eqq(Dbl::fetch_ivalue("select '1' like binary '?ls' from dual", "1"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '1' like binary '?ls' from dual", 1), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '%' like binary '?ls' from dual", "%"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select '!' like binary '?ls' from dual", "%"), 0);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary '?ls' from dual", "\\", "\\"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary '?ls' from dual", "\n", "\n"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary '?ls' from dual", "\\x", "\\x"), 1);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary '?ls' from dual", "xx", "\\x"), 0);
-        xassert_eqq(Dbl::fetch_ivalue("select ? like binary '?ls' from dual", "xx", "%x"), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select '1' like cast('?ls' as binary) from dual", "1"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '1' like cast('?ls' as binary) from dual", 1), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '%' like cast('?ls' as binary) from dual", "%"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select '!' like cast('?ls' as binary) from dual", "%"), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast('?ls' as binary) from dual", "\\", "\\"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast('?ls' as binary) from dual", "\n", "\n"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast('?ls' as binary) from dual", "\\x", "\\x"), 1);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast('?ls' as binary) from dual", "xx", "\\x"), 0);
+        xassert_eqq(Dbl::fetch_ivalue("select ? like cast('?ls' as binary) from dual", "xx", "%x"), 0);
     }
 
     function test_dbl_compare_and_swap() {
@@ -229,6 +229,21 @@ class Unit_Tester {
         xassert_eqq($csvr[2], "Hi");
     }
 
+    function test_csv_json() {
+        $csv = CsvParser::make_json(json_decode('[
+    {"pid":2,"Butts and Money":4,"thing":true},
+    {"paper":4, "Fungi": 10}
+]'));
+        $csv->add_synonym("pid", "paper");
+        $csvr = $csv->next_row();
+        xassert_eqq($csvr["pid"], "2");
+        xassert_eqq($csvr["butts_and_money"], "4");
+        xassert_eqq($csvr["thing"], "Y");
+        $csvr = $csv->next_row();
+        xassert_eqq($csvr["pid"], "4");
+        xassert_eqq($csvr["Fungi"], "10");
+    }
+
     function test_numrangejoin() {
         xassert_eqq(numrangejoin([1, 2, 3, 4, 6, 8]), "1–4, 6, and 8");
         xassert_eqq(numrangejoin(["#1", "#2", "#3", 4, "xx6", "xx7", 8]), "#1–3, 4, xx6–7, and 8");
@@ -290,22 +305,43 @@ class Unit_Tester {
     function test_json() {
         xassert_eqq(json_encode(Json::decode("{}")), "{}");
         xassert_eqq(json_encode(Json::decode('"\\u0030"')), '"0"');
+        xassert_eqq(json_encode(Json::decode('""')), '""');
+        xassert_eqq(json_encode(Json::decode('"')), 'null');
+        xassert_eqq(json_encode(Json::decode('"\\""')), '"\\""');
+        xassert_eqq(json_encode(Json::decode('"\\"\\\\"')), '"\\"\\\\"');
+        xassert_eqq(json_encode(Json::decode('"\\"\\\\\\')), 'null');
+        xassert_eqq(json_encode(Json::decode("null")), "null");
+        xassert_eqq(json_encode(Json::decode("true")), "true");
+        xassert_eqq(json_encode(Json::decode("false")), "false");
+        xassert_eqq(Json::decode('"'), null);
+        xassert_eqq(Json::decode("\"\r\n\""), null);
+        xassert_eqq(Json::decode("\"\027\""), null);
         xassert_eqq(Json::encode("\n"), '"\\n"');
         xassert_eqq(Json::encode("\007"), '"\\u0007"');
         xassert_eqq(Json::encode("–"), '"–"');
         xassert_eqq(Json::decode(Json::encode("–")), "–");
         xassert_eqq(Json::decode(Json::encode("\xE2\x80\xA8\xE2\x80\xA9")), "\xE2\x80\xA8\xE2\x80\xA9");
         xassert_eqq(json_encode(Json::decode('{"1":"1"}')), '{"1":"1"}');
-        $x = Json::decode_landmarks('{
+        xassert_eqq(json_encode(Json::decode('[1,"1"]   ')), '[1,"1"]');
+        xassert_eqq(json_encode(Json::decode('[1,"1"]   !')), "null");
+        $jp = new JsonParser;
+        $x = $jp->input('{
     "a": ["b", "c"],
     "b": {
         "c": "d"
     }
-}', "x.txt");
-        xassert_match($x->a[0], "/^x.txt:2(?::|\$)/");
-        xassert_match($x->a[1], "/^x.txt:2(?::|\$)/");
-        xassert_match($x->b->c, "/^x.txt:4(?::|\$)/");
-        xassert_match($x->b->__LANDMARK__, "/^x.txt:3(?::|\$)/");
+}')->flags(JSON_THROW_ON_ERROR)->decode_positions();
+        $jp->filename("x.txt");
+        xassert_eqq($jp->position_landmark($x->a[0]), "x.txt:2:11");
+        xassert_eqq($jp->path_landmark(" . a   "), "x.txt:2:11");
+        xassert_eqq($jp->path_landmark("b"), "x.txt:3:10");
+        xassert_eqq($jp->path_landmark("a[0]"), "x.txt:2:11");
+        xassert_eqq($jp->position_landmark($x->a[1]), "x.txt:2:16");
+        xassert_eqq($jp->path_landmark(".a.1"), "x.txt:2:16");
+        xassert_eqq($jp->position_landmark($x->b->c), "x.txt:4:14");
+        xassert_eqq($jp->path_landmark("[  \"b\"   ][   \"c\"]"), "x.txt:4:14");
+        xassert_eqq($jp->position_landmark($x->b->__LANDMARK__), "x.txt:3:10");
+        xassert_eqq($jp->path_landmark("[  \"b\"   ][   \"c\"].d"), "x.txt:4:14");
     }
 
     function test_json_object_replace() {

@@ -6,5 +6,6 @@
 declare(strict_types=1);
 require_once(__DIR__ . '/setup.php');
 TestRunner::reset_db();
-TestRunner::go(new Reviews_Tester($Conf));
+TestRunner::go(new Reviews_Tester(Conf::$main));
+TestRunner::go(new Comments_Tester(Conf::$main));
 xassert_exit();

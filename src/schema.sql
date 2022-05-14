@@ -63,6 +63,7 @@ CREATE TABLE `ContactInfo` (
   `lastLogin` bigint(11) NOT NULL DEFAULT 0,
   `defaultWatch` int(11) NOT NULL DEFAULT 2,
   `roles` tinyint(1) NOT NULL DEFAULT 0,
+  `cdbRoles` tinyint(1) NOT NULL DEFAULT 0,
   `disabled` tinyint(1) NOT NULL DEFAULT 0,
   `contactTags` varbinary(4096) DEFAULT NULL,
   `data` varbinary(32767) DEFAULT NULL,
@@ -331,19 +332,18 @@ CREATE TABLE `PaperReview` (
   `reviewAuthorNotified` bigint(11) NOT NULL DEFAULT 0,
   `reviewEditVersion` int(1) NOT NULL DEFAULT 0,
   `reviewWordCount` int(11) DEFAULT NULL,
-  `reviewFormat` tinyint(1) DEFAULT NULL,
 
-  `overAllMerit` tinyint(1) NOT NULL DEFAULT 0,
-  `reviewerQualification` tinyint(1) NOT NULL DEFAULT 0,
-  `novelty` tinyint(1) NOT NULL DEFAULT 0,
-  `technicalMerit` tinyint(1) NOT NULL DEFAULT 0,
-  `interestToCommunity` tinyint(1) NOT NULL DEFAULT 0,
-  `longevity` tinyint(1) NOT NULL DEFAULT 0,
-  `grammar` tinyint(1) NOT NULL DEFAULT 0,
-  `likelyPresentation` tinyint(1) NOT NULL DEFAULT 0,
-  `suitableForShort` tinyint(1) NOT NULL DEFAULT 0,
-  `potential` tinyint(4) NOT NULL DEFAULT 0,
-  `fixability` tinyint(4) NOT NULL DEFAULT 0,
+  `s01` tinyint(1) NOT NULL DEFAULT 0,
+  `s02` tinyint(1) NOT NULL DEFAULT 0,
+  `s03` tinyint(1) NOT NULL DEFAULT 0,
+  `s04` tinyint(1) NOT NULL DEFAULT 0,
+  `s05` tinyint(1) NOT NULL DEFAULT 0,
+  `s06` tinyint(1) NOT NULL DEFAULT 0,
+  `s07` tinyint(1) NOT NULL DEFAULT 0,
+  `s08` tinyint(1) NOT NULL DEFAULT 0,
+  `s09` tinyint(1) NOT NULL DEFAULT 0,
+  `s10` tinyint(4) NOT NULL DEFAULT 0,
+  `s11` tinyint(4) NOT NULL DEFAULT 0,
 
   `tfields` longblob,
   `sfields` varbinary(2048) DEFAULT NULL,
@@ -562,7 +562,7 @@ CREATE TABLE `TopicInterest` (
 
 
 
-insert into Settings (name, value) values ('allowPaperOption', 259);
+insert into Settings (name, value) values ('allowPaperOption', 260);
 insert into Settings (name, value) values ('setupPhase', 1);
 -- there are no submissions yet
 insert into Settings (name, value) values ('no_papersub', 1);
@@ -576,8 +576,6 @@ insert into Settings (name, value) values ('pcrev_any', 1);
 insert into Settings (name, value) values ('extrev_view', 2);
 -- default: administrators must approve potentially-conflicted external reviews
 insert into Settings (name, value) values ('extrev_chairreq', 2);
--- default review form
-insert into Settings (name, value, data) values ('review_form',1,'{"overAllMerit":{"name":"Overall merit","order":1,"visibility":"au","options":["Reject","Weak reject","Weak accept","Accept","Strong accept"]},"reviewerQualification":{"name":"Reviewer expertise","order":2,"visibility":"au","options":["No familiarity","Some familiarity","Knowledgeable","Expert"]},"t01":{"name":"Paper summary","order":3,"visibility":"au"},"t02":{"name":"Comments for author","order":4,"visibility":"au"},"t03":{"name":"Comments for PC","order":5,"visibility":"pc"}}');
 
 insert ignore into PaperStorage set
     paperStorageId=1, paperId=0, timestamp=0, mimetype='text/plain',

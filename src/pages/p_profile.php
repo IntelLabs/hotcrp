@@ -78,7 +78,8 @@ class Profile_Page {
                 $cs = new ContactSearch(ContactSearch::F_USER, $u, $this->viewer);
                 if ($cs->user_ids()) {
                     $user = $this->conf->user_by_id(($cs->user_ids())[0]);
-                    $list = new SessionList("u/all/" . urlencode($this->qreq->search), $cs->user_ids(), "“" . htmlspecialchars($u) . "”", $this->conf->hoturl_raw("users", ["t" => "all"], Conf::HOTURL_SITEREL));
+                    $list = (new SessionList("u/all/" . urlencode($this->qreq->search), $cs->user_ids(), "“{$u}”"))
+                        ->set_urlbase($this->conf->hoturl_raw("users", ["t" => "all"], Conf::HOTURL_SITEREL));
                     $list->set_cookie($this->viewer);
                     $this->qreq->u = $user->email;
                 } else {
@@ -213,7 +214,7 @@ class Profile_Page {
         }
 
         // save account
-        return $ustatus->save($ustatus->jval, $acct);
+        return $ustatus->save_user($ustatus->jval, $acct);
     }
 
 
@@ -286,20 +287,26 @@ class Profile_Page {
             $ustatus->csvreq = $line;
             $ustatus->parse_csv_group("");
             $ustatus->notify = friendly_boolean($line["notify"]) ?? true;
-            if (($saved_user = $this->save_user($ustatus, null))) {
+            $saved_user = $this->save_user($ustatus, null);
+            if ($saved_user) {
                 $url = $this->conf->hoturl("profile", "u=" . urlencode($saved_user->email));
-                $x = "<a class=\"nb\" href=\"{$url}\">" . $saved_user->name_h(NAME_E) . "</a>";
+                $link = "<a class=\"nb\" href=\"{$url}\">" . $saved_user->name_h(NAME_E) . "</a>";
                 if ($ustatus->notified) {
-                    $notified[] = $x;
-                    $success[] = $x;
+                    $notified[] = $link;
+                    $success[] = $link;
                 } else if (!empty($ustatus->diffs)) {
-                    $success[] = $x;
+                    $success[] = $link;
                 } else {
-                    $nochanges[] = $x;
+                    $nochanges[] = $link;
                 }
+            } else {
+                $link = null;
             }
             foreach ($ustatus->problem_list() as $mi) {
                 $mi->landmark = $csv->landmark();
+                if ($link !== null && $mi->status !== MessageSet::INFORM) {
+                    $mi->message = "<5>" . $mi->message_as(5) . " (account {$link})";
+                }
                 $ms->append_item($mi);
             }
         }
@@ -309,12 +316,12 @@ class Profile_Page {
         }
         $mpos = 0;
         if (!empty($success)) {
-            $ms->splice_item($mpos++, MessageItem::success($this->conf->_("<5>Accounts %#s saved", $success)));
+            $ms->splice_item($mpos++, MessageItem::success($this->conf->_("<5>Saved accounts %#s", $success)));
         } else if ($ms->has_error()) {
             $ms->splice_item($mpos++, MessageItem::error($this->conf->_("<0>Changes not saved; please correct these errors and try again")));
         }
         if (!empty($notified)) {
-            $ms->splice_item($mpos++, MessageItem::success($this->conf->_("<5>Accounts %#s activated with email notification", $notified)));
+            $ms->splice_item($mpos++, MessageItem::success($this->conf->_("<5>Activated accounts with email notification %#s", $notified)));
         }
         if (!empty($nochanges)) {
             $ms->splice_item($mpos++, new MessageItem(null, $this->conf->_("<5>No changes to accounts %#s", $nochanges), MessageSet::MARKED_NOTE));
@@ -689,7 +696,7 @@ class Profile_Page {
             echo '</h2>';
         }
 
-        if (($this->conf->report_saved_messages() < 1 || $use_req)
+        if (($this->conf->report_saved_messages() < 1 || !$use_req)
             && $this->ustatus->has_message()) {
             $this->conf->feedback_msg($this->ustatus);
         }

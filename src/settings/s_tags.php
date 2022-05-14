@@ -26,20 +26,8 @@ class Tags_SettingRenderer {
     static function print_tag_rank(SettingValues $sv) {
         $sv->print_entry_group("tag_rank", null, null, 'The <a href="' . $sv->conf->hoturl("offline") . '">offline reviewing page</a> will expose support for uploading rankings by this tag. (<a href="' . $sv->conf->hoturl("help", "t=ranking") . '">Help</a>)');
     }
-    static function print(SettingValues $sv) {
-        // Tags
-        echo '<div class="form-g">';
-        $sv->print_group("tags/main");
-        echo "</div>\n";
-
-        echo '<div class="form-g">';
-        $sv->print_group("tags/visibility");
-        echo "</div>\n";
-    }
     static function print_tag_seeall(SettingValues $sv) {
-        echo '<div class="form-g-2">';
         $sv->print_checkbox('tag_seeall', "PC can see tags for conflicted submissions");
-        echo '</div>';
     }
     static function print_styles(SettingValues $sv) {
         $skip_colors = [];
@@ -155,10 +143,9 @@ class Tags_SettingParser extends SettingParser {
             $new_votish[] = "";
 
             // remove negative votes
-            $pcm = $sv->conf->pc_members();
             $removals = [];
             foreach ($new_votish as $t) {
-                list($tag, $index) = Tagger::unpack($t);
+                list($tag, $unused_index) = Tagger::unpack($t);
                 if ($tag !== false) {
                     $removals[] = "right(tag," . (strlen($tag) + 1) . ")='~" . sqlq($tag) . "'";
                 }
@@ -172,7 +159,7 @@ class Tags_SettingParser extends SettingParser {
 
             // remove no-longer-active voting tags
             if (($removed_votish = array_diff($old_votish, $new_votish))) {
-                $result = $sv->conf->qe("delete from PaperTag where tag?a", array_values($removed_votish));
+                $sv->conf->qe("delete from PaperTag where tag?a", array_values($removed_votish));
             }
 
             $sv->mark_invalidate_caches(["autosearch" => true]);

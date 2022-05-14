@@ -313,7 +313,7 @@ class Constant_Fexpr extends Fexpr {
             $this->x = 89 - ord($letter);
         } else if ($format === Fexpr::FREVIEWFIELD
                    && $letter
-                   && ($x = $format_detail->parse_option_value($letter))) {
+                   && ($x = $format_detail->parse_value($letter))) {
             $this->x = $x;
         } else if ($format === Fexpr::FROUND
                    && ($round = $formula->conf->round_number($this->x, false)) !== null) {
@@ -758,8 +758,8 @@ class Aggregate_Fexpr extends Fexpr {
 
     function typecheck(Formula $formula) {
         $ok = $this->typecheck_arguments($formula);
-        if (($this->op !== "argmin"
-            && $this->op !== "argmax")
+        if ($this->op !== "argmin"
+            && $this->op !== "argmax"
             && !$this->args[0]->math_format()) {
             $formula->fexpr_lerror($this->args[0], $this->args[0]->disallowed_use_error());
             $ok = false;
@@ -1251,7 +1251,7 @@ class FormulaCompiler {
         if (!in_array($f, $this->queryOptions["scores"] ?? [])) {
             $this->queryOptions["scores"][] = $f;
         }
-        if ($this->check_gvar('$ensure_score_' . $f->id)) {
+        if ($this->check_gvar('$ensure_score_' . $f->short_id)) {
             $this->g0stmt[] = $this->_prow() . '->ensure_review_field_order(' . $f->order . ');';
         }
     }
@@ -1267,7 +1267,7 @@ class FormulaCompiler {
     private function _push() {
         $this->_stack[] = [$this->_lprefix, $this->lstmt, $this->index_type, $this->indexed, $this->_lflags];
         $this->_lprefix = ++$this->_maxlprefix;
-        $this->lstmt = array();
+        $this->lstmt = [];
         $this->index_type = Fexpr::IDX_NONE;
         $this->indexed = false;
         $this->_lflags = 0;
@@ -1306,7 +1306,6 @@ class FormulaCompiler {
     /** @param int $index_types
      * @return string */
     function loop_variable($index_types) {
-        $g = array();
         if ($index_types === Fexpr::IDX_TAGPC) {
             return $this->_add_tag_pc();
         } else if ($index_types === Fexpr::IDX_REVIEW) {
@@ -1396,7 +1395,7 @@ class FormulaCompiler {
 
     /** @return string */
     function _compile_my(Fexpr $e) {
-        $p = $this->_push();
+        $this->_push();
         $this->index_type = Fexpr::IDX_MY;
         $t = $this->_addltemp($e->compile($this));
         $loop = $this->_join_lstmt(false);
@@ -1463,7 +1462,7 @@ class Formula implements JsonSerializable {
     /** @var bool */
     const DEBUG = false;
 
-    static public $opprec = array(
+    static public $opprec = [
         "**" => 13,
         "u+" => 12, "u-" => 12, "u!" => 12,
         "*" => 11, "/" => 11, "%" => 11,
@@ -1479,16 +1478,16 @@ class Formula implements JsonSerializable {
         "||" => 1, "or" => 1,
         "?:" => 0,
         "in" => -1
-    );
+    ];
 
-    static private $_oprassoc = array(
+    static private $_oprassoc = [
         "**" => true
-    );
+    ];
 
-    static private $_oprewrite = array(
+    static private $_oprewrite = [
         "=" => "==", ":" => "==", "≤" => "<=", "≥" => ">=", "≠" => "!=",
         "and" => "&&", "or" => "||"
-    );
+    ];
 
     const ALLOW_INDEXED = 1;
     /** @param ?string $expr
@@ -1531,6 +1530,7 @@ class Formula implements JsonSerializable {
         }
     }
 
+    /** @return string */
     function abbreviation() {
         if ($this->_abbreviation === null) {
             $this->conf->abbrev_matcher();
@@ -1876,7 +1876,6 @@ class Formula implements JsonSerializable {
                 || preg_match('/\A(?:null|false|true|pid|paperid)\z/i', $m[1])) {
                 break;
             }
-            $ee = null;
             if (preg_match('/\A(?:type|round|reviewer|words|auwords)\z/i', $m[1])) {
                 if ($e0) {
                     break;
@@ -2420,7 +2419,7 @@ class Formula implements JsonSerializable {
             if ($this->_format === Fexpr::FREVIEWFIELD) {
                 return $this->_format_detail->unparse_value($rx, ReviewField::VALUE_SC, $real_format);
             } else if ($this->_format === Fexpr::FPREFEXPERTISE) {
-                return ReviewField::unparse_letter(91, $x + 2);
+                return Score_ReviewField::unparse_letter(91, $x + 2);
             } else if ($this->_format === Fexpr::FREVIEWER) {
                 return $this->user->reviewer_html_for($x);
             } else if ($this->_format === Fexpr::FDATE
@@ -2449,7 +2448,7 @@ class Formula implements JsonSerializable {
             if ($this->_format === Fexpr::FREVIEWFIELD) {
                 return $this->_format_detail->unparse_value($rx, 0, $real_format);
             } else if ($this->_format === Fexpr::FPREFEXPERTISE) {
-                return ReviewField::unparse_letter(91, $x + 2);
+                return Score_ReviewField::unparse_letter(91, $x + 2);
             } else if ($this->_format === Fexpr::FREVIEWER) {
                 return $this->user->name_text_for($x);
             } else if ($this->_format === Fexpr::FDATE

@@ -9,11 +9,13 @@ class Topics_SettingParser extends SettingParser {
     private $newtopics;
 
     function set_oldv(SettingValues $sv, Si $si) {
-        if ($si->name === "topic__newlist") {
+        if ($si->name === "new_topics") {
             $sv->set_oldv($si->name, "");
         } else if ($si->part0 === "topic__") {
             $tn = $sv->unmap_enumeration_member($si->name, $sv->conf->topic_set()->as_array());
-            $sv->set_oldv($si->name, (object) ["name" => $tn]);
+            if ($tn !== null) {
+                $sv->set_oldv($si->name, (object) ["id" => intval($si->part1), "name" => $tn]);
+            }
         }
     }
 
@@ -28,7 +30,7 @@ class Topics_SettingParser extends SettingParser {
         $interests = [];
         while (($row = $result->fetch_row())) {
             $interests[$row[0]] = $interests[$row[0]] ?? [0, 0];
-            $interests[$row[0]][$row[1] > 0] += 1;
+            $interests[$row[0]][$row[1] > 0 ? 1 : 0] += 1;
         }
         Dbl::free($result);
 
@@ -36,7 +38,7 @@ class Topics_SettingParser extends SettingParser {
         if ($sv->conf->has_topics()) {
             echo " To delete an existing topic, remove its name.";
         }
-        echo "</p>\n", Ht::hidden("has_topics", 1);
+        echo "</p>\n", Ht::hidden("has_topic", 1);
 
         if (($topic_counters = $sv->enumerate("topic__"))) {
             echo '<div class="mg has-copy-topics"><table><thead><tr><th style="text-align:left">';
@@ -56,8 +58,8 @@ class Topics_SettingParser extends SettingParser {
                 echo '</td>';
                 if (!empty($interests)) {
                     $ti = $interests[$tid] ?? [null, null];
-                    echo '<td class="fx plr padls">', ($ti[0] ? '<span class="topic-2">' . $ti[0] . "</span>" : ""), "</td>",
-                        '<td class="fx plr padls">', ($ti[1] ? '<span class="topic2">' . $ti[1] . "</span>" : ""), "</td>";
+                    echo '<td class="fx plr padls">', ($ti[0] ? '<span class="topic-1">' . $ti[0] . "</span>" : ""), "</td>",
+                        '<td class="fx plr padls">', ($ti[1] ? '<span class="topic1">' . $ti[1] . "</span>" : ""), "</td>";
                 }
             }
             echo '</tbody></table>',
@@ -65,9 +67,9 @@ class Topics_SettingParser extends SettingParser {
                 "</div>\n";
         }
 
-        echo '<div class="mg"><label for="topic__newlist"><strong>New topics</strong></label> (enter one per line)<br>',
-            $sv->feedback_at("topic__newlist"),
-            Ht::textarea("topic__newlist", $sv->use_req() ? $sv->reqstr("topic__newlist") : "", array("cols" => 80, "rows" => 2, "class" => ($sv->has_problem_at("topic__newlist") ? "has-error " : "") . "need-autogrow", "id" => "topic__newlist")), "</div>";
+        echo '<div class="mg"><label for="new_topics"><strong>New topics</strong></label> (enter one per line)<br>',
+            $sv->feedback_at("new_topics"),
+            Ht::textarea("new_topics", $sv->use_req() ? $sv->reqstr("new_topics") : "", ["cols" => 80, "rows" => 2, "class" => ($sv->has_problem_at("new_topics") ? "has-error " : "") . "need-autogrow", "id" => "new_topics"]), "</div>";
     }
 
     /** @return bool */
@@ -81,7 +83,7 @@ class Topics_SettingParser extends SettingParser {
                 ++$ctr;
             }
         }
-        $sv->set_req("topic__newlist", "");
+        $sv->set_req("new_topics", "");
         return true;
     }
 
@@ -121,9 +123,9 @@ class Topics_SettingParser extends SettingParser {
     }
 
     function apply_req(SettingValues $sv, Si $si) {
-        if ($si->name === "topic__newlist") {
+        if ($si->name === "new_topics") {
             return $this->_apply_req_newlist($sv, $si);
-        } else if ($si->name === "topics") {
+        } else if ($si->name === "topic") {
             return $this->_apply_req_topics($sv, $si);
         } else {
             return false;
@@ -132,7 +134,7 @@ class Topics_SettingParser extends SettingParser {
 
     function store_value(SettingValues $sv, Si $si) {
         $oldm = $sv->conf->topic_set()->as_array();
-        $newt2 = $delt = $changet = [];
+        $newt2 = $changet = [];
         foreach ($this->topicj as $tid => $tname) {
             if (!isset($oldm[$tid])) {
                 $newt2[] = [$tid, $tname];

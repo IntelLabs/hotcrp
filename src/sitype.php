@@ -2,28 +2,28 @@
 // sitype.php -- HotCRP conference settings types
 // Copyright (c) 2022 Eddie Kohler; see LICENSE.
 
-class Sitype {
+abstract class Sitype {
     /** @var associative-array<string,class-string> */
     static private $type_classname = [
-        "checkbox" => "Checkbox_Sitype",
-        "cdate" => "Cdate_Sitype",
-        "date" => "Date_Sitype",
-        "email" => "Email_Sitype",
-        "emailheader" => "EmailHeader_Sitype",
-        "float" => "Float_Sitype",
-        "grace" => "Grace_Sitype",
-        "htmlstring" => "Html_Sitype",
-        "int" => "Nonnegint_Sitype", /* XXX */
-        "longstring" => "String_Sitype",
-        "nonnegint" => "Nonnegint_Sitype",
-        "radio" => "Radio_Sitype",
-        "simplestring" => "String_Sitype",
-        "string" => "String_Sitype",
-        "tag" => "Tag_Sitype",
-        "tagbase" => "Tag_Sitype",
-        "taglist" => "TagList_Sitype",
-        "tagselect" => "Tag_Sitype",
-        "url" => "Url_Sitype"
+        "checkbox" => "+Checkbox_Sitype",
+        "cdate" => "+Cdate_Sitype",
+        "date" => "+Date_Sitype",
+        "email" => "+Email_Sitype",
+        "emailheader" => "+EmailHeader_Sitype",
+        "float" => "+Float_Sitype",
+        "grace" => "+Grace_Sitype",
+        "htmlstring" => "+Html_Sitype",
+        "int" => "+Nonnegint_Sitype", /* XXX */
+        "longstring" => "+String_Sitype",
+        "nonnegint" => "+Nonnegint_Sitype",
+        "radio" => "+Radio_Sitype",
+        "simplestring" => "+String_Sitype",
+        "string" => "+String_Sitype",
+        "tag" => "+Tag_Sitype",
+        "tagbase" => "+Tag_Sitype",
+        "taglist" => "+TagList_Sitype",
+        "tagselect" => "+Tag_Sitype",
+        "url" => "+Url_Sitype"
     ];
     /** @var associative-array<string,?Sitype> */
     static private $type_class = [];
@@ -32,11 +32,20 @@ class Sitype {
      * @param ?string $subtype
      * @return ?Sitype */
     static function get(Conf $conf, $name, $subtype = null) {
+        assert($name !== null);
         $key = $subtype === null ? $name : "{$name}:{$subtype}";
         if (!array_key_exists($key, self::$type_class)) {
-            $tname = self::$type_classname[$name] ?? null;
-            /** @phan-suppress-next-line PhanParamTooMany */
-            self::$type_class[$key] = $tname ? new $tname($name, $subtype) : null;
+            if (array_key_exists($name, self::$type_classname)) {
+                $tstr = self::$type_classname[$name];
+            } else {
+                $tstr = $name;
+            }
+            if ($tstr[0] === "+") {
+                $tname = substr($tstr, 1);
+                self::$type_class[$key] = new $tname($name, $subtype);
+            } else {
+                self::$type_class[$key] = null;
+            }
         }
         return self::$type_class[$key];
     }
@@ -54,13 +63,23 @@ class Sitype {
     }
 
     /** @param string $vstr */
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
-        throw new ErrorException("Don't know how to parse {$si->name}");
+    abstract function parse_reqv($vstr, Si $si, SettingValues $sv);
+
+    /** @param null|int|string $v
+     * @return string */
+    function unparse_reqv($v, Si $si) {
+        return (string) $v;
     }
 
-    /** @return string */
-    function unparse_vstr($v, Si $si) {
-        return (string) $v;
+    /** @param mixed $jv */
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        return null;
+    }
+
+    /** @param null|int|string $v
+     * @return mixed */
+    function unparse_jsonv($v, Si $si) {
+        return $this->unparse_reqv($v, $si);
     }
 
     /** @return bool */
@@ -79,6 +98,14 @@ trait Data_Sitype {
     function storage_type() {
         return Si::SI_DATA;
     }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_string($jv) || $jv === null) {
+            return $jv ?? "";
+        } else {
+            $sv->error_at($si, "<0>String required");
+            return null;
+        }
+    }
 }
 
 class Checkbox_Sitype extends Sitype {
@@ -86,16 +113,27 @@ class Checkbox_Sitype extends Sitype {
     function parse_null_vstr(Si $si) {
         return 0;
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         return $vstr !== "" ? 1 : 0;
     }
-    function unparse_vstr($v, Si $si) {
+    function unparse_reqv($v, Si $si) {
         return $v ? "1" : "";
+    }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_bool($jv)) {
+            return $jv ? 1 : 0;
+        } else {
+            $sv->error_at($si, "<0>Boolean required");
+            return null;
+        }
+    }
+    function unparse_jsonv($v, Si $si) {
+        return $v ? true : false;
     }
 }
 
 class Radio_Sitype extends Sitype {
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         foreach ($si->values as $allowedv) {
             if ((string) $allowedv === $vstr)
                 return $allowedv;
@@ -103,8 +141,38 @@ class Radio_Sitype extends Sitype {
         $sv->error_at($si, "<0>‘" . ($vstr === "" ? "(empty)" : $vstr) . "’ is not a valid choice");
         return null;
     }
-    function unparse_vstr($v, Si $si) {
-        return (string) $v;
+    function unparse_reqv($v, Si $si) {
+        if (is_bool($v) && $si->values === [0, 1]) {
+            return $v ? "1" : "0";
+        } else {
+            return (string) $v;
+        }
+    }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        foreach ($si->values as $allowedv) {
+            if ($allowedv === $jv
+                || ($allowedv === 0 && $jv === false)
+                || ($allowedv === 1 && $jv === true))
+                return $allowedv;
+        }
+        foreach ($si->json_values ?? [] as $i => $allowedv) {
+            if ($allowedv === $jv)
+                return $si->values[$i];
+        }
+        $sv->error_at(null, "<0>Invalid choice");
+        return null;
+    }
+    function unparse_jsonv($v, Si $si) {
+        if (isset($si->json_values)) {
+            if (($i = array_search($v, $si->values, true)) !== false
+                && $i < count($si->json_values)) {
+                return $si->json_values[$i];
+            }
+        } else if ($si->values === [0, 1]
+                   && ($v === 0 || $v === 1)) {
+            return $v === 1;
+        }
+        return $v;
     }
     function nullable($v, Si $si, SettingValues $sv) {
         return $v === ($si->default_value ?? 0);
@@ -116,7 +184,7 @@ class Cdate_Sitype extends Sitype {
     function parse_null_vstr(Si $si) {
         return 0;
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if ($vstr !== "") {
             $curv = $sv->oldv($si);
             return $curv > 0 ? $curv : Conf::$now;
@@ -124,8 +192,19 @@ class Cdate_Sitype extends Sitype {
             return 0;
         }
     }
-    function unparse_vstr($v, Si $si) {
+    function unparse_reqv($v, Si $si) {
         return $v ? "1" : "";
+    }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_bool($jv)) {
+            return $jv ? "1" : "";
+        } else {
+            $sv->error_at($si, "<0>Boolean required");
+            return null;
+        }
+    }
+    function unparse_jsonv($v, Si $si) {
+        return $v ? true : false;
     }
 }
 
@@ -139,7 +218,7 @@ class Date_Sitype extends Sitype {
         $si->size = $si->size ?? 32;
         $si->placeholder = $si->placeholder ?? "N/A";
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if ($vstr === ""
             || $vstr === "0"
             || strcasecmp($vstr, "N/A") === 0) {
@@ -153,15 +232,25 @@ class Date_Sitype extends Sitype {
             return null;
         }
     }
-    function unparse_vstr($v, Si $si) {
-        if ($v === null) {
+    function unparse_reqv($v, Si $si) {
+        if ($v === null || ($v <= 0 && !$this->explicit_none)) {
             return "";
         } else if ($v <= 0) {
-            return $v === 0 && $this->explicit_none ? "none" : "";
+            return "none";
         } else if ($v === 1) {
             return "now";
         } else {
             return $si->conf->parseableTime($v, true);
+        }
+    }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_string($jv)) {
+            return $jv;
+        } else if (is_int($jv)) {
+            return $jv > 0 ? "{$jv}s" : "";
+        } else {
+            $sv->error_at($si, "<0>Date string required");
+            return null;
         }
     }
     function nullable($v, Si $si, SettingValues $sv) {
@@ -175,7 +264,7 @@ class Grace_Sitype extends Sitype {
         $si->size = $si->size ?? 15;
         $si->placeholder = $si->placeholder ?? "none";
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if (($v = SettingParser::parse_interval($vstr)) !== false) {
             return intval($v);
         } else {
@@ -183,7 +272,7 @@ class Grace_Sitype extends Sitype {
             return null;
         }
     }
-    function unparse_vstr($v, Si $si) {
+    function unparse_reqv($v, Si $si) {
         if ($v === null || $v <= 0 || !is_numeric($v)) {
             return "none";
         } else if ($v % 3600 === 0) {
@@ -194,6 +283,19 @@ class Grace_Sitype extends Sitype {
             return sprintf("%d:%02d", intval($v / 60), $v % 60);
         }
     }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_string($jv)) {
+            return $jv;
+        } else if (is_int($jv)) {
+            return "{$jv} sec";
+        } else {
+            $sv->error_at($si, "<0>Grace period string required");
+            return null;
+        }
+    }
+    function unparse_jsonv($v, Si $si) {
+        return $v;
+    }
 }
 
 class Nonnegint_Sitype extends Sitype {
@@ -202,7 +304,7 @@ class Nonnegint_Sitype extends Sitype {
         $si->size = $si->size ?? 15;
         $si->placeholder = $si->placeholder ?? "none";
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if (preg_match('/\A\+?[0-9]+\z/', $vstr)) {
             return intval($vstr);
         } else if ($vstr === "" && $si->default_value !== null) {
@@ -212,6 +314,19 @@ class Nonnegint_Sitype extends Sitype {
             return null;
         }
     }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_int($jv) && $jv >= 0) {
+            return (string) $jv;
+        } else if ($jv === null) {
+            return "";
+        } else {
+            $sv->error_at($si, "<0>Nonnegative whole number required");
+            return null;
+        }
+    }
+    function unparse_jsonv($v, Si $si) {
+        return $v;
+    }
 }
 
 class Float_Sitype extends Sitype {
@@ -219,7 +334,7 @@ class Float_Sitype extends Sitype {
         $si->size = $si->size ?? 15;
         $si->placeholder = $si->placeholder ?? "none";
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if (is_numeric($vstr)) {
             return floatval($vstr);
         } else if ($vstr === "" && $si->default_value !== null) {
@@ -228,6 +343,19 @@ class Float_Sitype extends Sitype {
             $sv->error_at($si, "<0>Please enter a number");
             return null;
         }
+    }
+    function convert_jsonv($jv, Si $si, SettingValues $sv) {
+        if (is_int($jv) || is_float($jv)) {
+            return (float) $jv;
+        } else if ($jv === null) {
+            return "";
+        } else {
+            $sv->error_at($si, "<0>Number required");
+            return null;
+        }
+    }
+    function unparse_jsonv($v, Si $si) {
+        return $v;
     }
 }
 
@@ -241,7 +369,7 @@ class String_Sitype extends Sitype {
         $this->simple = $name === "simplestring";
         $this->long = $name === "longstring";
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if ($this->simple) {
             $s = simplify_whitespace($vstr);
         } else if ($this->long) {
@@ -249,11 +377,11 @@ class String_Sitype extends Sitype {
         } else {
             $s = trim($vstr);
         }
-        if ($s === "" && $si->required === true) {
+        if ($s !== "" || $si->required !== true) {
+            return $s;
+        } else {
             $sv->error_at($si, "<0>Entry required");
             return null;
-        } else {
-            return $s;
         }
     }
     function nullable($v, Si $si, SettingValues $sv) {
@@ -265,7 +393,7 @@ class String_Sitype extends Sitype {
 
 class Url_Sitype extends Sitype {
     use Data_Sitype;
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if (($vstr === "" && $si->required === false)
             || preg_match('/\A(?:https?|ftp):\/\/\S+\z/', $vstr)) {
             return $vstr;
@@ -281,7 +409,7 @@ class Url_Sitype extends Sitype {
 
 class Email_Sitype extends Sitype {
     use Data_Sitype;
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if (($vstr === "" && $si->required === false)
             || validate_email($vstr)
             || $vstr === $sv->oldv($si->name)) {
@@ -298,7 +426,7 @@ class Email_Sitype extends Sitype {
 
 class EmailHeader_Sitype extends Sitype {
     use Data_Sitype;
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         $mt = new MimeText;
         $t = $mt->encode_email_header("", $vstr);
         if ($t !== false) {
@@ -312,7 +440,7 @@ class EmailHeader_Sitype extends Sitype {
 
 class Html_Sitype extends Sitype {
     use Data_Sitype;
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         $ch = CleanHTML::basic();
         if (($t = $ch->clean($vstr)) !== false) {
             return $t;
@@ -333,7 +461,7 @@ class Tag_Sitype extends Sitype {
     function initialize_si(Si $si) {
         $si->required = $si->required ?? true;
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         if ($vstr === "" && $si->required === false) {
             return "";
         } else if (($t = $sv->tagger()->check($vstr, $this->flags))) {
@@ -351,6 +479,8 @@ class TagList_Sitype extends Sitype {
     private $flags;
     /** @var ?float */
     private $min_idx;
+    /** @param string $type
+     * @param string $subtype */
     function __construct($type, $subtype) {
         if ($subtype === "wildcard") {
             $this->flags = Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE | Tagger::ALLOWSTAR;
@@ -363,7 +493,7 @@ class TagList_Sitype extends Sitype {
             $this->flags = Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE;
         }
     }
-    function parse_vstr($vstr, Si $si, SettingValues $sv) {
+    function parse_reqv($vstr, Si $si, SettingValues $sv) {
         $ts = [];
         foreach (preg_split('/[\s,;]+/', $vstr) as $t) {
             if ($t !== "" && ($tx = $sv->tagger()->check($t, $this->flags))) {

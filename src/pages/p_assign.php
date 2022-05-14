@@ -76,7 +76,6 @@ class Assign_Page {
                 continue;
             }
 
-            $revtype = $conftype = "";
             if (in_array($assignment, $acceptable_review_types, true)) {
                 $revtype = ReviewInfo::unparse_assigner_action((int) $assignment);
                 $conftype = "off";
@@ -102,8 +101,8 @@ class Assign_Page {
             }
 
             $user = CsvGenerator::quote($p->email);
-            $t[] = "{$prow->paperId},conflict,$user,,$conftype\n";
-            $t[] = "{$prow->paperId},{$revtype},$user,$myround\n";
+            $t[] = "{$prow->paperId},conflict,{$user},,{$conftype}\n";
+            $t[] = "{$prow->paperId},{$revtype},{$user},{$myround}\n";
         }
 
         $aset = new AssignmentSet($this->user, true);
@@ -215,6 +214,7 @@ class Assign_Page {
         }
     }
 
+    /** @param ReviewInfo|ReviewRequestInfo|ReviewRefusalInfo $rrow */
     private function print_reqrev_main($rrow, $namex, $time) {
         $rname = "Review " . ($rrow->reviewStatus > 0 ? " (accepted)" : " (not started)");
         if ($this->user->can_view_review($this->prow, $rrow)) {
@@ -242,6 +242,7 @@ class Assign_Page {
         echo '</ul></div>';
     }
 
+    /** @param ReviewRequestInfo $rrow */
     private function print_reqrev_proposal($rrow, $namex, $rrowid) {
         echo "Review proposal: ", $namex, '</div><div class="f-h"><ul class="x mb-0">';
         if ($rrow->timeRequested
@@ -269,6 +270,7 @@ class Assign_Page {
         return $reason;
     }
 
+    /** @param ReviewRefusalInfo $rrow */
     private function print_reqrev_denied($rrow, $namex) {
         echo "Declined request: ", $namex,
             '</div><div class="f-h fx"><ul class="x mb-0">';
@@ -305,6 +307,7 @@ class Assign_Page {
         echo '</ul></div>';
     }
 
+    /** @param ReviewInfo|ReviewRequestInfo|ReviewRefusalInfo $rrow */
     private function print_reqrev($rrow, $time) {
         echo '<div class="ctelt"><div class="ctelti has-fold';
         if ($rrow->reviewType === REVIEW_REQUEST
@@ -357,11 +360,8 @@ class Assign_Page {
         if ($rrow->reviewType !== REVIEW_REFUSAL) {
             $namex .= ' ' . review_type_icon($rrowid->isPC ? REVIEW_PC : REVIEW_EXTERNAL, true);
         }
-        if ($rrow->reviewRound > 0
-            && $this->user->can_view_review_meta($this->prow, $rrow)) {
-            $namex .= '&nbsp;<span class="revround" title="Review round">'
-                . htmlspecialchars($this->conf->round_name($rrow->reviewRound))
-                . "</span>";
+        if ($this->user->can_view_review_meta($this->prow, $rrow)) {
+            $namex .= ReviewInfo::make_round_h($this->conf, $rrow->reviewRound);
         }
 
         // main render
@@ -457,12 +457,8 @@ class Assign_Page {
             '<a class="q ui js-assignment-fold" href="">', expander(null, 0),
             $this->user->reviewer_html_for($pc), '</a>';
         if ($crevtype != 0) {
-            echo review_type_icon($crevtype, $rrow && $rrow->reviewStatus < ReviewInfo::RS_ADOPTED, "ml-2");
-            if ($rrow && $rrow->reviewRound > 0) {
-                echo ' <span class="revround" title="Review round">',
-                    htmlspecialchars($this->conf->round_name($rrow->reviewRound)),
-                    '</span>';
-            }
+            echo review_type_icon($crevtype, $rrow && $rrow->reviewStatus < ReviewInfo::RS_ADOPTED, "ml-2"),
+                $rrow ? $rrow->round_h() : "";
         }
         if ($revtype >= 0) {
             echo unparse_preference_span($this->prow->preference($pc, true));

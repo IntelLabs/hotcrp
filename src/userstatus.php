@@ -777,7 +777,7 @@ class UserStatus extends MessageSet {
     /** @param object $cj
      * @param ?Contact $old_user
      * @return ?Contact */
-    function save($cj, $old_user = null) {
+    function save_user($cj, $old_user = null) {
         assert(is_object($cj));
         assert(!$old_user || (!$this->no_create && !$this->no_modify));
         $this->diffs = [];
@@ -970,6 +970,15 @@ class UserStatus extends MessageSet {
         $us->set_profile_prop($user, $us->only_update_empty($user));
         if (($cdbu = $user->cdb_user())) {
             $us->set_profile_prop($cdbu, $us->only_update_empty($cdbu));
+        }
+
+        // Collaborators special case: set locally, even if no_noempty_profile
+        if (isset($cj->collaborators)
+            && !$user->prop_changed("collaborators")) {
+            $user->set_prop("collaborators", $cj->collaborators, false);
+            if ($user->prop_changed("collaborators")) {
+                $us->diffs["collaborators"] = true;
+            }
         }
 
         // Disabled
@@ -1180,7 +1189,7 @@ class UserStatus extends MessageSet {
         }
 
         if (isset($qreq->has_ti) && $roles_pc && $us->viewer->isPC) {
-            $topics = array();
+            $topics = [];
             foreach ($us->conf->topic_set() as $id => $t) {
                 if (isset($qreq["ti$id"]) && is_numeric($qreq["ti$id"])) {
                     $topics[$id] = (int) $qreq["ti$id"];
@@ -1286,7 +1295,7 @@ class UserStatus extends MessageSet {
 
         // clean up
         if (isset($line["address"])
-            && ($v = trim($line["address"])) !== "") {
+            && trim($line["address"]) !== "") {
             $cj->address = explode("\n", cleannl($line["address"]));
             while (!empty($cj->address)
                    && $cj->address[count($cj->address) - 1] === "") {
@@ -1429,7 +1438,7 @@ class UserStatus extends MessageSet {
 
     static function print_new_password(UserStatus $us) {
         if ($us->viewer->can_change_password($us->user)) {
-            $us->print_section("Change password");
+            $us->print_start_section("Change password");
             $pws = $us->_req_passwords ?? ["", ""];
             $open = $pws[0] !== "" || $pws[1] !== ""
                 || $us->has_problem_at("upassword") || $us->has_problem_at("upassword2");
@@ -1514,7 +1523,7 @@ class UserStatus extends MessageSet {
         if (!$us->viewer->privChair) {
             return;
         }
-        $us->print_section("Roles", "roles");
+        $us->print_start_section("Roles", "roles");
         echo "<table class=\"w-text\"><tr><td class=\"nw\">\n";
         if (($us->user->roles & Contact::ROLE_CHAIR) !== 0) {
             $pcrole = $cpcrole = "chair";
@@ -1554,7 +1563,7 @@ class UserStatus extends MessageSet {
             return;
         }
         $cd = $us->conf->_i("conflictdef");
-        $us->cs()->add_section_class("w-text")->print_section();
+        $us->cs()->add_section_class("w-text")->print_start_section();
         echo '<h3 class="', $us->control_class("collaborators", "form-h"), '">Collaborators and other affiliations</h3>', "\n",
             "<p>List potential conflicts of interest one per line, using parentheses for affiliations and institutions. We may use this information when assigning reviews.<br>Examples: “Ping Yen Zhang (INRIA)”, “All (University College London)”</p>";
         if ($cd !== "" && preg_match('/<(?:p|div)[ >]/', $cd)) {
@@ -1575,7 +1584,7 @@ class UserStatus extends MessageSet {
             && !$us->viewer->privChair) {
             return;
         }
-        $us->cs()->add_section_class("w-text fx1")->print_section("Topic interests");
+        $us->cs()->add_section_class("w-text fx1")->print_start_section("Topic interests");
         echo '<p>Please indicate your interest in reviewing papers on these conference
 topics. We use this information to help match papers to reviewers.</p>',
             Ht::hidden("has_ti", 1),
@@ -1618,7 +1627,7 @@ topics. We use this information to help match papers to reviewers.</p>',
             && (!$us->user->isPC || $itags === "")) {
             return;
         }
-        $us->cs()->add_section_class("w-text fx2")->print_section("Tags");
+        $us->cs()->add_section_class("w-text fx2")->print_start_section("Tags");
         if ($us->viewer->privChair) {
             echo '<div class="', $us->control_class("tags", "f-i"), '">',
                 $us->feedback_html_at("tags"),
@@ -1661,7 +1670,7 @@ topics. We use this information to help match papers to reviewers.</p>',
     static function print_main_actions(UserStatus $us) {
         if ($us->viewer->privChair
             && !$us->is_new_user()) {
-            $us->cs()->add_section_class("form-outline-section")->print_section("User administration");
+            $us->cs()->add_section_class("form-outline-section")->print_start_section("User administration");
             $disablement = $us->user->disablement;
             echo '<div class="btngrid"><div class="d-flex mf mf-absolute">',
                 Ht::button("Send account information", ["class" => "ui js-send-user-accountinfo flex-grow-1", "disabled" => $disablement !== 0]), '</div><p></p>';
@@ -1685,7 +1694,7 @@ topics. We use this information to help match papers to reviewers.</p>',
             && $us->cs()->root === "main") {
             array_push($buttons, "", Ht::submit("merge", "Merge with another account"));
         }
-        $us->cs()->print_close_section();
+        $us->cs()->print_end_section();
         echo Ht::actions($buttons, ["class" => "aab aabig mt-7"]);
     }
 
@@ -1757,9 +1766,16 @@ John Adams,john@earbox.org,UC Berkeley,pc
     }
 
     /** @param string $title
-     * @param ?string $id */
-    function print_section($title, $id = null) {
-        $this->cs()->print_section($title, $id);
+     * @param ?string $hashid */
+    function print_start_section($title, $hashid = null) {
+        $this->cs()->print_start_section($title, $hashid);
+    }
+
+    /** @param string $title
+     * @param ?string $hashid
+     * @deprecated */
+    function print_section($title, $hashid = null) {
+        $this->print_start_section($title, $hashid);
     }
 
     /** @param string $name */

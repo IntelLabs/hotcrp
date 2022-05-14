@@ -242,21 +242,21 @@ class Tracks_SettingParser extends SettingParser {
 
     private function print_cross_track(SettingValues $sv) {
         echo "<div class=\"settings-tracks\"><div class=\"entryg\">General permissions:</div>";
-        $this->ctr = $sv->search_enumeration("track__", "__id", "none");
+        $this->ctr = $sv->search_enumeration_id("track__", "none");
         $this->print_perm($sv, "viewtracker", "Who can see the <a href=\"" . $sv->conf->hoturl("help", "t=chair#meeting") . "\">meeting tracker</a>?", self::PERM_DEFAULT_UNFOLDED);
         echo "</div>\n\n";
     }
 
     function print(SettingValues $sv) {
         echo "<p>Tracks control the PC members allowed to view or review different sets of submissions. <span class=\"nw\">(<a href=\"" . $sv->conf->hoturl("help", "t=tracks") . "\">Help</a>)</span></p>",
-            Ht::hidden("has_tracks", 1);
+            Ht::hidden("has_track", 1);
 
         foreach ($sv->enumerate("track__") as $ctr) {
             $this->print_track($sv, $ctr);
         }
         $this->print_cross_track($sv);
 
-        if ($sv->editable("tracks")) {
+        if ($sv->editable("track")) {
             echo '<template id="settings-track-new" class="hidden">';
             $this->print_track($sv, '$');
             echo '</template>',
@@ -269,7 +269,7 @@ class Tracks_SettingParser extends SettingParser {
         $pfx = $si->part0 . $si->part1;
         $type = $sv->base_parse_req("{$pfx}__type");
         $tagsi = $sv->si("{$pfx}__tag");
-        $tag = $type === "+" || $type === "-" ? $tagsi->parse_vstr($sv->vstr($tagsi), $sv) : "";
+        $tag = $type === "+" || $type === "-" ? $tagsi->parse_reqv($sv->vstr($tagsi), $sv) : "";
         $perm = Track::$perm_name_map[$si->part1];
         if ($type === "" || ($type === "+" && $tag === "")) {
             $pv = null;
@@ -296,7 +296,7 @@ class Tracks_SettingParser extends SettingParser {
                 $this->_apply_req_perm($sv, $si);
             }
             return true;
-        } else if ($si->name === "tracks") {
+        } else if ($si->name === "track") {
             $j = [];
             foreach ($sv->enumerate("track__") as $ctr) {
                 $this->cur_trx = $sv->parse_members("track__{$ctr}");
@@ -329,7 +329,7 @@ class Tracks_SettingParser extends SettingParser {
 
     static function crosscheck(SettingValues $sv) {
         $conf = $sv->conf;
-        $tracks_interest = $sv->has_interest("tracks");
+        $tracks_interest = $sv->has_interest("track");
         if (($tracks_interest || $sv->has_interest("pcrev_any"))
             && $conf->has_tracks()) {
             foreach ($sv->enumerate("track__") as $ctr) {

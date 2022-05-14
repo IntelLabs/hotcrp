@@ -81,6 +81,7 @@ users.php
 
 batch/.htaccess
 batch/assign.php
+batch/backupdb.php
 batch/checkinvariants.php
 batch/deletepapers.php
 batch/fixdelegation.php
@@ -143,6 +144,8 @@ lib/ht.php
 lib/icons.php
 lib/intlmsgset.php
 lib/json.php
+lib/jsonexception.php
+lib/jsonparser.php
 lib/jwtparser.php
 lib/ldaplogin.php
 lib/login.php
@@ -358,6 +361,7 @@ src/papercolumns/pc_tagreport.php
 src/papercolumns/pc_timestamp.php
 src/papercolumns/pc_topics.php
 src/papercolumns/pc_topicscore.php
+src/papercolumns/pc_wordcount.php
 src/paperevents.php
 src/paperinfo.php
 src/paperlist.php
@@ -369,8 +373,9 @@ src/papertable.php
 src/paperrank.php
 src/permissionproblem.php
 src/responseround.php
-src/review.php
 src/reviewdiffinfo.php
+src/reviewfield.php
+src/reviewform.php
 src/reviewinfo.php
 src/reviewrefusalinfo.php
 src/reviewrequestinfo.php
@@ -408,6 +413,8 @@ src/searchexample.php
 src/searchselection.php
 src/searchsplitter.php
 src/sessionlist.php
+src/settinginfoset.php
+src/settingparser.php
 src/settings/s_banal.php
 src/settings/s_basics.php
 src/settings/s_decisions.php
@@ -420,6 +427,7 @@ src/settings/s_reviewfieldcondition.php
 src/settings/s_reviewform.php
 src/settings/s_reviews.php
 src/settings/s_reviewvisibility.php
+src/settings/s_shepherds.php
 src/settings/s_sitecontact.php
 src/settings/s_subfieldcondition.php
 src/settings/s_subform.php
@@ -440,6 +448,7 @@ src/tokeninfo.php
 src/topicset.php
 src/track.php
 src/updateschema.php
+src/updatesession.php
 src/useractions.php
 src/userstatus.php
 

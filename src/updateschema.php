@@ -82,7 +82,6 @@ class UpdateSchema {
             return false;
         }
         $opsj = [];
-        $byabbr = [];
         while (($row = $result->fetch_object())) {
             // backward compatibility with old schema versions
             if (!isset($row->optionValues)) {
@@ -291,6 +290,15 @@ class UpdateSchema {
             && $this->conf->ql_ok("alter table PaperReview add `sfields` varbinary(2048) DEFAULT NULL");
     }
 
+    /** @var array<non-empty-string,non-empty-string>
+     * @readonly */
+    static private $v175_text_field_map = [
+        "paperSummary" => "t01", "commentsToAuthor" => "t02",
+        "commentsToPC" => "t03", "commentsToAddress" => "t04",
+        "weaknessOfPaper" => "t05", "strengthOfPaper" => "t06",
+        "textField7" => "t07", "textField8" => "t08"
+    ];
+
     private function v175_paper_review_null_main_fields() {
         $cleanf = Dbl::make_multi_ql_stager($this->conf->dblink);
         $result = $this->conf->ql("select * from PaperReview");
@@ -298,7 +306,7 @@ class UpdateSchema {
             $tfields = json_decode($row["tfields"] ?? "{}", true);
             foreach ($row as $k => $v) {
                 if ($v !== null) {
-                    $k = ReviewInfo::$text_field_map[$k] ?? $k;
+                    $k = self::$v175_text_field_map[$k] ?? $k;
                     if (strlen($k) === 3
                         && $k[0] === "t"
                         && ctype_digit(substr($k, 1))
@@ -313,13 +321,12 @@ class UpdateSchema {
         }
         Dbl::free($result);
         $cleanf(true);
-        $kf = array_map(function ($k) { return "$k=null"; }, array_keys(ReviewInfo::$text_field_map));
+        $kf = array_map(function ($k) { return "$k=null"; }, array_keys(self::$v175_text_field_map));
         return $this->conf->ql_ok("update PaperReview set " . join(", ", $kf));
     }
 
     private function v176_paper_review_drop_main_fields() {
-        $rid = [];
-        $kf = array_map(function ($k) { return "$k is not null"; }, array_keys(ReviewInfo::$text_field_map));
+        $kf = array_map(function ($k) { return "$k is not null"; }, array_keys(self::$v175_text_field_map));
         if (!$this->conf->ql_ok("lock tables PaperReview write")) {
             return false;
         }
@@ -331,7 +338,7 @@ class UpdateSchema {
             $ok = false;
         } else {
             $ok = true;
-            foreach (ReviewInfo::$text_field_map as $kmain => $kjson) {
+            foreach (self::$v175_text_field_map as $kmain => $kjson) {
                 $ok = $ok && $this->conf->ql_ok("alter table PaperReview drop column `$kmain`");
             }
         }
@@ -636,12 +643,33 @@ class UpdateSchema {
             }
             $rfj = array_values((array) $rfj);
         }
+        $text_fields = [
+            "paperSummary", "commentsToAuthor", "commentsToPC", "commentsToAddress",
+            "weaknessOfPaper", "strengthOfPaper", "textField7", "textField8"
+        ];
+        $score_fields = [
+            "overAllMerit", "reviewerQualification", "novelty", "technicalMerit",
+            "interestToCommunity", "longevity", "grammar", "likelyPresentation",
+            "suitableForShort", "potential", "fixability"
+        ];
         foreach ($rfj as $fj) {
-            if (!($rfi = ReviewInfo::field_info($fj->id))) {
+            $new_id = null;
+            if (is_string($fj->id) && $fj->id !== "") {
+                if (strlen($fj->id) === 3
+                    && ($fj->id[0] === "s" || $fj->id[0] === "t")
+                    && ctype_digit(substr($fj->id, 1))) {
+                    $new_id = $fj->id;
+                } else if (($i = array_search($fj->id, $score_fields, true)) !== false) {
+                    $new_id = sprintf("s%02d", $i + 1);
+                } else if (($i = array_search($fj->id, $text_fields, true)) !== false) {
+                    $new_id = sprintf("t%02d", $i + 1);
+                }
+            }
+            if (!$new_id) {
                 error_log("{$this->conf->dbname}: review_form.{$fj->id} not found");
                 return null;
             }
-            $fj->id = $rfi->short_id;
+            $fj->id = $new_id;
             if (!isset($fj->visibility) && isset($fj->view_score)) {
                 if ($fj->view_score === -2) {
                     $fj->visibility = "secret";
@@ -661,7 +689,7 @@ class UpdateSchema {
                 }
             }
             unset($fj->view_score);
-            if ($rfi->has_options && !isset($fj->scheme)) {
+            if ($new_id[0] === "s" && !isset($fj->scheme)) {
                 $sv = $fj->option_class_prefix ?? "sv";
                 if (str_starts_with($sv, "sv-")) {
                     $sv = substr($sv, 3);
@@ -679,7 +707,7 @@ class UpdateSchema {
                 }
             }
             unset($fj->option_class_prefix);
-            if ($rfi->has_options && !isset($fj->required) && isset($fj->allow_empty)) {
+            if ($new_id[0] === "s" && !isset($fj->required) && isset($fj->allow_empty)) {
                 $fj->required = !$fj->allow_empty;
             }
             unset($fj->allow_empty);
@@ -785,12 +813,12 @@ class UpdateSchema {
             if (count($conf->round_list()) > 1) {
                 // update review rounds (XXX locking)
                 $result = $conf->ql_ok("select paperId, tag from PaperTag where tag like '%~%'");
-                $rrs = array();
+                $rrs = [];
                 while (($row = $result->fetch_row())) {
                     list($contact, $round) = explode("~", $row[1]);
                     if (($round = array_search($round, $conf->round_list()))) {
                         if (!isset($rrs[$round]))
-                            $rrs[$round] = array();
+                            $rrs[$round] = [];
                         $rrs[$round][] = "(contactId=$contact and paperId=$row[0])";
                     }
                 }
@@ -1166,7 +1194,7 @@ class UpdateSchema {
         }
         if (!isset($conf->settings["outcome_map"])
             && $conf->sversion < 65) {
-            $ojson = array();
+            $ojson = [];
             $result = $conf->ql_ok("select * from ReviewFormOptions where fieldName='outcome'");
             while ($result && ($row = $result->fetch_object())) {
                 $ojson[$row->level] = $row->description;
@@ -2342,6 +2370,22 @@ class UpdateSchema {
             && $this->v259_add_affiliation_to_unaccented_name("ContactInfo")
             && $this->v259_add_affiliation_to_unaccented_name("DeletedContactInfo")) {
             $conf->update_schema_version(259);
+        }
+        if ($conf->sversion === 259
+            && $conf->ql_ok("alter table PaperReview drop column `reviewFormat`")
+            && $conf->ql_ok("alter table ContactInfo add `cdbRoles` tinyint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `overAllMerit` `s01` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `reviewerQualification` `s02` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `novelty` `s03` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `technicalMerit` `s04` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `interestToCommunity` `s05` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `longevity` `s06` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `grammar` `s07` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `likelyPresentation` `s08` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `suitableForShort` `s09` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `potential` `s10` smallint(1) NOT NULL DEFAULT 0")
+            && $conf->ql_ok("alter table PaperReview change `fixability` `s11` smallint(1) NOT NULL DEFAULT 0")) {
+            $conf->update_schema_version(260);
         }
 
         $conf->ql_ok("delete from Settings where name='__schema_lock'");

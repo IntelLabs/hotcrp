@@ -2,20 +2,46 @@
 // checkinvariants.php -- HotCRP batch invariant checking script
 // Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-require_once(dirname(__DIR__) . "/src/siteloader.php");
-
-$arg = Getopt::rest($argv, "hn:", array("help", "name:", "fix-autosearch"));
-if (isset($arg["h"]) || isset($arg["help"])
-    || count($arg["_"]) > 0) {
-    fwrite(STDOUT, "Usage: php batch/checkinvariants.php [-n CONFID] [--fix-autosearch]\n");
-    exit(0);
+if (realpath($_SERVER["PHP_SELF"]) === __FILE__) {
+    require_once(dirname(__DIR__) . "/src/init.php");
+    exit(CheckInvariants_Batch::make_args($argv)->run());
 }
 
-require_once(SiteLoader::find("src/init.php"));
+class CheckInvariants_Batch {
+    /** @var Conf */
+    public $conf;
+    /** @var bool */
+    public $fix_autosearch;
 
-$ic = new ConfInvariants($Conf);
-$ic->exec_all();
+    function __construct(Conf $conf, $arg) {
+        $this->conf = $conf;
+        $this->fix_autosearch = isset($arg["fix-autosearch"]);
+    }
 
-if (isset($ic->problems["autosearch"]) && isset($arg["fix-autosearch"])) {
-    $Conf->update_automatic_tags();
+    /** @return int */
+    function run() {
+        $ic = new ConfInvariants($this->conf);
+        $ic->exec_all();
+        if (isset($ic->problems["autosearch"]) && $this->fix_autosearch) {
+            $this->conf->update_automatic_tags();
+        }
+        return 0;
+    }
+
+    /** @return CheckInvariants_Batch */
+    static function make_args($argv) {
+        $arg = (new Getopt)->long(
+            "name:,n: !",
+            "config:,c: !",
+            "help,h !",
+            "fix-autosearch Repair any incorrect autosearch tags"
+        )->helpopt("help")
+         ->description("Check invariants in a HotCRP database.
+Usage: php batch/checkinvariants.php [-n CONFID] [--fix-autosearch]\n")
+         ->maxarg(0)
+         ->parse($argv);
+
+        $conf = initialize_conf($arg["config"] ?? null, $arg["name"] ?? null);
+        return new CheckInvariants_Batch($conf, $arg);
+    }
 }

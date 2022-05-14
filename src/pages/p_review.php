@@ -114,7 +114,9 @@ class Review_Page {
 
         $rv = new ReviewValues($this->rf());
         $rv->paperId = $this->prow->paperId;
-        if (($whynot = $this->user->perm_submit_review($this->prow, $this->rrow))) {
+        if (($whynot = ($this->rrow
+                        ? $this->user->perm_edit_review($this->prow, $this->rrow, true)
+                        : $this->user->perm_create_review($this->prow)))) {
             $rv->msg_at(null, "<5>" . $whynot->unparse_html(), MessageSet::ERROR);
         } else if ($rv->parse_qreq($this->qreq, !!$this->qreq->override)) {
             if (isset($this->qreq->approvesubreview)
@@ -212,7 +214,9 @@ class Review_Page {
         $rv->paperId = $this->prow->paperId;
         $my_rrow = $this->prow->review_by_user($this->user);
         $my_rid = ($my_rrow ?? $this->rrow)->unparse_ordinal_id();
-        if (($whynot = $this->user->perm_submit_review($this->prow, $my_rrow))) {
+        if (($whynot = ($my_rrow
+                        ? $this->user->perm_edit_review($this->prow, $my_rrow, true)
+                        : $this->user->perm_create_review($this->prow)))) {
             $rv->msg_at(null, "<5>" . $whynot->unparse_html(), MessageSet::ERROR);
         } else if ($rv->parse_qreq($this->qreq, !!$this->qreq->override)) {
             $rv->set_ready($this->qreq->adoptsubmit);
@@ -295,7 +299,7 @@ class Review_Page {
 <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />
 <meta http-equiv=\"Content-Script-Type\" content=\"text/javascript\" />
 <title>Redirection</title>
-<body>\n",
+<body>",
             Ht::form($this->conf->hoturl("=api/" . ($isaccept ? "acceptreview" : "declinereview"), ["p" => $this->prow->paperId, "r" => $rrid, "verbose" => 1, "redirect" => 1]), ["id" => "redirectform"]),
             Ht::submit("Press to continue"),
             "</form>",
@@ -368,7 +372,9 @@ class Review_Page {
         $pt->print_paper_info();
 
         if (!$this->user->can_view_review($this->prow, $this->rrow)
-            && !$this->user->can_edit_review($this->prow, $this->rrow)) {
+            && !($this->rrow
+                 ? $this->user->can_edit_review($this->prow, $this->rrow)
+                 : $this->user->can_create_review($this->prow))) {
             $pt->paptabEndWithReviewMessage();
         } else {
             if ($pt->mode === "re" || $this->rrow) {

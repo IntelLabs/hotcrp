@@ -49,7 +49,7 @@ function handle_request($user, $qreq, $nav) {
         $user->conf->redirect($redir->url);
     } catch (JsonCompletion $jc) {
         $jc->result->emit($qreq->valid_token());
-    } catch (PageCompletion $pc) {
+    } catch (PageCompletion $unused) {
     }
 }
 
@@ -69,10 +69,10 @@ if ($nav->page === "u") {
     }
 }
 
-// handle special pages
+// handle pages
 if ($nav->page === "api") {
     require_once("src/init.php");
-    API_Page::go_nav($nav, Conf::$main);
+    API_Page::go_nav($nav, initialize_conf());
 } else if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "stylesheets") {
     $_GET["file"] = $nav->page . $nav->path;
     include("src/pages/p_cacheable.php");
@@ -85,6 +85,7 @@ if ($nav->page === "api") {
     Scorechart_Page::go_param($_GET);
 } else {
     require_once("src/init.php");
+    initialize_conf();
     initialize_request();
     handle_request(Contact::$main_user, Qrequest::$main_request, $nav);
 }

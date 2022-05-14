@@ -65,9 +65,21 @@ function settings_field_unfold() {
     $(this).scrollIntoView();
 }
 
+function settings_disable_children(e) {
+    $(e).find("input, select, textarea, button").each(function () {
+        this.removeAttribute("name"); // do not submit with form
+        if (this.type === "checkbox" || this.type === "radio" || this.type === "button")
+            this.disabled = true;
+        else if (this.type !== "select")
+            this.readonly = true;
+        removeClass(this, "ui");
+    });
+}
+
 
 // BEGIN SUBMISSION FIELD SETTINGS
 (function () {
+var type_properties, type_name_placeholders;
 
 function settings_sf_order() {
     var i = 0, n, pos,
@@ -84,10 +96,23 @@ function settings_sf_order() {
 }
 
 handle_ui.on("js-settings-sf-type", function (event) {
-    var v = this.value;
-    $(this).closest(".settings-sf").find(".has-type-condition").each(function () {
-        toggleClass(this, "hidden", this.getAttribute("data-type-condition").split(" ").indexOf(v) < 0);
-    });
+    var props, e, name;
+    if (!type_properties) {
+        e = document.getElementById("settings-sform");
+        type_properties = JSON.parse(e.getAttribute("data-type-properties"));
+        type_name_placeholders = JSON.parse(e.getAttribute("data-type-name-placeholders"));
+    }
+    if ((props = (type_properties || {})[this.value])) {
+        for (e = this.closest(".settings-sf-edit").firstChild;
+             e; e = e.nextSibling) {
+            if (e.nodeType === 1 && e.hasAttribute("data-property"))
+                toggleClass(e, "hidden", !props.includes(e.getAttribute("data-property")));
+        }
+    }
+    e = this.form.elements[this.name.replace("__type", "__name")];
+    if (e) {
+        e.placeholder = (type_name_placeholders || {})[this.value] || "Field name";
+    }
 });
 
 handle_ui.on("js-settings-sf-move", function (event) {
@@ -97,7 +122,7 @@ handle_ui.on("js-settings-sf-move", function (event) {
     } else if (hasClass(this, "movedown") && sf.nextSibling) {
         sf.parentNode.insertBefore(sf, sf.nextSibling.nextSibling);
     } else if (hasClass(this, "delete")) {
-        var msg;
+        var msg, x;
         if ((x = this.getAttribute("data-sf-exists")))
             msg = 'This field will be deleted from the submission form and from ' + plural(x, 'submission') + '.';
         else
@@ -115,8 +140,11 @@ function add_dialog() {
         return sel.options[sel.selectedIndex] || sel.options[0];
     }
     function render_template() {
-        var opt = cur_option();
-        $d.find(".settings-sf-template-view").html(samps[opt.value | 0].cloneNode(true));
+        var opt = cur_option(), sft = $d.find(".settings-sf-template-view")[0];
+        if (hasClass(sft.lastChild, "settings-sf-example"))
+            sft.lastChild.remove();
+        sft.appendChild(samps[opt.value | 0].cloneNode(true));
+        settings_disable_children(sft);
     }
     function submit(event) {
         var opt = cur_option(),
@@ -139,12 +167,12 @@ function add_dialog() {
         var hc = popup_skeleton(), i;
         hc.push('<h2>Add field</h2>');
         hc.push('<p>Choose a template for the new field.</p>');
-        hc.push('<select name="sf_template" class="w-99 want-focus" size="5">', '</select>');
+        hc.push('<select name="sf_template" class="w-100 want-focus" size="5">', '</select>');
         for (i = 0; samps[i]; ++i) {
             hc.push('<option value="'.concat(i, i ? '">' : '" selected>', escape_html(samps[i].getAttribute("data-title")), '</option>'));
         }
         hc.pop();
-        hc.push('<div class="settings-sf-template-view mt-4" style="width:500px;max-width:90%;min-height:10em"></div>');
+        hc.push('<fieldset class="settings-sf-template-view mt-4" style="min-width:500px;max-width:90%;min-height:10em"><legend>Example</legend></fieldset>');
         hc.push_actions(['<button type="submit" name="add" class="btn-primary">Add field</button>',
             '<button type="button" name="cancel">Cancel</button>']);
         $d = hc.show();
@@ -160,20 +188,16 @@ handle_ui.on("js-settings-sf-add", add_dialog);
 
 $(document).on("hotcrpsettingssf", ".settings-sf", function (evt) {
     var view = document.getElementById(this.id + "__view"),
-        edit = document.getElementById(this.id + "__edit");
-    $(view).find("input, select, textarea, button").each(function () {
-        this.removeAttribute("name"); // do not submit with form
-        if (this.type === "checkbox" || this.type === "radio" || this.type === "button")
-            this.disabled = true;
-        else if (this.type !== "select")
-            this.readonly = true;
-        removeClass(this, "ui");
-    });
+        edit = document.getElementById(this.id + "__edit"),
+        type = document.getElementById(this.id + "__type");
+    settings_disable_children(view);
     if (edit
         && !form_differs(edit)
         && !$(edit).find(".is-warning, .is-error, .has-warning, .has-error").length) {
         fold(this, true, 2);
     }
+    if (type)
+        $(type).trigger("change");
     removeClass(this, "hidden");
     settings_sf_order();
 });
@@ -246,11 +270,15 @@ handle_ui.on("js-settings-track-add", function () {
 
 handle_ui.on("js-settings-topics-copy", function () {
     var topics = [];
-    $(this).closest(".has-copy-topics").find("[name^=top]").each(function () {
-        topics.push(escape_html(this.value));
+    $(this).closest(".has-copy-topics").find("input").each(function () {
+        if (this.type === "text"
+            && this.name.startsWith("topic__")
+            && this.name.endsWith("__name")
+            && this.defaultValue.trim() !== "")
+            topics.push(escape_html(this.defaultValue.trim()));
     });
     var node = $("<textarea></textarea>").appendTo(document.body);
-    node.val(topics.join("\n"));
+    node[0].value = topics.join("\r");
     node[0].select();
     document.execCommand("copy");
     node.remove();
@@ -320,8 +348,8 @@ function get_fid(elt) {
 }
 
 function unparse_option(fieldj, idx) {
-    if (fieldj.option_letter) {
-        var cc = fieldj.option_letter.charCodeAt(0);
+    if (fieldj.start && fieldj.start !== 1) {
+        var cc = fieldj.start.charCodeAt(0);
         return String.fromCharCode(cc + fieldj.options.length - idx);
     } else
         return idx.toString();
@@ -333,7 +361,7 @@ function options_to_text(fieldj) {
         return "";
     for (i = 0; i !== fieldj.options.length; ++i)
         t.push(unparse_option(fieldj, i + 1) + ". " + fieldj.options[i]);
-    if (fieldj.option_letter)
+    if (fieldj.start && fieldj.start !== 1)
         t.reverse();
     if (t.length)
         t.push(""); // get a trailing newline
@@ -461,7 +489,7 @@ function option_value_html(fieldj, value) {
     if (!value || value < 0)
         return ["", "No entry"];
     else
-        return [make_score_info(fieldj.options.length, fieldj.option_letter, fieldj.scheme).unparse_revnum(value), escape_html(fieldj.options[value - 1] || "Unknown")];
+        return [make_score_info(fieldj.options.length, fieldj.start, fieldj.scheme).unparse_revnum(value), escape_html(fieldj.options[value - 1] || "Unknown")];
 }
 
 handle_ui.on("unfold.js-settings-field-unfold", function (event) {
@@ -506,7 +534,7 @@ function rf_render_view(fieldj) {
     hc.push('<div class="revev">', '</div>');
     if (fieldj.options) {
         for (i = 0; i !== fieldj.options.length; ++i) {
-            var n = fieldj.option_letter ? fieldj.options.length - i : i + 1;
+            var n = fieldj.start && fieldj.start !== 1 ? fieldj.options.length - i : i + 1;
             hc.push('<label class="checki"><span class="checkc"><input type="radio" disabled></span>'.concat(option_value_html(fieldj, n).join(" "), '</label>'));
         }
         if (!fieldj.required) {

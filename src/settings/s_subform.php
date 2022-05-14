@@ -17,16 +17,16 @@ class SubForm_SettingRenderer {
 
         if (is_executable("src/banal")) {
             echo '<div class="g fx2">';
-            Banal_SettingRenderer::print("0", $sv);
+            Banal_SettingParser::print("0", $sv);
             echo '</div>';
         }
         echo '</div>';
     }
 
     static function print_conflicts(SettingValues $sv) {
-        echo '<div id="foldpcconf" class="form-g fold', $sv->vstr("sub_pcconf") ? "o" : "c", "\">\n";
+        echo '<div id="foldpcconf" class="fold', $sv->vstr("sub_pcconf") ? "o" : "c", "\">\n";
         $sv->print_checkbox("sub_pcconf", "Collect authors’ PC conflicts", ["class" => "uich js-foldup"]);
-        $cflt = array();
+        $cflt = [];
         $confset = $sv->conf->conflict_types();
         foreach ($confset->basic_conflict_types() as $ct) {
             $cflt[] = "“" . $confset->unparse_html_description($ct) . "”";
@@ -35,13 +35,12 @@ class SubForm_SettingRenderer {
         $sv->print_checkbox("sub_collab", "Collect authors’ other conflicts and collaborators as text");
         echo "</div>\n";
 
-        echo '<div class="form-g">';
+        echo '<hr class="form-sep">';
         $sv->print_message_minor("conflict_description", "Definition of conflict of interest");
-        echo "</div>\n";
 
-        echo '<div class="form-g">', $sv->label("sub_pcconfvis", "When can reviewers see conflict information?"),
+        echo '<hr class="form-sep">',
+            $sv->label("sub_pcconfvis", "When can reviewers see conflict information?"),
             '&nbsp; ',
-            $sv->select("sub_pcconfvis", [1 => "Never", 0 => "When authors or tracker are visible", 2 => "Always"]),
-            '</div>';
+            $sv->select("sub_pcconfvis", [1 => "Never", 0 => "When authors or tracker are visible", 2 => "Always"]);
     }
 }

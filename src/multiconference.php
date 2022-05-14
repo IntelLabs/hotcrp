@@ -3,42 +3,23 @@
 // Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Multiconference {
-    /** @var ?array<string,mixed> */
-    static private $original_opt;
     /** @var array<string,?Conf> */
     static private $conf_cache;
 
-    static function init() {
-        global $Opt, $argv;
-        assert(self::$original_opt === null);
-        self::$original_opt = $Opt;
+    /** @param ?string $confid */
+    static function init($confid = null) {
+        global $Opt;
 
-        $confid = $Opt["confid"] ?? null;
-        if (!$confid && PHP_SAPI == "cli") {
-            for ($i = 1; $i != count($argv); ++$i) {
-                if ($argv[$i] === "-n" || $argv[$i] === "--name") {
-                    if (isset($argv[$i + 1]))
-                        $confid = $argv[$i + 1];
-                    break;
-                } else if (substr($argv[$i], 0, 2) === "-n") {
-                    $confid = substr($argv[$i], 2);
-                    break;
-                } else if (substr($argv[$i], 0, 7) === "--name=") {
-                    $confid = substr($argv[$i], 7);
-                    break;
-                } else if ($argv[$i] === "--") {
-                    break;
-                }
-            }
-        } else if (!$confid) {
+        $confid = $confid ?? $Opt["confid"] ?? null;
+        if ($confid === null && PHP_SAPI !== "cli") {
             $base = Navigation::base_absolute(true);
             if (($multis = $Opt["multiconferenceAnalyzer"] ?? null)) {
                 foreach (is_array($multis) ? $multis : [$multis] as $multi) {
                     list($match, $replace) = explode(" ", $multi);
-                    if (preg_match("`\\A$match`", $base, $m)) {
+                    if (preg_match("`\\A{$match}`", $base, $m)) {
                         $confid = $replace;
                         for ($i = 1; $i < count($m); ++$i) {
-                            $confid = str_replace("\$$i", $m[$i], $confid);
+                            $confid = str_replace("\${$i}", $m[$i], $confid);
                         }
                         break;
                     }
@@ -49,26 +30,13 @@ class Multiconference {
         }
 
         if (!$confid) {
-            $confid = "__nonexistent__";
-        } else if (!preg_match('/\A[-a-zA-Z0-9_][-a-zA-Z0-9_.]*\z/', $confid)) {
+            $Opt["confid"] = "__nonexistent__";
+        } else if (preg_match('/\A[-a-zA-Z0-9_][-a-zA-Z0-9_.]*\z/', $confid)) {
+            $Opt["confid"] = $confid;
+        } else {
             $Opt["__original_confid"] = $confid;
-            $confid = "__invalid__";
+            $Opt["confid"] = "__invalid__";
         }
-
-        self::assign_confid($Opt, $confid);
-    }
-
-    /** @param array<string,mixed> &$opt
-     * @param string $confid */
-    static function assign_confid(&$opt, $confid) {
-        foreach (["dbName", "dbUser", "dbPassword", "dsn"] as $k) {
-            if (isset($opt[$k]) && is_string($opt[$k]))
-                $opt[$k] = str_replace('${confid}', $confid, $opt[$k]);
-        }
-        if (!($opt["dbName"] ?? null) && !($opt["dsn"] ?? null)) {
-            $opt["dbName"] = $confid;
-        }
-        $opt["confid"] = $confid;
     }
 
     /** @param ?string $root
@@ -97,13 +65,9 @@ class Multiconference {
         $save_opt = $Opt;
         '@phan-var array<string,mixed> $save_opt';
         $root = $root ?? SiteLoader::$root;
-        if ($root === SiteLoader::$root && self::$original_opt !== null) {
-            $Opt = self::$original_opt;
-        } else {
-            $Opt = [];
-            SiteLoader::read_options_file("{$root}/conf/options.php");
-        }
-        self::assign_confid($Opt, $confid);
+        $Opt = [];
+        SiteLoader::read_options_file("{$root}/conf/options.php");
+        $Opt["confid"] = $confid;
         if ($Opt["include"] ?? null) {
             SiteLoader::read_included_options();
         }
@@ -180,7 +144,7 @@ class Multiconference {
     /** @return string */
     static private function nonexistence_error() {
         if (PHP_SAPI === "cli") {
-            return "This is a multiconference installation. Use `-n CONFID` to specify a conference.";
+            return "Conference not specified. Use `-n CONFID` to specify a conference.";
         } else {
             return "Conference not specified.";
         }
@@ -191,31 +155,48 @@ class Multiconference {
         if (isset($Opt["multiconferenceFailureCallback"])) {
             call_user_func($Opt["multiconferenceFailureCallback"], "options");
         }
+
         $errors = [];
         $confid = $Opt["confid"] ?? null;
         $multiconference = $Opt["multiconference"] ?? null;
-        if ($multiconference && $confid === "__nonexistent__") {
-            $errors[] = self::nonexistence_error();
-        } else if ($multiconference) {
-            $errors[] = "The “{$confid}” conference does not exist. Check your URL to make sure you spelled it correctly.";
-        } else if (!($Opt["loaded"] ?? false)) {
-            $errors[] = "HotCRP has been installed, but not yet configured. You must run `lib/createdb.sh` to create a database for your conference. See `README.md` for further guidance.";
+        $missing = array_values(array_filter($Opt["missing"] ?? [], function ($x) {
+            return strpos($x, "__nonexistent__") === false;
+        }));
+
+        if (PHP_SAPI === "cli") {
+            if ($missing) {
+                array_push($errors, ...array_map(function ($s) {
+                    if (!file_exists($s)) {
+                        return "{$s}: Configuration file not found";
+                    } else {
+                        return "{$s}: Unable to load configuration file";
+                    }
+                }, $missing));
+            } else if ($multiconference && $confid === "__nonexistent__") {
+                $errors[] = self::nonexistence_error();
+            } else {
+                $errors[] = "Unable to load HotCRP";
+            }
         } else {
-            $errors[] = "HotCRP was unable to load. A system administrator must fix this problem.";
-        }
-        if (!($Opt["loaded"] ?? false) && defined("HOTCRP_OPTIONS")) {
-            $errors[] = "Unable to load options file `" . HOTCRP_OPTIONS . "`.";
-        } else if (!($Opt["loaded"] ?? false)) {
-            $errors[] = "Unable to load options file.";
-        }
-        if (isset($Opt["missing"]) && $Opt["missing"]) {
-            $missing = array_filter($Opt["missing"], function ($x) {
-                return strpos($x, "__nonexistent__") === false;
-            });
-            if (!empty($missing)) {
-                $errors[] = "Unable to load options from " . commajoin($missing) . ".";
+            if (!($Opt["loaded"] ?? null)) {
+                $main_options = defined("HOTCRP_OPTIONS") ? HOTCRP_OPTIONS : SiteLoader::$root . "/conf/options.php";
+                if (!file_exists($main_options)) {
+                    $errors[] = "HotCRP has been installed, but not yet configured. You must run `lib/createdb.sh` to create a database for your conference. See `README.md` for further guidance.";
+                } else {
+                    $errors[] = "HotCRP was unable to load. A system administrator must fix this problem.";
+                }
+            } else if ($multiconference && $confid === "__nonexistent__") {
+                $errors[] = self::nonexistence_error();
+            } else {
+                if ($multiconference) {
+                    $errors[] = "The “{$confid}” conference does not exist. Check your URL to make sure you spelled it correctly.";
+                }
+                if (!empty($missing)) {
+                    $errors[] = "Unable to load " . pluralx(count($missing), "configuration file") . " " . commajoin($missing) . ".";
+                }
             }
         }
+
         self::fail(["nolink" => true], ...$errors);
     }
 
@@ -236,8 +217,47 @@ class Multiconference {
             if (defined("HOTCRP_TESTHARNESS")) {
                 $errors[] = "You may need to run `lib/createdb.sh -c test/options.php` to create the database.";
             }
-            error_log("Unable to connect to database " . Dbl::sanitize_dsn(Conf::$main->dsn));
+            if (($cp = Dbl::parse_connection_params($Opt))) {
+                error_log("Unable to connect to database " . $cp->sanitized_dsn());
+            } else {
+                error_log("Unable to connect to database");
+            }
         }
         self::fail(["nolink" => true], ...$errors);
+    }
+
+    /** @param Throwable $ex
+     * @suppress PhanUndeclaredProperty */
+    static function batch_exception_handler($ex) {
+        global $argv;
+        $s = $ex->getMessage();
+        if (defined("HOTCRP_TESTHARNESS")) {
+            $s = $ex->getFile() . ":" . $ex->getLine() . ": " . $s;
+        }
+        if (strpos($s, ":") === false) {
+            $script = $argv[0] ?? "";
+            if (($slash = strrpos($script, "/")) !== false) {
+                if (($slash === 5 && str_starts_with($script, "batch"))
+                    || ($slash > 5 && substr_compare($script, "/batch", $slash - 6, 6) === 0)) {
+                    $slash -= 6;
+                }
+                $script = substr($script, $slash + 1);
+            }
+            if ($script !== "") {
+                $s = "{$script}: {$s}";
+            }
+        }
+        if (substr($s, -1) !== "\n") {
+            $s = "{$s}\n";
+        }
+        if (property_exists($ex, "getopt")
+            && $ex->getopt instanceof Getopt) {
+            $s .= $ex->getopt->short_usage();
+        }
+        if (defined("HOTCRP_TESTHARNESS")) {
+            $s .= debug_string_backtrace($ex) . "\n";
+        }
+        fwrite(STDERR, $s);
+        exit(1);
     }
 }

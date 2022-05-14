@@ -310,7 +310,6 @@ class Autoassigner {
             }
         }
         Dbl::free($result);
-        $row = $result = null;
         gc_collect_cycles();
         $this->make_pref_groups();
 
@@ -669,7 +668,6 @@ class Autoassigner {
             }
         }
         // paper <-> contact map
-        $bpdone = array();
         foreach ($papers as $pid => $ct) {
             if ($ct <= 0 && $peass[$pid] <= 0) {
                 continue;
@@ -745,7 +743,7 @@ class Autoassigner {
         $mcmf_round = 1;
         while ($this->assign_mcmf_once($papers, $action, $round, $nperpc)) {
             $nmissing = 0;
-            foreach ($papers as $pid => $ct) {
+            foreach ($papers as $ct) {
                 if ($ct > 0)
                     $nmissing += $ct;
             }
@@ -778,7 +776,7 @@ class Autoassigner {
 
     private function check_missing_assignments(&$papers, $action) {
         ksort($papers);
-        $badpids = array();
+        $badpids = [];
         foreach ($papers as $pid => $n) {
             if ($n > 0)
                 $badpids[] = $pid;
@@ -786,12 +784,11 @@ class Autoassigner {
         if (!count($badpids)) {
             return;
         }
-        $b = array();
+        $b = [];
         $pidx = join("+", $badpids);
         foreach ($badpids as $pid) {
             $b[] = $this->conf->hotlink($pid, "assign", "p=$pid&amp;ls=$pidx");
         }
-        $x = "";
         if ($action === "rev" || $action === "revadd") {
             $x = ", possibly because of conflicts or previously declined reviews in the PC members you selected";
         } else {
@@ -910,13 +907,13 @@ class Autoassigner {
         $m->run();
         // extract next roots
         $roots = array_keys($plist);
-        $result = array();
+        $result = [];
         while (!$m->infeasible && !empty($roots)) {
             $source = ".source";
             if (count($roots) !== count($plist)) {
                 $source = "p" . $roots[mt_rand(0, count($roots) - 1)];
             }
-            $pgroup = $igroup = array();
+            $pgroup = $igroup = [];
             foreach ($m->topological_sort($source, "p") as $v) {
                 $pidx = (int) substr($v->name, 1);
                 $igroup[] = $pidx;
@@ -947,9 +944,9 @@ class Autoassigner {
         $this->mcmf_round_descriptor = "";
         $this->mcmf_optimizing_for = "Optimizing assignment";
         // load conflicts
-        $cflt = array();
+        $cflt = [];
         foreach ($this->papersel as $pid) {
-            $cflt[$pid] = array();
+            $cflt[$pid] = [];
         }
         $result = $this->conf->qe("select paperId, contactId from PaperConflict where paperId?a and contactId?a and conflictType>" . CONFLICT_MAXUNCONFLICTED, $this->papersel, array_keys($this->acs));
         while (($row = $result->fetch_row())) {
@@ -973,11 +970,11 @@ class Autoassigner {
         }
         // make assignments
         $this->set_progress("Completing assignment");
-        $this->ass = array("paper,action,tag", "# hotcrp_assign_display_search",
-                           "# hotcrp_assign_show pcconf", "all,cleartag,$tag");
+        $this->ass = ["paper,action,tag", "# hotcrp_assign_display_search",
+                      "# hotcrp_assign_show pcconf", "all,cleartag,$tag"];
         $curgroup = -1;
         $index = 0;
-        $search = array("LEGEND:none");
+        $search = ["LEGEND:none"];
         foreach ($result[0] as $pid) {
             if ($groupmap[$pid] != $curgroup && $curgroup != -1) {
                 $search[] = "THEN LEGEND:none";
@@ -1026,7 +1023,7 @@ class Autoassigner {
 
     /** @return array<int,array<int,true>> */
     function tentative_assignment_map() {
-        $pcmap = $a = [];
+        $a = [];
         foreach ($this->acs as $ac) {
             $a[$ac->cid] = [];
             foreach ($ac->newass ?? [] as $pid) {

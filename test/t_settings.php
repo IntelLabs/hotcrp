@@ -32,15 +32,17 @@ class Settings_Tester {
     }
 
     function test_setting_info() {
-        $siset = $this->conf->si_set();
-        $si = $this->conf->si("sub_banal_data_0");
+        $si = $this->conf->si("format__0__spec");
         xassert_eqq($si->storage_type, Si::SI_DATA | Si::SI_SLICE);
         xassert_eqq($si->storage_name(), "sub_banal");
-        $si = $this->conf->si("sub_banal_data_4");
+        $si = $this->conf->si("format__4__spec");
         xassert_eqq($si->storage_type, Si::SI_DATA | Si::SI_SLICE);
         xassert_eqq($si->storage_name(), "sub_banal_4");
-        $si = $this->conf->si("sub_banal_m1");
-        xassert_eqq($si->group, "decisions");
+        $si = $this->conf->si("format__m1__active");
+        xassert_eqq($si->first_page(), "decisions");
+
+        $si = $this->conf->si("rf__1__order");
+        xassert_eqq($si->first_page(), "reviewform");
     }
 
     function test_message_defaults() {
@@ -53,8 +55,8 @@ class Settings_Tester {
         xassert(strpos($s, "topic") === false);
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
-            "topic__newlist" => "Whatever\n"
+            "has_topic" => 1,
+            "new_topics" => "Whatever\n"
         ])->parse();
 
         $s = $this->conf->si("preference_instructions")->default_value($sv);
@@ -63,7 +65,7 @@ class Settings_Tester {
         ConfInvariants::test_all($this->conf);
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
+            "has_topic" => 1,
             "topic__1__name" => "Whatever",
             "topic__1__delete" => 1
         ]);
@@ -84,16 +86,16 @@ class Settings_Tester {
         $this->delete_topics();
         xassert_eqq(json_encode($this->conf->topic_set()->as_array()), '[]');
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
-            "topic__newlist" => "Fart\n   Barf"
+            "has_topic" => 1,
+            "new_topics" => "Fart\n   Barf"
         ]);
         xassert($sv->execute());
         xassert_eqq(json_encode($this->conf->topic_set()->as_array()), '{"2":"Barf","1":"Fart"}');
 
         // duplicate topic not accepted
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
-            "topic__newlist" => "Fart"
+            "has_topic" => 1,
+            "new_topics" => "Fart"
         ]);
         xassert(!$sv->execute());
         xassert_eqq($sv->reqstr("topic__3__name"), "Fart");
@@ -102,27 +104,27 @@ class Settings_Tester {
         xassert_eqq(json_encode($this->conf->topic_set()->as_array()), '{"2":"Barf","1":"Fart"}');
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
-            "topic__newlist" => "Fart2"
+            "has_topic" => 1,
+            "new_topics" => "Fart2"
         ]);
         xassert($sv->execute());
         xassert_eqq(json_encode($this->conf->topic_set()->as_array()), '{"2":"Barf","1":"Fart","3":"Fart2"}');
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
+            "has_topic" => 1,
             "topic__1__id" => "2",
             "topic__1__name" => "Fért",
             "topic__2__id" => "",
             "topic__2__name" => "Festival Fartal",
             "topic__3__id" => "\$",
             "topic__3__name" => "Fet",
-            "topic__newlist" => "Fart3"
+            "new_topics" => "Fart3"
         ]);
         xassert($sv->execute());
         xassert_eqq(json_encode_db($this->conf->topic_set()->as_array()), '{"1":"Fart","3":"Fart2","6":"Fart3","2":"Fért","4":"Festival Fartal","5":"Fet"}');
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_topics" => 1,
+            "has_topic" => 1,
             "topic__1__id" => "1",
             "topic__1__delete" => "1",
             "topic__2__id" => "2",
@@ -143,24 +145,68 @@ class Settings_Tester {
         ConfInvariants::test_all($this->conf);
     }
 
+    function test_topics_json() {
+        $this->delete_topics();
+        xassert_eqq(json_encode($this->conf->topic_set()->as_array()), '[]');
+
+        $sv = (new SettingValues($this->u_chair))->add_json_string('{
+            "topic": ["Barf", "Fart", "Money"]
+        }');
+        xassert($sv->execute());
+        xassert_eqq(json_encode_db($this->conf->topic_set()->as_array()), '{"1":"Barf","2":"Fart","3":"Money"}');
+
+        $sv = (new SettingValues($this->u_chair))->add_json_string('{
+            "topic": []
+        }');
+        xassert($sv->execute());
+        xassert_eqq(json_encode_db($this->conf->topic_set()->as_array()), '{"1":"Barf","2":"Fart","3":"Money"}');
+
+        $sv = (new SettingValues($this->u_chair))->add_json_string('{
+            "topic": [{"id": 1, "name": "Berf"}]
+        }');
+        xassert($sv->execute());
+        xassert_eqq(json_encode_db($this->conf->topic_set()->as_array()), '{"1":"Berf","2":"Fart","3":"Money"}');
+
+        $sv = (new SettingValues($this->u_chair))->add_json_string('{
+            "topic": [{"id": 1, "name": "Berf"}]
+        }', null, true);
+        xassert($sv->execute());
+        xassert_eqq(json_encode_db($this->conf->topic_set()->as_array()), '{"1":"Berf"}');
+
+        $sv = (new SettingValues($this->u_chair))->add_json_string('{
+            "topic": [{"id": "$", "name": "Berf"}]
+        }');
+        xassert(!$sv->execute());
+        xassert_neqq(strpos($sv->full_feedback_text(), "is not unique"), false);
+
+        $sv = (new SettingValues($this->u_chair))->add_json_string('{
+            "topic": [{"name": "Bingle"}, {"name": "Bongle"}]
+        }');
+        xassert($sv->execute());
+        xassert_eqq(json_encode_db($this->conf->topic_set()->as_array()), '{"1":"Berf","4":"Bingle","5":"Bongle"}');
+
+        $this->delete_topics();
+    }
+
     function test_decision_types() {
         $this->conf->save_refresh_setting("outcome_map", null);
         xassert_eqq(json_encode($this->conf->decision_map()), '{"0":"Unspecified","1":"Accepted","-1":"Rejected"}');
         xassert_eqq($this->conf->setting("decisions"), null);
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__name" => "Accepted!",
             "decision__1__id" => "1",
             "decision__2__name" => "Newly accepted",
-            "decision__2__id" => "\$"
+            "decision__2__id" => "\$",
+            "decision__2__category" => "accept"
         ]);
         xassert($sv->execute());
         xassert_eqq(json_encode($this->conf->decision_map()), '{"0":"Unspecified","1":"Accepted!","2":"Newly accepted","-1":"Rejected"}');
         xassert_eqq($this->conf->setting("decisions"), null);
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__id" => "1",
             "decision__1__delete" => "1"
         ]);
@@ -169,7 +215,7 @@ class Settings_Tester {
 
         // accept-category with “reject” in the name is rejected by default
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__id" => "2",
             "decision__1__name" => "Rejected"
         ]);
@@ -178,7 +224,7 @@ class Settings_Tester {
 
         // duplicate decision names are rejected
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__id" => "2",
             "decision__1__name" => "Rejected",
             "decision__1__name_force" => "1"
@@ -189,28 +235,44 @@ class Settings_Tester {
 
         // can override name conflict
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__id" => "2",
             "decision__1__name" => "Really Rejected",
-            "decision__1__name_force" => "1"
+            "decision__1__name_force" => "1",
+            "decision__2__id" => "\$",
+            "decision__2__name" => "Whatever",
+            "decision__2__category" => "reject"
         ]);
         xassert($sv->execute());
-        xassert_eqq(json_encode($this->conf->decision_map()), '{"0":"Unspecified","2":"Really Rejected","-1":"Rejected"}');
+        xassert_eqq(json_encode($this->conf->decision_map()), '{"0":"Unspecified","2":"Really Rejected","-1":"Rejected","-2":"Whatever"}');
+
+        // not change name => no need to override conflict
+        $sv = SettingValues::make_request($this->u_chair, [
+            "has_decision" => 1,
+            "decision__1__id" => "2",
+            "decision__1__name" => "Really Rejected",
+            "decision__2__id" => "-2",
+            "decision__2__name" => "Well I dunno"
+        ]);
+        xassert($sv->execute());
+        xassert_eqq(json_encode($this->conf->decision_map()), '{"0":"Unspecified","2":"Really Rejected","-1":"Rejected","-2":"Well I dunno"}');
 
         // missing name => error
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__id" => "\$"
         ]);
         xassert(!$sv->execute());
 
         // restore default decisions => no database setting
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_decisions" => 1,
+            "has_decision" => 1,
             "decision__1__id" => "\$",
             "decision__1__name" => "Accepted",
             "decision__2__id" => "2",
-            "decision__2__delete" => "1"
+            "decision__2__delete" => "1",
+            "decision__3__id" => "-2",
+            "decision__3__delete" => "1"
         ]);
         xassert($sv->execute());
         xassert_eqq(json_encode($this->conf->decision_map()), '{"0":"Unspecified","1":"Accepted","-1":"Rejected"}');
@@ -224,7 +286,7 @@ class Settings_Tester {
         xassert(!$this->conf->find_review_field("B15"));
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "B9",
             "rf__1__id" => "s03",
             "rf__1__choices" => "1. A\n2. B\n3. C\n4. D\n5. E\n6. F\n7. G\n8. H\n9. I",
@@ -241,12 +303,14 @@ class Settings_Tester {
         xassert($sv->execute());
 
         $rf = $this->conf->find_review_field("B5");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(1), "sv sv9");
         xassert_eqq($rf->value_class(2), "sv sv7");
         xassert_eqq($rf->value_class(3), "sv sv5");
         xassert_eqq($rf->value_class(4), "sv sv3");
         xassert_eqq($rf->value_class(5), "sv sv1");
         $rf = $this->conf->find_review_field("B9");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(1), "sv sv1");
         xassert_eqq($rf->value_class(2), "sv sv2");
         xassert_eqq($rf->value_class(3), "sv sv3");
@@ -257,6 +321,7 @@ class Settings_Tester {
         xassert_eqq($rf->value_class(8), "sv sv8");
         xassert_eqq($rf->value_class(9), "sv sv9");
         $rf = $this->conf->find_review_field("B15");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(1), "sv sv1");
         xassert_eqq($rf->value_class(2), "sv sv2");
         xassert_eqq($rf->value_class(3), "sv sv2");
@@ -273,6 +338,7 @@ class Settings_Tester {
         xassert_eqq($rf->value_class(14), "sv sv8");
         xassert_eqq($rf->value_class(15), "sv sv9");
         $rf = $this->conf->find_review_field("B10");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(1), "sv sv1");
         xassert_eqq($rf->value_class(2), "sv sv2");
         xassert_eqq($rf->value_class(3), "sv sv3");
@@ -285,7 +351,7 @@ class Settings_Tester {
         xassert_eqq($rf->value_class(10), "sv sv9");
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__id" => "s03",
             "rf__1__colors" => "svr",
             "rf__2__id" => "s04",
@@ -297,12 +363,14 @@ class Settings_Tester {
         ]);
         xassert($sv->execute());
         $rf = $this->conf->find_review_field("B5");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(1), "sv sv1");
         xassert_eqq($rf->value_class(2), "sv sv3");
         xassert_eqq($rf->value_class(3), "sv sv5");
         xassert_eqq($rf->value_class(4), "sv sv7");
         xassert_eqq($rf->value_class(5), "sv sv9");
         $rf = $this->conf->find_review_field("B9");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(1), "sv sv9");
         xassert_eqq($rf->value_class(2), "sv sv8");
         xassert_eqq($rf->value_class(3), "sv sv7");
@@ -313,6 +381,7 @@ class Settings_Tester {
         xassert_eqq($rf->value_class(8), "sv sv2");
         xassert_eqq($rf->value_class(9), "sv sv1");
         $rf = $this->conf->find_review_field("B15");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(15), "sv sv1");
         xassert_eqq($rf->value_class(14), "sv sv2");
         xassert_eqq($rf->value_class(13), "sv sv2");
@@ -329,6 +398,7 @@ class Settings_Tester {
         xassert_eqq($rf->value_class(2), "sv sv8");
         xassert_eqq($rf->value_class(1), "sv sv9");
         $rf = $this->conf->find_review_field("B10");
+        assert($rf instanceof Score_ReviewField);
         xassert_eqq($rf->value_class(10), "sv sv1");
         xassert_eqq($rf->value_class(9), "sv sv2");
         xassert_eqq($rf->value_class(8), "sv sv3");
@@ -341,7 +411,7 @@ class Settings_Tester {
         xassert_eqq($rf->value_class(1), "sv sv9");
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__id" => "s03",
             "rf__1__delete" => "1",
             "rf__2__id" => "s04",
@@ -357,7 +427,7 @@ class Settings_Tester {
 
     function test_review_name_required() {
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__id" => "s90",
             "rf__1__choices" => "1. A\n2. B\n"
         ]);
@@ -368,6 +438,7 @@ class Settings_Tester {
     function test_responses() {
         if ($this->conf->setting_data("responses")) {
             $this->conf->save_refresh_setting("responses", null);
+            $this->conf->qe("delete from PaperComment where (commentType&?)!=0", CommentInfo::CT_RESPONSE);
         }
 
         $rrds = $this->conf->response_rounds();
@@ -378,7 +449,7 @@ class Settings_Tester {
 
         // rename unnamed response round
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_responses" => 1,
+            "has_response" => 1,
             "response__1__id" => "0",
             "response__1__name" => "Butt",
             "response__1__open" => "@" . (Conf::$now - 1),
@@ -406,7 +477,7 @@ class Settings_Tester {
         // changes ignored if response_active checkbox off
         $sv = SettingValues::make_request($this->u_chair, [
             "has_response_active" => 1,
-            "has_responses" => 1,
+            "has_response" => 1,
             "response__1__id" => "0",
             "response__1__name" => "ButtJRIOQOIFNINF",
             "response__1__open" => "@" . (Conf::$now - 1),
@@ -417,7 +488,7 @@ class Settings_Tester {
 
         // add an unnamed response round
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_responses" => 1,
+            "has_response" => 1,
             "response__1__id" => '$',
             "response__1__name" => "",
             "response__1__open" => "@" . (Conf::$now - 1),
@@ -459,7 +530,7 @@ class Settings_Tester {
 
         // recursive condition not allowed
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Program",
             "sf__1__id" => "\$",
             "sf__1__order" => 100,
@@ -472,7 +543,7 @@ class Settings_Tester {
 
         // newly-added field conditions can refer to other newly-added fields
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Program",
             "sf__1__id" => "\$",
             "sf__1__order" => 100,

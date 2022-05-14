@@ -38,7 +38,7 @@ class Responses_SettingParser extends SettingParser {
         // set placeholder for unnamed round
         $rrd = ($sv->conf->response_rounds())[0] ?? null;
         if ($rrd && $rrd->unnamed) {
-            $ctr = $sv->search_enumeration("response__", "__id", "0");
+            $ctr = $sv->search_enumeration_id("response__", "0");
             assert($ctr !== null);
             $si = $sv->si("response__{$ctr}__name");
             $si->placeholder = "unnamed";
@@ -102,12 +102,11 @@ class Responses_SettingParser extends SettingParser {
 
     function print(SettingValues $sv) {
         // Authors' response
-        echo '<div class="form-g">';
         $sv->print_checkbox("response_active", '<strong>Collect authors’ responses to the reviews<span class="if-response-active">:</span></strong>', ["group_open" => true, "class" => "uich js-settings-resp-active"]);
         Icons::stash_defs("trash");
         echo Ht::unstash(), '<div class="if-response-active',
             $sv->vstr("response_active") ? "" : " hidden",
-            '"><hr class="g">', Ht::hidden("has_responses", 1);
+            '"><hr class="g">', Ht::hidden("has_response", 1);
 
         foreach ($sv->enumerate("response__") as $ctr) {
             $this->print_one($sv, $ctr);
@@ -117,16 +116,15 @@ class Responses_SettingParser extends SettingParser {
         $this->print_one($sv, '$');
         echo '</template>';
         if ($sv->editable("response__0__name")) {
-            echo '<div class="form-g">',
-                Ht::button("Add response", ["class" => "ui js-settings-response-new"]),
-                '</div>';
+            echo '<hr class="form-sep">',
+                Ht::button("Add response", ["class" => "ui js-settings-response-new"]);
         }
 
-        echo '</div></div></div>';
+        echo '</div></div>';
     }
 
     function apply_req(SettingValues $sv, Si $si) {
-        if ($si->name === "responses") {
+        if ($si->name === "response") {
             return $this->apply_response_req($sv, $si);
         } else if ($si->part2 === "__name") {
             $rrd = $sv->cur_object;
@@ -208,7 +206,7 @@ class Responses_SettingParser extends SettingParser {
     }
 
     static function crosscheck(SettingValues $sv) {
-        if ($sv->has_interest("responses")) {
+        if ($sv->has_interest("response")) {
             foreach ($sv->conf->response_rounds() as $i => $rrd) {
                 if ($rrd->search) {
                     foreach ($rrd->search->message_list() as $mi) {

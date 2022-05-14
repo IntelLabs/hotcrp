@@ -77,7 +77,7 @@ class Reviews_Tester {
     }
 
     function test_add_incomplete_review() {
-        save_review(1, $this->u_mgbaker, ["overAllMerit" => 5, "ready" => false]);
+        save_review(1, $this->u_mgbaker, ["s01" => 5, "ready" => false]);
 
         assert_search_papers($this->u_chair, "re:3", "1-18");
         assert_search_papers($this->u_chair, "-re:3", "19-30");
@@ -105,7 +105,7 @@ class Reviews_Tester {
     }
 
     function test_complete_incomplete_review() {
-        save_review(1, $this->u_mgbaker, ["overAllMerit" => 5, "reviewerQualification" => 1, "ready" => true]);
+        save_review(1, $this->u_mgbaker, ["s01" => 5, "s02" => 1, "ready" => true]);
 
         assert_search_papers($this->u_chair, "re:3", "1-18");
         assert_search_papers($this->u_chair, "-re:3", "19-30");
@@ -134,7 +134,7 @@ class Reviews_Tester {
 
     function test_offline_review_update() {
         $paper1 = $this->conf->checked_paper_by_id(1, $this->u_chair);
-        $rrow = fetch_review($paper1, $this->u_mgbaker);
+        fetch_review($paper1, $this->u_mgbaker);
         $this->review1A = file_get_contents(SiteLoader::find("test/review1A.txt"));
 
         // correct update
@@ -156,15 +156,15 @@ class Reviews_Tester {
         xassert($tf->parse_text(false));
         xassert($tf->check_and_save($this->u_mgbaker));
         xassert_eqq(join(" ", $tf->unchanged), "#1A");
-        xassert($tf->has_problem_at("overAllMerit"));
+        xassert($tf->has_problem_at("s01"));
 
         // invalid “No entry” fails
         $tf = ReviewValues::make_text($this->conf->review_form(), preg_replace('/^4/m', 'No entry', $this->review1A), "review1A-3.txt");
         xassert($tf->parse_text(false));
         xassert($tf->check_and_save($this->u_mgbaker));
         xassert_eqq(join(" ", $tf->unchanged), "#1A");
-        xassert($tf->has_problem_at("overAllMerit"));
-        xassert(strpos($tf->feedback_text_at("overAllMerit"), "Entry required") !== false);
+        xassert($tf->has_problem_at("s01"));
+        xassert(strpos($tf->feedback_text_at("s01"), "Entry required") !== false);
         //error_log(var_export($tf->message_list(), true));
     }
 
@@ -196,7 +196,7 @@ class Reviews_Tester {
     function test_change_review_choices() {
         // add “no entry” to overall merit choices
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Overall merit",
             "rf__1__id" => "s01",
             "rf__1__choices" => "1. Reject\n2. Weak reject\n3. Weak accept\n4. Accept\n5. Strong accept\nNo entry\n"
@@ -209,7 +209,7 @@ class Reviews_Tester {
         xassert($tf->parse_text(false));
         xassert($tf->check_and_save($this->u_mgbaker));
         xassert_eqq(join(" ", $tf->updated ?? []), "#1A");
-        xassert(!$tf->has_problem_at("overAllMerit"));
+        xassert(!$tf->has_problem_at("s01"));
 
         assert_search_papers($this->u_chair, "has:ovemer", "");
 
@@ -218,13 +218,13 @@ class Reviews_Tester {
         xassert($tf->parse_text(false));
         xassert($tf->check_and_save($this->u_mgbaker));
         xassert_eqq(join(" ", $tf->updated), "#1A");
-        xassert(!$tf->has_problem_at("overAllMerit"));
+        xassert(!$tf->has_problem_at("s01"));
 
         assert_search_papers($this->u_chair, "ovemer:4", "1");
 
         // remove “4” choice from overall merit
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Overall merit",
             "rf__1__id" => "s01",
             "rf__1__choices" => "1. Reject\n2. Weak reject\n3. Weak accept\nNo entry\n"
@@ -243,7 +243,7 @@ class Reviews_Tester {
 
         // Stop displaying reviewer expertise
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Reviewer expertise",
             "rf__1__id" => "s02",
             "rf__1__order" => 0
@@ -253,7 +253,7 @@ class Reviews_Tester {
 
         // Add reviewer expertise back
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Reviewer expertise",
             "rf__1__id" => "s02",
             "rf__1__choices" => "1. No familiarity\n2. Some familiarity\n3. Knowledgeable\n4. Expert",
@@ -295,7 +295,7 @@ class Reviews_Tester {
 
     function test_many_fields() {
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Score 3", "rf__1__choices" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf__1__order" => 2.03, "rf__1__id" => "s03",
             "rf__2__name" => "Score 4", "rf__2__choices" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf__2__order" => 2.04, "rf__2__id" => "s04",
             "rf__3__name" => "Score 5", "rf__3__choices" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf__3__order" => 2.05, "rf__3__id" => "s05",
@@ -363,7 +363,7 @@ class Reviews_Tester {
 
         // Remove some fields and truncate their options
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Score 15", "rf__1__order" => 0, "rf__1__id" => "s15",
             "rf__2__name" => "Score 16", "rf__2__choices" => "1. Yes\n2. No\nNo entry\n", "rf__2__id" => "s16",
             "rf__3__name" => "Text 10", "rf__3__order" => 0, "rf__3__id" => "t10"
@@ -372,7 +372,7 @@ class Reviews_Tester {
         xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Score 15", "rf__1__choices" => "1. Yes\n2. No\nNo entry\n", "rf__1__order" => 100, "rf__1__id" => "s15",
             "rf__2__name" => "Text 10", "rf__2__order" => 101, "rf__2__id" => "t10"
         ]);
@@ -565,7 +565,7 @@ class Reviews_Tester {
         assert_search_papers($this->u_chair, "tex11:butt", "1");
 
         // simplify review form
-        $sx = ["has_review_form" => 1];
+        $sx = ["has_rf" => 1];
         for ($i = 3, $ctr = 1; $i <= 16; ++$i) {
             $sx["rf__{$ctr}__id"] = sprintf("s%02d", $i);
             $sx["rf__{$ctr}__delete"] = true;
@@ -697,7 +697,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // offline review parsing for UTF-8 review questions
         $sv = SettingValues::make_request($user_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Questions for authors’ response",
             "rf__1__description" => "Specific questions that could affect your accept/reject decision. Remember that the authors have limited space and must respond to all reviewers.",
             "rf__1__visibility" => "au",
@@ -711,13 +711,13 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
         xassert($tf->parse_text(false));
         xassert($tf->check_and_save($user_diot));
         xassert_eqq($tf->summary_status(), MessageSet::SUCCESS);
-        xassert_eqq($tf->full_feedback_text(), "Review #18A updated.\n");
+        xassert_eqq($tf->full_feedback_text(), "Updated review #18A\n");
 
         $tf = ReviewValues::make_text($conf->review_form(), $review18A, "review18A.txt");
         xassert($tf->parse_text(false));
         xassert($tf->check_and_save($user_diot));
         xassert_eqq($tf->summary_status(), MessageSet::WARNING);
-        xassert_eqq($tf->full_feedback_text(), "Review #18A unchanged.\n");
+        xassert_eqq($tf->full_feedback_text(), "No changes to review #18A\n");
 
         $rrow = fetch_review($paper18, $user_diot);
         xassert_eqq($rrow->fval("t04"), "This is the stuff I want to add for the authors’ response.\n");
@@ -732,7 +732,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
         xassert_eqq($rrow->fval("t04"), "That was the stuff I want to add for the authors’ response.\n");
 
         $sv = SettingValues::make_request($user_chair, [
-            "has_review_form" => 1,
+            "has_rf" => 1,
             "rf__1__name" => "Questions for authors’ response (hidden from authors)",
             "rf__1__name_force" => 1,
             "rf__1__id" => "t04"
@@ -1045,7 +1045,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // rename field
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Fudge",
             "sf__1__id" => 1,
             "sf__1__order" => 1,
@@ -1058,7 +1058,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // retype field => fails
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Fudge",
             "sf__1__id" => 1,
             "sf__1__order" => 1,
@@ -1069,7 +1069,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // delete old field, create new field with same name
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Fudge",
             "sf__1__id" => 1,
             "sf__1__order" => 1,
@@ -1085,7 +1085,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // new field
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Brownies",
             "sf__1__id" => "\$",
             "sf__1__order" => 100,
@@ -1103,7 +1103,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // nonunique name => fail
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__name" => "Brownies",
             "sf__1__id" => "\$",
             "sf__1__order" => 100,
@@ -1115,7 +1115,7 @@ But, in a larger sense, we can not dedicate -- we can not consecrate -- we can n
 
         // no name => fail
         $sv = SettingValues::make_request($this->u_chair, [
-            "has_options" => 1,
+            "has_sf" => 1,
             "sf__1__id" => "\$",
             "sf__1__order" => 100,
             "sf__1__type" => "numeric"

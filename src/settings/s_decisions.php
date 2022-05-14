@@ -9,11 +9,12 @@ class Decisions_SettingParser extends SettingParser {
         if (is_numeric($did)
             && ($dnum = intval($did)) !== 0
             && ($dname = ($sv->conf->decision_map())[$dnum] ?? null)) {
-            $v = (object) ["id" => $dnum, "name" => $dname, "category" => $dnum > 0 ? "a" : "r"];
+            $category = $dnum > 0 ? "accept" : "reject";
+            $v = ["id" => $dnum, "name" => $dname, "category" => $category];
         } else {
-            $v = (object) ["id" => null, "name" => "", "category" => "a"];
+            $v = ["id" => null, "name" => "", "category" => "accept"];
         }
-        $sv->set_oldv($si, $v);
+        $sv->set_oldv($si, (object) $v);
     }
 
     function prepare_enumeration(SettingValues $sv, Si $si) {
@@ -28,7 +29,7 @@ class Decisions_SettingParser extends SettingParser {
         $did = $sv->vstr("decision__{$ctr}__id");
         $isnew = $did === "" || $did === "\$";
         $count = $countmap[$did] ?? 0;
-        $editable = $sv->editable("decisions");
+        $editable = $sv->editable("decision");
         echo '<div id="decision__', $ctr, '" class="has-fold foldo settings-decision',
             $isnew ? ' is-new' : '', '"><div class="entryi">',
             $sv->feedback_at("decision__{$ctr}__name"),
@@ -47,10 +48,10 @@ class Decisions_SettingParser extends SettingParser {
         $class = $sv->vstr("decision__{$ctr}__category");
         if ($isnew) {
             echo Ht::select("decision__{$ctr}__category",
-                    ["a" => "Accept category", "r" => "Reject category"], $class,
-                    $sv->sjs("decision__{$ctr}__category", ["data-default-value" => "a"]));
+                    ["accept" => "Accept category", "reject" => "Reject category"], $class,
+                    $sv->sjs("decision__{$ctr}__category", ["data-default-value" => "accept"]));
         } else {
-            echo $class === "a" ? "<span class=\"pstat_decyes\">Accept</span> category" : "<span class=\"pstat_decno\">Reject</span> category";
+            echo $class === "accept" ? "<span class=\"pstat_decyes\">Accept</span> category" : "<span class=\"pstat_decno\">Reject</span> category";
             if ($count) {
                 echo ", ", plural($count, "submission");
             }
@@ -71,8 +72,7 @@ class Decisions_SettingParser extends SettingParser {
             $decs_pcount[(int) $row[0]] = (int) $row[1];
         }
 
-        echo '<div class="form-g">',
-            Ht::hidden("has_decisions", 1),
+        echo Ht::hidden("has_decision", 1),
             '<div id="settings-decision-types">';
         foreach ($sv->enumerate("decision__") as $ctr) {
             self::print_decrow($sv, $ctr, $decs_pcount);
@@ -84,14 +84,13 @@ class Decisions_SettingParser extends SettingParser {
         }
         echo '<div id="settings-decision-type-notes" class="hidden">',
             '<div class="hint">Examples: “Accepted as short paper”, “Early reject”</div></div>';
-        if ($sv->editable("decisions")) {
+        if ($sv->editable("decision")) {
             echo '<template id="settings-new-decision-type" class="hidden">';
             self::print_decrow($sv, '$', $decs_pcount);
             echo '</template><div class="mg">',
                 Ht::button("Add decision type", ["class" => "ui js-settings-decision-add"]),
                 '</div>';
         }
-        echo "</div>\n";
     }
 
     /** @param SettingValues $sv
@@ -103,9 +102,9 @@ class Decisions_SettingParser extends SettingParser {
                 $sv->error_at("decision__{$ctr}__name", "<0>{$error}");
             }
             if (!$sv->reqstr("decision__{$ctr}__name_force")
-                && stripos($dsr->name, $dsr->category === "a" ? "reject" : "accept") !== false) {
-                $n1 = $dsr->category === "a" ? "An Accept" : "A Reject";
-                $n2 = $dsr->category === "a" ? "reject" : "accept";
+                && stripos($dsr->name, $dsr->category === "accept" ? "reject" : "accept") !== false) {
+                $n1 = $dsr->category === "accept" ? "An Accept" : "A Reject";
+                $n2 = $dsr->category === "accept" ? "reject" : "accept";
                 $sv->error_at("decision__{$ctr}__name", "<0>{$n1}-category decision has “{$n2}” in its name");
                 $sv->inform_at("decision__{$ctr}__name", "<0>Either change the decision name or category or check the “Confirm” box to save anyway.");
                 $sv->error_at("decision__{$ctr}__category");
@@ -115,7 +114,7 @@ class Decisions_SettingParser extends SettingParser {
     }
 
     function apply_req(SettingValues $sv, Si $si) {
-        if ($si->name !== "decisions") {
+        if ($si->name !== "decision") {
             return false;
         }
 
@@ -133,7 +132,7 @@ class Decisions_SettingParser extends SettingParser {
         // name reuse, new ids
         foreach ($djs as $dj) {
             if ($dj->id === null) {
-                $idstep = $dj->id = $dj->category === "a" ? 1 : -1;
+                $idstep = $dj->id = $dj->category === "accept" ? 1 : -1;
                 while (isset($hasid[$dj->id])) {
                     $dj->id += $idstep;
                 }
@@ -145,7 +144,7 @@ class Decisions_SettingParser extends SettingParser {
         $collator = $sv->conf->collator();
         usort($djs, function ($a, $b) use ($collator) {
             if ($a->category !== $b->category) {
-                return $a->category === "a" ? -1 : 1;
+                return $a->category === "accept" ? -1 : 1;
             } else {
                 return $collator->compare($a->name, $b->name);
             }
