@@ -1,11 +1,11 @@
 <?php
 // listactions/la_tag.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Tag_ListAction extends ListAction {
     static function render(PaperList $pl, Qrequest $qreq) {
         // tagtype cell
-        $tagopt = array("a" => "Add", "d" => "Remove", "s" => "Define", "xxxa" => null, "ao" => "Add to order", "aos" => "Add to gapless order", "so" => "Define order", "sos" => "Define gapless order", "sor" => "Define random order");
+        $tagopt = ["a" => "Add", "d" => "Remove", "s" => "Define", "xxxa" => null, "ao" => "Add to order", "aos" => "Add to gapless order", "so" => "Define order", "sos" => "Define gapless order", "sor" => "Define random order"];
         $tagextra = ["class" => "js-submit-action-info-tag"];
         if ($pl->user->privChair) {
             $tagopt["xxxb"] = null;
@@ -15,22 +15,22 @@ class Tag_ListAction extends ListAction {
         // tag name cell
         $t = "";
         if ($pl->user->privChair) {
-            $t .= '<span class="fx99"><a class="ui q js-foldup" href="">'
+            $t .= '<span class="fx99"><a class="ui q js-foldup" href="" data-fold-target="0">'
                 . expander(null, 0) . "</a></span>";
         }
         $t .= 'tag<span class="fn99">(s)</span> &nbsp;'
             . Ht::entry("tag", $qreq->tag,
-                        ["size" => 15, "class" => "want-focus js-autosubmit js-submit-action-info-tag need-suggest tags", "data-autosubmit-type" => "tag"])
-            . ' &nbsp;' . Ht::submit("fn", "Go", ["value" => "tag", "class" => "uic js-submit-mark"]);
+                        ["size" => 15, "class" => "want-focus js-autosubmit js-submit-action-info-tag need-suggest tags", "data-submit-fn" => "tag"])
+            . $pl->action_submit("tag");
         if ($pl->user->privChair) {
             $t .= '<div class="fx"><div style="margin:2px 0">'
-                . Ht::checkbox("tagcr_gapless", 1, !!$qreq->tagcr_gapless, array("style" => "margin-left:0"))
+                . Ht::checkbox("tagcr_gapless", 1, !!$qreq->tagcr_gapless, ["class" => "ml-0"])
                 . "&nbsp;" . Ht::label("Gapless order") . "</div>"
                 . '<div style="margin:2px 0">Using: &nbsp;'
                 . Ht::select("tagcr_method", PaperRank::methods(), $qreq->tagcr_method)
                 . "</div>"
                 . '<div style="margin:2px 0">Source tag: &nbsp;~'
-                . Ht::entry("tagcr_source", $qreq->tagcr_source, array("size" => 15))
+                . Ht::entry("tagcr_source", $qreq->tagcr_source, ["size" => 15])
                 . "</div></div>";
         }
 
@@ -57,7 +57,7 @@ class Tag_ListAction extends ListAction {
             shuffle($papers);
         }
 
-        $x = array("action,paper,tag\n");
+        $x = ["action,paper,tag\n"];
         if ($act === "s" || $act === "so" || $act === "sos" || $act === "sor") {
             foreach ($tags as $t) {
                 $x[] = "cleartag,all," . Tagger::base($t) . "\n";
@@ -92,7 +92,7 @@ class Tag_ListAction extends ListAction {
             if ($tagger->check($tagreq, Tagger::NOPRIVATE | Tagger::NOVALUE)
                 && $tagger->check($source_tag, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE)) {
                 $r = new PaperRank($user->conf, $source_tag, $tagreq, $papers,
-                                   $qreq->tagcr_gapless, "Search", "search");
+                                   !!$qreq->tagcr_gapless, "Search", "search");
                 $r->run($qreq->tagcr_method);
                 $assignset->set_overrides(Contact::OVERRIDE_CONFLICT | Contact::OVERRIDE_TAG_CHECKS);
                 $assignset->parse($r->unparse_assignment());
@@ -103,24 +103,22 @@ class Tag_ListAction extends ListAction {
                 $assignset->error($tagger->error_html());
             }
         }
-        if (($errors = $assignset->messages_div_html())) {
-            if ($assignset->is_empty()) {
-                Conf::msg_error($errors);
-            } else {
-                Conf::msg_warning("Some tag assignments were ignored:\n$errors");
-                $assignset->clear_errors();
-            }
+        if ($assignset->is_empty() && $assignset->has_message()) {
+            $assignset->prepend_msg("<0>Changes not saved due to errors", 2);
+        } else if ($assignset->is_empty()) {
+            $assignset->prepend_msg("<0>No changes", MessageSet::MARKED_NOTE);
+        } else if ($assignset->has_message()) {
+            $assignset->prepend_msg("<0>Some tag assignments ignored because of errors", MessageSet::MARKED_NOTE);
+        } else {
+            $assignset->prepend_msg("<0>Tag changes saved", MessageSet::SUCCESS);
         }
         $success = $assignset->execute();
-
         if ($qreq->ajax) {
-            json_exit(["ok" => $success]);
-        } else if ($success) {
-            if (!$errors) {
-                $user->conf->confirmMsg("Tags saved.");
-            }
-            $args = ["atab" => "tag"] + $qreq->subset_as_array(["tag", "tagfn", "tagcr_method", "tagcr_source", "tagcr_gapless"]);
-            $user->conf->redirect_self($qreq, $args);
+            json_exit(["ok" => $success, "message_list" => $assignset->message_list()]);
+        } else {
+            $user->conf->feedback_msg($assignset->message_list());
+            $args = ["atab" => "tag"] + $qreq->subset_as_array("tag", "tagfn", "tagcr_method", "tagcr_source", "tagcr_gapless");
+            return new Redirection($user->conf->site_referrer_url($qreq, $args, Conf::HOTURL_RAW));
         }
     }
 }

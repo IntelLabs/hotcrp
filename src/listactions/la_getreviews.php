@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getreviews.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class GetReviews_ListAction extends GetReviewBase_ListAction {
     private $include_paper;
@@ -20,10 +20,12 @@ class GetReviews_ListAction extends GetReviewBase_ListAction {
             $user->conf->au_seerev = Conf::AUSEEREV_YES;
             Contact::update_rights();
         }
-        $errors = $texts = $pids = [];
+        $texts = $pids = [];
+        $ms = (new MessageSet)->set_ignore_duplicates(true)->set_want_ftext(true, 0);
         foreach ($ssel->paper_set($user) as $prow) {
             if (($whyNot = $user->perm_view_paper($prow))) {
-                $errors["#$prow->paperId: " . $whyNot->unparse_text()] = true;
+                $mi = $ms->error_at(null, "<0>" . $whyNot->unparse_text());
+                $mi->landmark = "#{$prow->paperId}";
                 continue;
             }
             $rctext = "";
@@ -55,9 +57,12 @@ class GetReviews_ListAction extends GetReviewBase_ListAction {
                         . "* Paper #{$prow->paperId} {$prow->title}\n\n" . $rctext;
                 }
                 $texts[] = [$prow->paperId, $rctext, $time];
-                $pids[$prow->paperId] = true;
+                $pids[] = $prow->paperId;
             } else if (($whyNot = $user->perm_view_review($prow, null))) {
-                $errors["#$prow->paperId: " . $whyNot->unparse_text()] = true;
+                $mi = $ms->error_at(null, "<0>" . $whyNot->unparse_text());
+                $mi->landmark = "#{$prow->paperId}";
+            } else {
+                $ms->msg_at(null, "<0>{$prow->paperId} has no visible reviews", MessageSet::WARNING_NOTE);
             }
         }
         if (!$this->iszip) {
@@ -73,8 +78,8 @@ class GetReviews_ListAction extends GetReviewBase_ListAction {
             Contact::update_rights();
         }
         if (!empty($pids)) {
-            $user->log_activity("Download reviews", array_keys($pids));
+            $user->log_activity("Download reviews", $pids);
         }
-        return $this->finish($user, $texts, $errors);
+        return $this->finish($user, $texts, $ms);
     }
 }

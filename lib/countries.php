@@ -3,7 +3,7 @@
 // This list of countries taken from Amazon.com's address entries, 2007.
 class Countries {
 
-    public static $list = array("Afghanistan",
+    public static $list = ["Afghanistan",
 "Albania",
 "Algeria",
 "Andorra",
@@ -45,7 +45,7 @@ class Countries {
 "Congo, Democratic Republic of the",
 "Congo, Republic of the",
 "Costa Rica",
-"Côte d'Ivoire",
+"Côte d’Ivoire",
 "Croatia",
 "Cuba",
 "Cyprus",
@@ -93,7 +93,7 @@ class Countries {
 "Kazakhstan",
 "Kenya",
 "Kiribati",
-"Korea, North – Democratic People's Republic of Korea",
+"Korea, North – Democratic People’s Republic of Korea",
 "Korea, South – Republic of Korea",
 "Kosovo",
 "Kuwait",
@@ -201,25 +201,29 @@ class Countries {
 "Yemen",
 "Zambia",
 "Zimbabwe",
-		       "Other");
+		       "Other"];
 
-    public static $synonyms = array(
+    public static $synonyms = [
         "united states" => "united states of america",
         "us" => "united states of america",
-        "usa" => "united states of america");
+        "usa" => "united states of america"
+    ];
 
+    /** @param string $name
+     * @param string $country
+     * @return string */
     static function selector($name, $country, $extra = []) {
         $sel_country = "";
         $opts = ["<option" . ($country ? '' : ' selected') . ' value="">(select one)</option>'];
-        if (($x = self::$synonyms[strtolower($country)] ?? null)) {
+        if (($x = self::$synonyms[strtolower($country ?? "")] ?? null)) {
             $country = $x;
         }
         foreach (self::$list as $c) {
-            if ($country && !strcasecmp($country, $c)) {
+            if ($country !== null && strcasecmp($country, $c) === 0) {
                 $sel_country = $c;
                 $country = null;
             }
-            $opts[] = '<option' . ($sel_country === $c ? ' selected' : '') . ">$c</option>";
+            $opts[] = '<option' . ($sel_country === $c ? ' selected' : '') . ">{$c}</option>";
         }
         if ($country) {
             $sel_country = $country;
@@ -232,7 +236,7 @@ class Countries {
         if (!isset($extra["data-default-value"])) {
             $extra["data-default-value"] = $sel_country;
         }
-        return "<span class=\"select\"><select name=\"${name}\"" . Ht::extra($extra) . ">\n"
+        return "<span class=\"select\"><select name=\"{$name}\"" . Ht::extra($extra) . ">\n"
             . join("\n", $opts) . "</select></span>";
     }
 }

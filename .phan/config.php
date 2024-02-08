@@ -26,6 +26,9 @@ use Phan\Config;
  */
 return (function () {
 $config = [
+    "minimum_target_php_version" => "7.0",
+    "target_php_version" => "8.1",
+
     // If true, missing properties will be created when
     // they are first seen. If false, we'll report an
     // error message.
@@ -47,6 +50,9 @@ $config = [
 
     "enable_internal_return_type_plugins" => true,
     //"enable_extended_internal_return_type_plugins" => true,
+
+    //"redundant_condition_detection" => true,
+    //"unused_variable_detection" => true,
 
     // A list of directories that should be parsed for class and
     // method information. After excluding the directories
@@ -96,6 +102,7 @@ $config = [
 
     "exclude_file_list" => [
         Config::projectPath(".phan/config.php"),
+        Config::projectPath("batch/downgradedb.php"),
         Config::projectPath("lib/collatorshim.php"),
         Config::projectPath("lib/polyfills.php")
     ],
@@ -111,7 +118,9 @@ $config = [
 
     "suppress_issue_types" => [
         "PhanUnusedPublicMethodParameter",
-        "PhanParamReqAfterOpt"
+        "PhanUnusedVariableValueOfForeachWithKey",
+        "PhanParamReqAfterOpt", // remove when PHP 7.0 is not supported
+        "PhanUndeclaredClassAttribute"
     ],
 
     "plugins" => [

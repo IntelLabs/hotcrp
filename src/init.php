@@ -1,6 +1,6 @@
 <?php
 // init.php -- HotCRP initialization (test or site)
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 declare(strict_types=1);
 const HOTCRP_VERSION = "3.0b1";
@@ -27,6 +27,7 @@ const DTYPE_SUBMISSION = 0;
 const DTYPE_FINAL = -1;
 const DTYPE_COMMENT = -2;
 const DTYPE_EXPORT = -3;
+const DTYPE_INVALID = -4;
 
 const VIEWSCORE_EMPTY = -3;         // score no one can see; see also reviewViewScore
 const VIEWSCORE_ADMINONLY = -2;
@@ -48,7 +49,7 @@ const NAME_MAILQUOTE = 128; // quote name by RFC822
 const NAME_A = 256; // affiliation
 const NAME_PARSABLE = 512; // `last, first` if `first last` would be ambiguous
 
-const COMMENTTYPE_DRAFT = 1;
+const COMMENTTYPE_DRAFT = 1; // XXX obsolete, see CommentInfo versions
 const COMMENTTYPE_BLIND = 2;
 const COMMENTTYPE_RESPONSE = 4;
 const COMMENTTYPE_BYAUTHOR = 8;
@@ -65,18 +66,25 @@ const TAG_REGEX = '~?~?' . TAG_REGEX_NOTWIDDLE;
 const TAG_MAXLEN = 80;
 const TAG_INDEXBOUND = 2147483646;
 
-global $Conf, $Now, $ConfSitePATH;
+global $Conf;
 
 require_once("siteloader.php");
 require_once(SiteLoader::find("lib/navigation.php"));
 require_once(SiteLoader::find("lib/polyfills.php"));
 require_once(SiteLoader::find("lib/base.php"));
 require_once(SiteLoader::find("lib/redirect.php"));
+mysqli_report(MYSQLI_REPORT_OFF);
 require_once(SiteLoader::find("lib/dbl.php"));
 require_once(SiteLoader::find("src/helpers.php"));
 require_once(SiteLoader::find("src/conference.php"));
 require_once(SiteLoader::find("src/contact.php"));
-Conf::set_current_time(time());
+Conf::set_current_time(microtime(true));
+if (defined("HOTCRP_TESTHARNESS")) {
+    Conf::$test_mode = true;
+}
+if (PHP_SAPI === "cli") {
+    set_exception_handler("Multiconference::batch_exception_handler");
+}
 
 
 // Set locale to C (so that, e.g., strtolower() on UTF-8 data doesn't explode)
@@ -91,42 +99,29 @@ if (PHP_VERSION_ID < 80000
 }
 
 
-function read_included_options(&$files) {
-    global $Opt;
-    if (is_string($files)) {
-        $files = [$files];
-    }
-    for ($i = 0; $i !== count($files); ++$i) {
-        foreach (SiteLoader::expand_includes($files[$i]) as $f) {
-            $key = "missing";
-            if ((@include $f) !== false) {
-                $key = "loaded";
-            }
-            $Opt[$key][] = $f;
-        }
-    }
-}
-
 function expand_json_includes_callback($includelist, $callback) {
     $includes = [];
-    foreach (is_array($includelist) ? $includelist : [$includelist] as $k => $str) {
+    foreach (is_array($includelist) ? $includelist : [$includelist] as $k => $v) {
+        if ($v === null || $v === false || $v === "") {
+            continue;
+        }
         $expandable = null;
-        if (is_string($str)) {
-            if (str_starts_with($str, "@")) {
-                $expandable = substr($str, 1);
-            } else if (!str_starts_with($str, "{")
-                       && (!str_starts_with($str, "[") || !str_ends_with(rtrim($str), "]"))
-                       && !ctype_space($str[0])) {
-                $expandable = $str;
+        if (is_string($v)) {
+            if (str_starts_with($v, "@")) {
+                $expandable = substr($v, 1);
+            } else if (!str_starts_with($v, "{")
+                       && (!str_starts_with($v, "[") || !str_ends_with(rtrim($v), "]"))
+                       && !ctype_space($v[0])) {
+                $expandable = $v;
             }
         }
-        if ($expandable) {
+        if ($expandable !== null) {
             foreach (SiteLoader::expand_includes($expandable) as $f) {
                 if (($x = file_get_contents($f)))
                     $includes[] = [$x, $f];
             }
         } else {
-            $includes[] = [$str, "entry $k"];
+            $includes[] = [$v, "entry $k"];
         }
     }
     foreach ($includes as $xentry) {
@@ -146,7 +141,7 @@ function expand_json_includes_callback($includelist, $callback) {
                 continue;
             }
             if (is_object($v)) {
-                $v->__subposition = ++Conf::$next_xt_subposition;
+                $v->__source_order = ++Conf::$next_xt_source_order;
             }
             if (!call_user_func($callback, $v, $k, $landmark)) {
                 error_log((Conf::$main ? Conf::$main->dbname . ": " : "") . "$landmark: Invalid expansion " . json_encode($v) . "\n" . debug_string_backtrace());
@@ -155,40 +150,245 @@ function expand_json_includes_callback($includelist, $callback) {
     }
 }
 
-global $Opt;
-if (!$Opt) {
-    $Opt = [];
-}
-if (!($Opt["loaded"] ?? null)) {
-    SiteLoader::read_main_options();
-    if ($Opt["multiconference"] ?? null) {
-        Multiconference::init();
+
+/** @param ?string $config_file
+ * @param ?string $confid
+ * @return Conf */
+function initialize_conf($config_file = null, $confid = null) {
+    global $Opt;
+    $Opt = $Opt ?? [];
+    if (!($Opt["loaded"] ?? null)) {
+        SiteLoader::read_main_options($config_file);
+        if ($confid !== null) {
+            $Opt["confid"] = $confid;
+        } else if ($Opt["multiconference"] ?? null) {
+            Multiconference::init($confid);
+        }
+        if ($Opt["include"] ?? null) {
+            SiteLoader::read_included_options();
+        }
     }
-    if (isset($Opt["include"]) && $Opt["include"]) {
-        read_included_options($Opt["include"]);
+    if ($Opt["missing"] ?? null) {
+        Multiconference::fail_bad_options();
+    }
+    if ($Opt["dbLogQueries"] ?? null) {
+        Dbl::log_queries($Opt["dbLogQueries"], $Opt["dbLogQueryFile"] ?? null);
+    }
+
+    // allow lots of memory
+    if (!($Opt["memoryLimit"] ?? null) && ini_get_bytes("memory_limit") < (128 << 20)) {
+        $Opt["memoryLimit"] = "128M";
+    }
+    if ($Opt["memoryLimit"] ?? null) {
+        ini_set("memory_limit", $Opt["memoryLimit"]);
+    }
+
+    // create the conference
+    if (!($Opt["__no_main"] ?? false)) {
+        if (!Conf::$main) {
+            Conf::set_main_instance(new Conf($Opt, true));
+        }
+        if (!Conf::$main->dblink) {
+            Multiconference::fail_bad_database();
+        }
+    }
+
+    return Conf::$main;
+}
+
+
+/** @param NavigationState $nav
+ * @param int $uindex
+ * @param int $nusers
+ * @param bool $cookie */
+function initialize_user_redirect($nav, $uindex, $nusers, $cookie) {
+    if ($nav->page === "api") {
+        if ($nusers === 0) {
+            json_exit(["ok" => false, "error" => "You have been signed out"]);
+        } else {
+            json_exit(["ok" => false, "error" => "Bad user specification"]);
+        }
+    } else if ($_SERVER["REQUEST_METHOD"] === "GET" || $_SERVER["REQUEST_METHOD"] === "HEAD") {
+        $page = $nav->base_absolute();
+        if ($nusers > 0) {
+            $page = "{$page}u/$uindex/";
+        }
+        if ($nav->page !== "index" || $nav->path !== "") {
+            $page = "{$page}{$nav->page}{$nav->php_suffix}{$nav->path}";
+        }
+        $page .= $nav->query;
+        if ($cookie) {
+            Conf::$main->set_cookie("hc-uredirect-" . Conf::$now, $page, Conf::$now + 20);
+        }
+        Navigation::redirect_absolute($page);
+    } else {
+        Conf::$main->error_msg("<0>You have been signed out from this account");
     }
 }
-if (!($Opt["loaded"] ?? null) || ($Opt["missing"] ?? null)) {
-    Multiconference::fail_bad_options();
-}
-if (isset($Opt["dbLogQueries"]) && $Opt["dbLogQueries"]) {
-    Dbl::log_queries($Opt["dbLogQueries"], $Opt["dbLogQueryFile"] ?? null);
-}
 
 
-// Allow lots of memory
-if (!($Opt["memoryLimit"] ?? null) && ini_get_bytes("memory_limit") < (128 << 20)) {
-    $Opt["memoryLimit"] = "128M";
-}
-if (isset($Opt["memoryLimit"]) && $Opt["memoryLimit"]) {
-    ini_set("memory_limit", $Opt["memoryLimit"]);
-}
+function initialize_request() {
+    $conf = Conf::$main;
+    $nav = Navigation::get();
 
+    // check PHP suffix
+    if (($php_suffix = $conf->opt("phpSuffix")) !== null) {
+        $nav->php_suffix = $php_suffix;
+    }
 
-// Create the conference
-if (!Conf::$main) {
-    Conf::set_main_instance(new Conf($Opt, true));
-}
-if (!Conf::$main->dblink) {
-    Multiconference::fail_bad_database();
+    // maybe redirect to https
+    if ($conf->opt("redirectToHttps")) {
+        $nav->redirect_http_to_https($conf->opt("allowLocalHttp"));
+    }
+
+    // collect $qreq
+    $qreq = Qrequest::make_global();
+
+    // check method
+    if ($qreq->method() !== "GET"
+        && $qreq->method() !== "POST"
+        && $qreq->method() !== "HEAD"
+        && ($qreq->method() !== "OPTIONS" || $nav->page !== "api")) {
+        header("HTTP/1.0 405 Method Not Allowed");
+        exit;
+    }
+
+    // mark as already expired to discourage caching, but allow the browser
+    // to cache for history buttons
+    header("Cache-Control: max-age=0,must-revalidate,private");
+
+    // set up Content-Security-Policy if appropriate
+    $conf->prepare_security_headers();
+
+    // skip user initialization if requested
+    if ($conf->opt["__no_main_user"] ?? null) {
+        return;
+    }
+
+    // set up session
+    if (($sh = $conf->opt["sessionHandler"] ?? null)) {
+        /** @phan-suppress-next-line PhanTypeExpectedObjectOrClassName, PhanNonClassMethodCall */
+        $conf->_session_handler = new $sh($conf);
+        session_set_save_handler($conf->_session_handler, true);
+    }
+    set_session_name($conf);
+    $sn = session_name();
+
+    // check CSRF token, using old value of session ID
+    if ($qreq->post && $sn && isset($_COOKIE[$sn])) {
+        $sid = $_COOKIE[$sn];
+        $l = strlen($qreq->post);
+        if ($l >= 8 && $qreq->post === substr($sid, strlen($sid) > 16 ? 8 : 0, $l)) {
+            $qreq->approve_token();
+        }
+    }
+    ensure_session(ENSURE_SESSION_ALLOW_EMPTY);
+
+    // upgrade session format
+    if (!isset($_SESSION["u"]) && isset($_SESSION["trueuser"])) {
+        $_SESSION["u"] = $_SESSION["trueuser"]->email;
+        unset($_SESSION["trueuser"]);
+    }
+
+    // determine user
+    $trueemail = $_SESSION["u"] ?? null;
+    $userset = $_SESSION["us"] ?? ($trueemail ? [$trueemail] : []);
+    $usercount = count($userset);
+    '@phan-var list<string> $userset';
+
+    $uindex = 0;
+    if ($nav->shifted_path === "") {
+        $wantemail = $_GET["i"] ?? $trueemail;
+        while ($wantemail !== null
+               && $uindex < $usercount
+               && strcasecmp($userset[$uindex], $wantemail) !== 0) {
+            ++$uindex;
+        }
+        if ($uindex < $usercount
+            && ($usercount > 1 || isset($_GET["i"]))
+            && $nav->page !== "api"
+            && ($_SERVER["REQUEST_METHOD"] === "GET" || $_SERVER["REQUEST_METHOD"] === "HEAD")) {
+            // redirect to `/u` version
+            $nav->query = preg_replace('/[?&]i=[^&]+(?=&|\z)/', '', $nav->query);
+            if (str_starts_with($nav->query, "&")) {
+                $nav->query = "?" . substr($nav->query, 1);
+            }
+            initialize_user_redirect($nav, $uindex, count($userset), !isset($_GET["i"]));
+        }
+    } else if (str_starts_with($nav->shifted_path, "u/")) {
+        $uindex = $usercount === 0 ? -1 : (int) substr($nav->shifted_path, 2);
+    }
+    if ($uindex >= 0 && $uindex < $usercount) {
+        $trueemail = $userset[$uindex];
+    } else if ($uindex !== 0) {
+        initialize_user_redirect($nav, 0, $usercount, false);
+    }
+
+    if (isset($_GET["i"])
+        && $trueemail
+        && strcasecmp($_GET["i"], $trueemail) !== 0) {
+        $conf->error_msg("<5>You are signed in as " . htmlspecialchars($trueemail) . ", not " . htmlspecialchars($_GET["i"]) . ". <a href=\"" . $conf->hoturl("signin", ["email" => $_GET["i"]]) . "\">Sign in</a>");
+    }
+
+    // look up and activate user
+    $muser = $trueemail ? $conf->user_by_email($trueemail) : null;
+    if (!$muser) {
+        $muser = Contact::make_email($conf, $trueemail);
+    }
+    $muser = $muser->activate($qreq, true);
+    Contact::set_main_user($muser);
+
+    // author view capability documents should not be indexed
+    if (!$muser->email
+        && $muser->has_author_view_capability()
+        && !$conf->opt("allowIndexPapers")) {
+        header("X-Robots-Tag: noindex, noarchive");
+    }
+
+    // redirect if disabled
+    if ($muser->is_disabled()) {
+        $gj = $conf->page_components($muser)->get($nav->page);
+        if (!$gj || !($gj->allow_disabled ?? false)) {
+            $conf->redirect_hoturl("index");
+        }
+    }
+
+    // if bounced through login, add post data
+    if (isset($_SESSION["login_bounce"][4])
+        && $_SESSION["login_bounce"][4] <= Conf::$now) {
+        unset($_SESSION["login_bounce"]);
+    }
+
+    if (!$muser->is_empty()
+        && isset($_SESSION["login_bounce"])
+        && !isset($_SESSION["testsession"])) {
+        $lb = $_SESSION["login_bounce"];
+        if ($lb[0] === $conf->dbname
+            && $lb[2] !== "index"
+            && $lb[2] === Navigation::page()) {
+            foreach ($lb[3] as $k => $v) {
+                if (!isset($qreq[$k]))
+                    $qreq[$k] = $v;
+            }
+            $qreq->set_annex("after_login", true);
+        }
+        unset($_SESSION["login_bounce"]);
+    }
+
+    // set $_SESSION["addrs"]
+    if ($_SERVER["REMOTE_ADDR"]
+        && (!$muser->is_empty()
+            || isset($_SESSION["addrs"]))
+        && (!isset($_SESSION["addrs"])
+            || !is_array($_SESSION["addrs"])
+            || $_SESSION["addrs"][0] !== $_SERVER["REMOTE_ADDR"])) {
+        $as = [$_SERVER["REMOTE_ADDR"]];
+        if (isset($_SESSION["addrs"]) && is_array($_SESSION["addrs"])) {
+            foreach ($_SESSION["addrs"] as $a) {
+                if ($a !== $_SERVER["REMOTE_ADDR"] && count($as) < 5)
+                    $as[] = $a;
+            }
+        }
+        $_SESSION["addrs"] = $as;
+    }
 }

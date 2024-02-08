@@ -1,6 +1,6 @@
 <?php
 // paperrank.php -- HotCRP helper functions for dealing with ranks
-// Copyright (c) 2009-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class PaperRank {
     /** @var Conf */
@@ -69,16 +69,19 @@ class PaperRank {
         }
 
         // load current ranks: $userrank maps user => [rank, paper]
-        $result = $this->conf->qe_raw("select paperId, tag, tagIndex from PaperTag where tag like '%~" . sqlq_for_like($source_tag) . "' and paperId in (" . join(",", $papersel) . ")");
+        $x = sqlq(Dbl::escape_like($source_tag));
+        $result = $this->conf->qe_raw("select paperId, tag, tagIndex from PaperTag where tag like '%~{$x}' and paperId in (" . join(",", $papersel) . ")");
         $len = strlen($source_tag) + 1;
         while (($row = $result->fetch_row())) {
-            $l = (int) substr($row[1], 0, strlen($row[1]) - $len);
-            $this->userrank[$l][] = [(int) $row[2], (int) $row[0]];
+            if ($row[1] !== "~") {
+                $l = (int) substr($row[1], 0, strlen($row[1]) - $len);
+                $this->userrank[$l][] = [(int) $row[2], (int) $row[0]];
+            }
         }
         Dbl::free($result);
 
         // sort $userrank[$user] by descending rank order
-        foreach ($this->userrank as $user => &$ranks) {
+        foreach ($this->userrank as &$ranks) {
             usort($ranks, [$this, "_comparUserrank"]);
         }
         unset($ranks);
@@ -132,7 +135,7 @@ class PaperRank {
 
 
     // compare two vote sets
-    function _comparRankIRV($a, $b) {
+    static function _comparRankIRV($a, $b) {
         for ($i = 0; $i < count($a); ++$i) {
             if ($a[$i] != $b[$i])
                 return $a[$i] < $b[$i] ? -1 : 1;
@@ -158,12 +161,11 @@ class PaperRank {
         // How many rank each paper?  #1 votes count the most, then #2, and so
         // forth.  Compute in base (# of users).
         $papervotes = array_combine($this->papersel, array_fill(0, count($this->papersel), array_fill(0, count($this->papersel), 0)));
-        foreach ($regrank as $user => &$pap) {
+        foreach ($regrank as $pap) {
             foreach ($pap as $ordinal => $p) {
                 $papervotes[$p][$ordinal]++;
             }
         }
-        unset($pap);
 
         // Add a random final number of votes, so no papers are equal.
         foreach ($papervotes as $p => &$votes) {
@@ -172,8 +174,8 @@ class PaperRank {
         unset($votes);
 
         // now calculate ranks
-        $reverseorder = array();
-        while (count($papervotes)) {
+        $reverseorder = [];
+        while (!empty($papervotes)) {
             // sort by increasing number of top votes
             uasort($papervotes, array("PaperRank", "_comparRankIRV"));
             // the loser is the first paper in the sort order
@@ -181,7 +183,7 @@ class PaperRank {
             $reverseorder[] = $loser;
             unset($papervotes[$loser]);
             // redistribute votes for the loser
-            foreach ($regrank as $user => &$pap) {
+            foreach ($regrank as &$pap) {
                 if (($pos = array_search($loser, $pap)) !== false) {
                     array_splice($pap, $pos, 1);
                     while ($pos < count($pap)) {
@@ -242,9 +244,7 @@ class PaperRank {
 
     // global rank calculation by range values (1-99)
     function rawrangevote() {
-        // calculate $minuserrank, $maxuserrank
-        $minuserrank = $maxuserrank = array();
-        foreach ($this->userrank as $user => &$ranks) {
+        foreach ($this->userrank as &$ranks) {
             foreach ($ranks as &$rr) {
                 if ($rr[0] >= 1)
                     $rr[0] = min($rr[0], 99);
@@ -256,7 +256,7 @@ class PaperRank {
         // map ranks to ranges
         $paperrange = array_fill(0, count($this->papersel), 0);
         $paperrangecount = array_fill(0, count($this->papersel), 0);
-        foreach ($this->userrank as $user => &$ranks) {
+        foreach ($this->userrank as &$ranks) {
             foreach ($ranks as $rr) {
                 $paperrange[$rr[1]] += $rr[0];
                 $paperrangecount[$rr[1]]++;
@@ -286,7 +286,7 @@ class PaperRank {
 
         // extract pairwise comparisons from user rankings into sparse 2D array
         $compareCounts = array_combine($this->papersel, array_fill(0, $paperCount, array()));
-        foreach ($this->userrank as $user => &$rankedPapers) {
+        foreach ($this->userrank as &$rankedPapers) {
             $numUserRanks = count($rankedPapers);
             for ($higherRank = 0; $higherRank < $numUserRanks - 1; $higherRank++) {
                 $higherRankedPaperId = $rankedPapers[$higherRank][1];
@@ -307,9 +307,9 @@ class PaperRank {
 
         // calculate the maximum number of papers outranking any paper
         $maxOutrankCount = 0;
-        foreach ($compareCounts as $rowPaperId => $compareCountRow) {
+        foreach ($compareCounts as $compareCountRow) {
             $rowOutrankCount = 0;
-            foreach ($compareCountRow as $colPaperId => $compareCount) {
+            foreach ($compareCountRow as $compareCount) {
                 if ($compareCount > 0)
                     $rowOutrankCount++;
             }
@@ -386,13 +386,12 @@ class PaperRank {
         $this->totalpref = 0;
         $this->deletedpref = 0;
 
-        foreach ($this->userrank as $user => $ranks) {
+        foreach ($this->userrank as $ranks) {
             for ($i = 0; $i < count($ranks); ++$i) {
                 list($rank, $p1) = $ranks[$i];
                 ++$this->voters[$p1];
                 $j = $i + 1;
                 while ($j < count($ranks) && $ranks[$j][0] == $rank) {
-                    $p2 = $ranks[$j][1];
                     ++$j;
                 }
                 for (; $j < count($ranks); ++$j) {

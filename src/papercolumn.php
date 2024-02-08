@@ -1,6 +1,6 @@
 <?php
 // papercolumn.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class PaperColumn extends Column {
     const OVERRIDE_NONE = 0;
@@ -39,12 +39,11 @@ class PaperColumn extends Column {
         }
         return $pc;
     }
-    /** @param string $msg
-     * @param bool $is_default */
-    static function column_error(Contact $user, $msg, $is_default = false) {
+    /** @param string|MessageItem $msg */
+    static function column_error(Contact $user, $msg) {
         $c = $user->conf->xt_context;
         if ($c instanceof PaperList) {
-            $c->column_error($msg, $is_default);
+            $c->column_error($msg);
         }
     }
 
@@ -65,7 +64,7 @@ class PaperColumn extends Column {
         $j = [
             "name" => $this->name,
             "title" => $this->header($pl, false),
-            "position" => $this->position
+            "order" => $this->order
         ];
         if ($this->className !== "pl_" . $this->name) {
             $j["className"] = $this->className;
@@ -198,7 +197,7 @@ class Selector_PaperColumn extends PaperColumn {
         if ($is_text) {
             return "Selected";
         } else {
-            return '<input type="checkbox" class="uic js-range-click is-range-group" data-range-type="pap[]" aria-label="Select all">';
+            return '<input type="checkbox" class="uic js-range-click is-range-group ignore-diff" data-range-type="pap[]" aria-label="Select all">';
         }
     }
     protected function checked(PaperList $pl, PaperInfo $row) {
@@ -210,8 +209,7 @@ class Selector_PaperColumn extends PaperColumn {
         if ($this->checked($pl, $row)) {
             $c .= ' checked';
         }
-        return '<span class="pl_rownum fx6">' . $pl->count . '. </span>'
-            . '<input type="checkbox" class="uic uikd js-range-click js-selector" name="pap[]" value="' . $row->paperId . '"' . $c . ' aria-label="#' . $row->paperId . '">';
+        return "<span class=\"pl_rownum fx6\">{$pl->count}. </span><input type=\"checkbox\" class=\"uic uikd js-range-click js-selector ignore-diff\" name=\"pap[]\" value=\"{$row->paperId}\"{$c} aria-label=\"#{$row->paperId}\">";
     }
     function text(PaperList $pl, PaperInfo $row) {
         return $this->checked($pl, $row) ? "Y" : "N";
@@ -230,7 +228,7 @@ class Title_PaperColumn extends PaperColumn {
         if ($this->has_decoration) {
             $pl->qopts["tags"] = 1;
         }
-        $this->highlight = $pl->search->field_highlighter("title");
+        $this->highlight = $pl->search->field_highlighter("ti");
         return true;
     }
     function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
@@ -403,11 +401,11 @@ class ReviewStatus_PaperColumn extends PaperColumn {
     }
     function content(PaperList $pl, PaperInfo $row) {
         list($done, $started) = $this->data($row, $pl->user);
-        return "<b>$done</b>" . ($done == $started ? "" : "/$started");
+        return "<b>{$done}</b>" . ($done == $started ? "" : "/{$started}");
     }
     function text(PaperList $pl, PaperInfo $row) {
         list($done, $started) = $this->data($row, $pl->user);
-        return $done . ($done == $started ? "" : "/$started");
+        return $done . ($done == $started ? "" : "/{$started}");
     }
 }
 
@@ -433,7 +431,7 @@ class Authors_PaperColumn extends PaperColumn {
     function prepare(PaperList $pl, $visible) {
         $this->aufull = $this->aufull ?? $pl->viewing("aufull");
         $this->anonau = $this->anonau ?? $pl->viewing("anonau");
-        $this->highlight = $pl->search->field_highlighter("authorInformation");
+        $this->highlight = $pl->search->field_highlighter("au");
         return $pl->user->can_view_some_authors();
     }
     function field_json(PaperList $pl) {
@@ -527,7 +525,7 @@ class Authors_PaperColumn extends PaperColumn {
         }
         if ($pl->conf->submission_blindness() !== Conf::BLIND_NEVER
             && !$pl->user->can_view_authors($row)) {
-            $t = '<div class="fx2">' . $t . '</div>';
+            $t = "<div class=\"fx2\">{$t}</div>";
         }
         return $t;
     }
@@ -576,7 +574,7 @@ class Collab_PaperColumn extends PaperColumn {
                 $x .= ($x === "" ? "" : "; ") . trim($c);
             }
         }
-        return Text::highlight($x, $pl->search->field_highlighter("collaborators"));
+        return Text::highlight($x, $pl->search->field_highlighter("co"));
     }
     function text(PaperList $pl, PaperInfo $row) {
         $x = "";
@@ -596,14 +594,14 @@ class Abstract_PaperColumn extends PaperColumn {
     }
     function content(PaperList $pl, PaperInfo $row) {
         $ab = $row->abstract_text();
-        $t = Text::highlight($ab, $pl->search->field_highlighter("abstract"), $highlight_count);
+        $t = Text::highlight($ab, $pl->search->field_highlighter("ab"), $highlight_count);
         $klass = strlen($t) > 190 ? "pl_longtext" : "pl_shorttext";
         if (!$highlight_count && ($format = $row->abstract_format())) {
             $pl->need_render = true;
-            $t = '<div class="' . $klass . ' need-format" data-format="'
-                . $format . '.plx">' . $t . '</div>';
+            $t = "<div class=\"{$klass} need-format\" data-format=\"{$format}\">{$t}</div>";
         } else {
-            $t = '<div class="' . $klass . ' format0">' . Ht::format0_html($t) . '</div>';
+            $t = Ht::format0_html($t);
+            $t = "<div class=\"{$klass} format0\">{$t}</div>";
         }
         return $t;
     }
@@ -721,13 +719,14 @@ class ReviewerType_PaperColumn extends PaperColumn {
         if ($flags & self::F_SHEPHERD) {
             $x[] = review_shepherd_icon();
         }
-        if (!empty($x) || ($ranal && $ranal->round)) {
+        $hasround = $ranal && $ranal->rrow->reviewRound > 0;
+        if (!empty($x) || $hasround) {
             $c = ["pl_revtype"];
             $t && ($c[] = "hasrev");
             ($flags & (self::F_LEAD | self::F_SHEPHERD)) && ($c[] = "haslead");
-            $ranal && $ranal->round && ($c[] = "hasround");
+            $hasround && ($c[] = "hasround");
             $t && ($x[] = $t);
-            return '<div class="' . join(" ", $c) . '">' . join('&nbsp;', $x) . '</div>';
+            return '<div class="' . join(" ", $c) . '">' . join(' ', $x) . '</div>';
         } else {
             return $t;
         }
@@ -806,11 +805,11 @@ class TagList_PaperColumn extends PaperColumn {
 }
 
 abstract class ScoreGraph_PaperColumn extends PaperColumn {
-    /** @var Contact */
-    protected $contact;
-    protected $not_me;
+    /** @var int */
+    protected $cid;
+    /** @var string */
     protected $score_sort;
-    /** @var ReviewField */
+    /** @var Score_ReviewField */
     protected $format_field;
     /** @var array<int,null|int|float|list<int>> */
     private $sortmap;
@@ -833,9 +832,10 @@ abstract class ScoreGraph_PaperColumn extends PaperColumn {
         return $this->score_sort;
     }
     function prepare(PaperList $pl, $visible) {
-        $this->contact = $pl->reviewer_user();
-        $this->not_me = $this->contact->contactId !== $pl->user->contactId;
-        if ($visible && $this->not_me
+        $ruser = $pl->reviewer_user();
+        $this->cid = $ruser->contactId;
+        if ($visible
+            && $this->cid !== $pl->user->contactId
             && (!$pl->user->privChair || $pl->conf->has_any_manager())) {
             $pl->qopts["reviewSignatures"] = true;
         }
@@ -843,21 +843,15 @@ abstract class ScoreGraph_PaperColumn extends PaperColumn {
             $this->score_sort($pl);
         }
     }
-    /** @return array<int,int> */
-    abstract function score_values(PaperList $pl, PaperInfo $row);
+    /** @return ScoreInfo */
+    abstract function score_info(PaperList $pl, PaperInfo $row);
     function prepare_sort(PaperList $pl, $sortindex) {
         $this->sortmap = $this->avgmap = [];
         foreach ($pl->rowset() as $row) {
-            $s = $this->score_values($pl, $row);
-            if ($s !== null) {
-                $scoreinfo = new ScoreInfo($s, true);
-                $cid = $this->contact->contactId;
-                if ($this->not_me
-                    && !$row->can_view_review_identity_of($cid, $pl->user)) {
-                    $cid = 0;
-                }
-                $this->sortmap[$row->paperXid] = $scoreinfo->sort_data($this->score_sort, $cid);
-                $this->avgmap[$row->paperXid] = $scoreinfo->mean();
+            $sci = $this->score_info($pl, $row);
+            if (!$sci->is_empty()) {
+                $this->sortmap[$row->paperXid] = $sci->sort_data($this->score_sort);
+                $this->avgmap[$row->paperXid] = $sci->mean();
             }
         }
     }
@@ -869,65 +863,65 @@ abstract class ScoreGraph_PaperColumn extends PaperColumn {
         return $x;
     }
     function content(PaperList $pl, PaperInfo $row) {
-        $values = $this->score_values($pl, $row);
-        if (empty($values)) {
+        $sci = $this->score_info($pl, $row);
+        if (!$sci->is_empty()) {
+            return $this->format_field->unparse_graph($sci, 1);
+        } else {
             return "";
         }
-        $pl->need_render = true;
-        $cid = $this->contact->contactId;
-        if ($this->not_me && !$row->can_view_review_identity_of($cid, $pl->user)) {
-            $cid = 0;
-        }
-        return $this->format_field->unparse_graph($values, 1, $values[$cid] ?? null);
     }
     function text(PaperList $pl, PaperInfo $row) {
-        $values = array_map([$this->format_field, "unparse_value"],
-                            $this->score_values($pl, $row));
+        $si = $this->score_info($pl, $row);
+        $values = array_map([$this->format_field, "unparse_value"], $si->as_sorted_list());
         return join(" ", array_values($values));
     }
 }
 
 class Score_PaperColumn extends ScoreGraph_PaperColumn {
-    public $score;
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
         $this->override = PaperColumn::OVERRIDE_IFEMPTY;
         $this->format_field = $conf->checked_review_field($cj->review_field_id);
-        $this->score = $this->format_field->id;
+        assert($this->format_field instanceof Score_ReviewField);
     }
     function prepare(PaperList $pl, $visible) {
         $bound = $pl->user->permissive_view_score_bound($pl->search->limit_author());
         if ($this->format_field->view_score <= $bound) {
             return false;
         }
-        if ($visible) {
-            $pl->qopts["scores"][$this->score] = true;
+        if ($visible && !in_array($this->format_field, $pl->qopts["scores"] ?? [])) {
+            $pl->qopts["scores"][] = $this->format_field;
         }
         parent::prepare($pl, $visible);
         return true;
     }
-    /** return array<int,int> */
-    function score_values(PaperList $pl, PaperInfo $row) {
-        $fid = $this->format_field->id;
-        $row->ensure_review_score($this->format_field);
-        $scores = [];
-        $vs = $this->format_field->view_score;
+    function score_info(PaperList $pl, PaperInfo $row) {
+        $f = $this->format_field;
+        $vs = $f->view_score;
+        $row->ensure_review_field_order($f->order);
+        $sci = new ScoreInfo(null, true);
         foreach ($row->viewable_reviews_as_display($pl->user) as $rrow) {
             if ($rrow->reviewSubmitted
-                && isset($rrow->$fid)
-                && $rrow->$fid
-                && ($vs >= VIEWSCORE_PC || $vs > $pl->user->view_score_bound($row, $rrow)))
-                $scores[$rrow->contactId] = $rrow->$fid;
+                && $rrow->fields[$f->order]
+                && ($f->view_score >= VIEWSCORE_PC
+                    || $f->view_score > $pl->user->view_score_bound($row, $rrow))) {
+                $sci->add($rrow->fields[$f->order]);
+                if ($rrow->contactId === $this->cid
+                    && $pl->user->can_view_review_identity($row, $rrow)) {
+                    $sci->set_my_score($rrow->fields[$f->order]);
+                }
+            }
         }
-        return $scores;
+        return $sci;
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
-        // Do not use score_values to determine content emptiness, since
+        // Do not use score_info to determine content emptiness, since
         // that would load the scores from the DB -- even for folded score
         // columns.
         return !$row->may_have_viewable_scores($this->format_field, $pl->user);
     }
 
+    /** @return array<ReviewField> */
     static function user_viewable_fields($name, Contact $user) {
         if ($name === "scores") {
             $fs = $user->conf->all_review_fields();
@@ -936,14 +930,15 @@ class Score_PaperColumn extends ScoreGraph_PaperColumn {
         }
         $vsbound = $user->permissive_view_score_bound();
         return array_filter($fs, function ($f) use ($vsbound) {
-            return $f && $f->has_options && $f->displayed && $f->view_score > $vsbound;
+            return $f && $f->has_options && $f->order && $f->view_score > $vsbound;
         });
     }
+    /** @return array<ReviewField> */
     static function expand($name, Contact $user, $xfj, $m) {
         return array_map(function ($f) use ($xfj) {
             $cj = (array) $xfj;
             $cj["name"] = $f->search_keyword();
-            $cj["review_field_id"] = $f->id;
+            $cj["review_field_id"] = $f->short_id;
             $cj["title"] = $f->search_keyword();
             $cj["title_html"] = $f->web_abbreviation();
             return (object) $cj;
@@ -957,7 +952,7 @@ class Score_PaperColumn extends ScoreGraph_PaperColumn {
         $cs = array_map(function ($f) {
             return $f->search_keyword();
         }, array_filter($user->conf->all_review_fields(), function ($f) use ($vsbound) {
-            return $f->has_options && $f->displayed && $f->view_score > $vsbound;
+            return $f->has_options && $f->order && $f->view_score > $vsbound;
         }));
         if (!empty($cs)) {
             array_unshift($cs, "scores");

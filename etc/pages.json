@@ -1,0 +1,222 @@
+[
+    {
+        "name": "__footer", "print_function": "*Conf::footer"
+    },
+
+
+    {   "name": "index", "alias": "home"   },
+
+
+    {   "name": "home", "allow_disabled": true   },
+    {
+        "name": "home/disabled", "order": 10,
+        "request_function": "Home_Page::disabled_request"
+    },
+    {
+        "name": "home/profile_redirect", "order": 100,
+        "request_function": "Home_Page::profile_redirect_request"
+    },
+    {
+        "name": "home/admin", "order": 900, "allow_if": "chair",
+        "allow_request_if": ["getpost", "req.clearbug || req.clearnewpcrev"],
+        "request_function": "AdminHome_Page::check_admin",
+        "print_function": "AdminHome_Page::print"
+    },
+    {
+        "name": "home/reviewtokenreport",
+        "allow_request_if": "req.reviewtokenreport",
+        "request_function": "Home_Page::reviewtokenreport_request"
+    },
+
+    {
+        "name": "home/head", "order": 1000,
+        "print_function": "*Home_Page::print_head"
+    },
+    {
+        "name": "home/content", "order": 1500,
+        "print_function": "*Home_Page::print_content"
+    },
+
+    {
+        "name": "home/sidebar/admin", "order": 100, "allow_if": "manager",
+        "print_function": "Home_Page::print_admin_sidebar"
+    },
+    {
+        "name": "home/sidebar/admin/settings", "order": 10, "allow_if": "chair",
+        "print_function": "Home_Page::print_admin_settings"
+    },
+    {
+        "name": "home/sidebar/admin/users", "order": 20, "allow_if": "manager",
+        "print_function": "Home_Page::print_admin_users"
+    },
+    {
+        "name": "home/sidebar/admin/assignments", "order": 30, "allow_if": "manager",
+        "print_function": "Home_Page::print_admin_assignments"
+    },
+    {
+        "name": "home/sidebar/admin/mail", "order": 40, "allow_if": "manager",
+        "print_function": "Home_Page::print_admin_mail"
+    },
+    {
+        "name": "home/sidebar/admin/log", "order": 50, "allow_if": "manager",
+        "print_function": "Home_Page::print_admin_log"
+    },
+    {
+        "name": "home/sidebar/info", "order": 200,
+        "print_function": "Home_Page::print_info_sidebar"
+    },
+    [   "home/sidebar/info/deadline", 10, "Home_Page::print_info_deadline"   ],
+    [   "home/sidebar/info/pc", 20, "Home_Page::print_info_pc"   ],
+    [   "home/sidebar/info/site", 30, "Home_Page::print_info_site"   ],
+    {
+        "name": "home/sidebar/info/accepted", "order": 40,
+        "allow_if": "conf.time_all_author_view_decision",
+        "print_function": "Home_Page::print_info_accepted"
+    },
+
+
+    [   "home/main/message", 1100, "*Home_Page::print_message"   ],
+    {
+        "name": "home/main/welcome", "order": 1200, "allow_if": "!pc",
+        "print_function": "*Home_Page::print_welcome"
+    },
+    [   "home/main/signin", 3000, "*Home_Page::print_signin"   ],
+    {
+        "name": "home/main/search", "order": 4000,
+        "print_function": "*Home_Page::print_search"
+    },
+    {
+        "name": "home/main/review_requests", "order": 4500, "allow_if": "reviewer",
+        "print_function": "*Home_Page::print_review_requests"
+    },
+    {
+        "name": "home/main/reviews", "order": 5000, "allow_if": "reviewer",
+        "print_function": "*Home_Page::print_reviews"
+    },
+    {
+        "name": "home/main/submissions", "order": 7000,
+        "print_function": "*Home_Page::print_submissions"
+    },
+    {
+        "name": "home/main/review_tokens", "order": 10000,
+        "print_function": "*Home_Page::print_review_tokens"
+    },
+
+
+    {   "name": "newaccount", "allow_disabled": true   },
+    {
+        "name": "newaccount/request", "order": 100,
+        "allow_request_if": "anypost",
+        "request_function": "*Signin_Page::create_request"
+    },
+    [   "newaccount/head", 1000, "Signin_Page::print_newaccount_head"   ],
+    [   "newaccount/message", 2000, "home/message"   ],
+    [   "newaccount/welcome", 2500, "home/welcome"   ],
+    [   "newaccount/body", 3000, "Signin_Page::print_newaccount_body"   ],
+    [   "newaccount/form/description", 10, "Signin_Page::print_newaccount_form_description"   ],
+    [   "newaccount/form/email", 20, "Signin_Page::print_newaccount_form_email"   ],
+    [   "newaccount/form/actions", 100, "Signin_Page::print_newaccount_form_actions"   ],
+
+
+    {   "name": "signin", "allow_disabled": true   },
+    {
+        "name": "signin/request", "order": 100,
+        "allow_request_if": "anypost",
+        "request_function": "Signin_Page::signin_request"
+    },
+    {
+        "name": "signin/request/basic", "order": 100,
+        "signin_function": "Signin_Page::signin_request_basic"
+    },
+    {
+        "name": "signin/request/success", "order": 100000,
+        "signin_function": "Signin_Page::signin_request_success"
+    },
+    [   "signin/head", 1000, "Signin_Page::print_signin_head"   ],
+    [   "signin/message", 2000, "home/message"   ],
+    [   "signin/welcome", 2500, "home/welcome"   ],
+    [   "signin/body", 3000, "Signin_Page::print_signin_form"   ],
+    [   "signin/form/description", 10, "Signin_Page::print_signin_form_description"   ],
+    [   "signin/form/email", 20, "Signin_Page::print_signin_form_email"   ],
+    [   "signin/form/password", 30, "Signin_Page::print_signin_form_password"   ],
+    [   "signin/form/actions", 100, "Signin_Page::print_signin_form_actions"   ],
+    [   "signin/form/create", 150, "Signin_Page::print_signin_form_create"   ],
+
+
+    {   "name": "signout", "allow_disabled": true   },
+    {
+        "name": "signout/request", "order": 100,
+        "allow_request_if": "anypost",
+        "request_function": "Signin_Page::signout_request"
+    },
+    [   "signout/head", 1000, "Signin_Page::print_signout_head"   ],
+    [   "signout/body", 3000, "Signin_Page::print_signout_body"   ],
+
+
+    {   "name": "forgotpassword", "allow_disabled": true   },
+    {
+        "name": "forgotpassword/request", "order": 100,
+        "allow_request_if": "anypost",
+        "request_function": "Signin_Page::forgot_request"
+    },
+    [   "forgotpassword/head", 1000, "Signin_Page::print_forgot_head"   ],
+    [   "forgotpassword/body", 3000, "Signin_Page::print_forgot_body"   ],
+    [   "forgotpassword/form/description", 10, "Signin_Page::print_forgot_form_description"   ],
+    [   "forgotpassword/form/email", 20, "Signin_Page::print_forgot_form_email"   ],
+    [   "forgotpassword/form/actions", 100, "*Signin_Page::print_forgot_form_actions"   ],
+    {
+        "name": "forgotpassword/externallogin", "order": false,
+        "print_function": "Signin_Page::forgot_externallogin_message"
+    },
+
+
+    {   "name": "resetpassword", "allow_disabled": true   },
+    {
+        "name": "resetpassword/request", "order": 100,
+        "allow_any_request": true,
+        "request_function": "*Signin_Page::reset_request"
+    },
+    [   "resetpassword/head", 1000, "Signin_Page::print_reset_head"   ],
+    [   "resetpassword/message", 2000, "home/message"   ],
+    [   "resetpassword/welcome", 2500, "home/welcome"   ],
+    [   "resetpassword/body", 3000, "*Signin_Page::print_reset_body"   ],
+    [   "resetpassword/form/description", 10, "Signin_Page::print_reset_form_description"   ],
+    [   "resetpassword/form/email", 20, "*Signin_Page::print_reset_form_email"   ],
+    [   "resetpassword/form/autopassword", 29, "Signin_Page::print_reset_form_autopassword"   ],
+    [   "resetpassword/form/password", 30, "Signin_Page::print_reset_form_password"   ],
+    [   "resetpassword/form/actions", 100, "forgotpassword/form/actions"   ],
+
+
+    {   "name": "graph", "print_function": "Graph_Page::go"   },
+    {   "name": "graph/formula", "print_function": "Graph_Formula_Page::go",
+        "title": "Formula", "order": 20, "allow_if": "pc"   },
+    {   "name": "graph/procrastination", "print_function": "Graph_Procrastination_Page::go",
+        "title": "Procrastination", "order": 10, "allow_if": "pc"   },
+    [   "graph/reviewerlameness", false, "graph/procrastination"    ],
+
+
+    {   "name": "api", "print_function": "API_Page::go", "allow_disabled": true   },
+    {   "name": "assign", "print_function": "Assign_Page::go"   },
+    {   "name": "autoassign", "print_function": "Autoassign_Page::go"   },
+    {   "name": "bulkassign", "print_function": "BulkAssign_Page::go"   },
+    {   "name": "buzzer", "print_function": "Buzzer_Page::go"   },
+    {   "name": "checkupdates", "print_function": "CheckUpdates_Page::go"   },
+    {   "name": "conflictassign", "print_function": "ConflictAssign_Page::go"   },
+    {   "name": "deadlines", "print_function": "Deadlines_Page::go", "allow_disabled": true   },
+    {   "name": "doc", "print_function": "Doc_Page::go"   },
+    {   "name": "help", "print_function": "Help_Page::go"   },
+    {   "name": "log", "print_function": "Log_Page::go"   },
+    {   "name": "mail", "print_function": "Mail_Page::go"   },
+    {   "name": "manualassign", "print_function": "ManualAssign_Page::go"   },
+    {   "name": "mergeaccounts", "print_function": "MergeAccounts_Page::go"   },
+    {   "name": "oauth", "print_function": "OAuth_Page::go", "allow_disabled": true   },
+    {   "name": "offline", "print_function": "Offline_Page::go"   },
+    {   "name": "paper", "print_function": "Paper_Page::go"   },
+    {   "name": "profile", "print_function": "Profile_Page::go"   },
+    {   "name": "review", "print_function": "Review_Page::go"   },
+    {   "name": "reviewprefs", "print_function": "ReviewPrefs_Page::go"   },
+    {   "name": "scorechart", "print_function": "Scorechart_Page::go"   },
+    {   "name": "search", "print_function": "Search_Page::go"   },
+    {   "name": "settings", "print_function": "Settings_Page::go"   },
+    {   "name": "users", "print_function": "Users_Page::go", "allow_disabled": true   }
+]

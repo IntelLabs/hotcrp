@@ -1,30 +1,13 @@
 <?php
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
+// savepapers.php -- HotCRP command-line paper modification script
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-$arg = Getopt::rest($argv, "hn:qrf:",
-    ["help", "name:", "filter=f:", "quiet", "disable", "disable-users",
-     "reviews", "match-title", "ignore-pid", "ignore-errors", "add-topics", "no-log"]);
-if (isset($arg["h"]) || isset($arg["help"])
-    || count($arg["_"]) > 1
-    || (count($arg["_"]) && $arg["_"][0] !== "-" && $arg["_"][0][0] === "-")) {
-    fwrite(STDOUT, "Usage: php batch/savepapers.php [-n CONFID] [OPTIONS] FILE
-
-Options include:
-  --quiet                Don't print progress information.
-  --ignore-errors        Don't exit after first error.
-  --disable-users        Newly created users are disabled.
-  --match-title          Match papers by title if no `pid`.
-  --ignore-pid           Ignore `pid` elements in JSON.
-  --reviews              Save JSON reviews.
-  --add-topics           Add undefined topics to conference.
-  --no-log               Don't add to the action log.
-  -f, --filter FUNCTION  Pass through FUNCTION.\n");
-    exit(0);
+if (realpath($_SERVER["PHP_SELF"]) === __FILE__) {
+    require_once(dirname(__DIR__) . "/src/init.php");
+    exit(SavePapers_Batch::run_args($argv));
 }
 
-require_once(SiteLoader::find("src/init.php"));
-
-class BatchSavePapers {
+class SavePapers_Batch {
     /** @var Conf */
     public $conf;
     /** @var Contact */
@@ -73,17 +56,17 @@ class BatchSavePapers {
         $this->tf = new ReviewValues($conf->review_form(), ["no_notify" => true]);
     }
 
+    /** @return $this */
     function set_args($arg) {
-        $this->quiet = isset($arg["q"]) || isset($arg["quiet"]);
+        $this->quiet = isset($arg["q"]);
         $this->ignore_errors = isset($arg["ignore-errors"]);
         $this->ignore_pid = isset($arg["ignore-pid"]);
         $this->match_title = isset($arg["match-title"]);
-        $this->disable_users = isset($arg["disable"]) || isset($arg["disable-users"]);
+        $this->disable_users = isset($arg["disable-users"]);
         $this->add_topics = isset($arg["add-topics"]);
-        $this->reviews = isset($arg["r"]) || isset($arg["reviews"]);
+        $this->reviews = isset($arg["r"]);
         $this->log = !isset($arg["no-log"]);
-        $fs = $arg["f"] ?? [];
-        foreach (is_array($fs) ? $fs : [$fs] as $f) {
+        foreach ($arg["f"] ?? [] as $f) {
             if (($colon = strpos($f, ":")) !== false
                 && $colon + 1 < strlen($f)
                 && $f[$colon + 1] !== ":") {
@@ -92,9 +75,10 @@ class BatchSavePapers {
             }
             $this->filters[] = $f;
         }
+        return $this;
     }
 
-    /** @return string|false */
+    /** @return string */
     function set_file($file) {
         // allow uploading a whole zip archive
         $zipfile = null;
@@ -105,29 +89,30 @@ class BatchSavePapers {
             $content = false;
             $this->ziparchive = new ZipArchive;
             $zipfile = $file;
-            $this->errprefix = "$file: ";
+            $this->errprefix = "{$file}: ";
         } else {
             $content = file_get_contents($file);
             $this->document_directory = dirname($file) . "/";
-            $this->errprefix = "$file: ";
+            $this->errprefix = "{$file}: ";
         }
 
         if (!$this->ziparchive
             && str_starts_with($content, "\x50\x4B\x03\x04")) {
             if (!($tmpdir = tempdir())) {
-                throw new Exception("Cannot create temporary directory");
-            } else if (file_put_contents("$tmpdir/data.zip", $content) !== strlen($content)) {
-                throw new Exception("$tmpdir/data.zip: Cannot write file");
+                throw new CommandLineException("{$this->errprefix}Cannot create temporary directory");
+            } else if (file_put_contents("{$tmpdir}/data.zip", $content) !== strlen($content)) {
+                throw new CommandLineException("{$this->errprefix}{$tmpdir}/data.zip: Cannot write file");
             }
             $this->ziparchive = new ZipArchive;
-            $zipfile = "$tmpdir/data.zip";
+            $zipfile = "{$tmpdir}/data.zip";
             $this->document_directory = null;
         }
+
         if ($this->ziparchive) {
             if ($this->ziparchive->open($zipfile) !== true) {
-                throw new Exception("{$this->errprefix}Invalid zip");
+                throw new CommandLineException("{$this->errprefix}Invalid zip");
             } else if ($this->ziparchive->numFiles == 0) {
-                throw new Exception("{$this->errprefix}Empty zipfile");
+                throw new CommandLineException("{$this->errprefix}Empty zipfile");
             }
             // find common directory prefix
             $slashpos = strrpos($this->ziparchive->getNameIndex(0), "/");
@@ -166,13 +151,17 @@ class BatchSavePapers {
             if (count($data_filename) === 0 && count($json_filename) === 1) {
                 $data_filename = $json_filename;
             } else if (count($data_filename) !== 1) {
-                throw new Exception("Should contain exactly one `*-data.json` file");
+                throw new CommandLineException("{$this->errprefix}Should contain exactly one `*-data.json` file");
             }
             $content = $this->ziparchive->getFromName($data_filename[0]);
             $this->errprefix = ($this->errprefix ? $file : "<stdin>") . "/" . $data_filename[0] . ": ";
         }
 
-        return $content;
+        if (is_string($content)) {
+            return $content;
+        } else {
+            throw new CommandLineException("{$this->errprefix}Read error");
+        }
     }
 
     function on_document_import($docj, PaperOption $o, PaperStatus $pstatus) {
@@ -241,13 +230,10 @@ class BatchSavePapers {
         }
 
         $ps = new PaperStatus($this->conf, null, [
-            "no_notify" => true,
             "disable_users" => $this->disable_users,
             "add_topics" => $this->add_topics,
             "content_file_prefix" => $this->document_directory
         ]);
-        $ps->set_allow_error_at("topics", true);
-        $ps->set_allow_error_at("options", true);
         $ps->on_document_import([$this, "on_document_import"]);
 
         $pid = $ps->save_paper_json($j);
@@ -256,12 +242,12 @@ class BatchSavePapers {
             $pidtext = "#$pid";
         }
         if (!$this->quiet) {
-            fwrite(STDERR, $pid ? ($ps->diffs ? "saved\n" : "unchanged\n") : "failed\n");
+            fwrite(STDERR, $pid ? ($ps->has_change() ? "saved\n" : "unchanged\n") : "failed\n");
         }
         // XXX does not change decision
         $prefix = $pidtext . ": ";
-        foreach ($ps->landmarked_message_texts() as $msg) {
-            fwrite(STDERR, $prefix . htmlspecialchars_decode($msg) . "\n");
+        foreach ($ps->decorated_message_list() as $mi) {
+            fwrite(STDERR, $prefix . $mi->message_as(0) . "\n");
         }
         if (!$pid) {
             ++$this->nerrors;
@@ -280,24 +266,23 @@ class BatchSavePapers {
                 } else {
                     $this->tf->req["override"] = true;
                     $this->tf->paperId = $pid;
-                    $user_req = [
+                    $user = Contact::make_keyed($this->conf, [
                         "firstName" => $this->tf->req["reviewerFirst"] ?? "",
                         "lastName" => $this->tf->req["reviewerLast"] ?? "",
                         "email" => $this->tf->req["reviewerEmail"],
                         "affiliation" => $this->tf->req["reviewerAffiliation"] ?? null,
                         "disabled" => $this->disable_users
-                    ];
-                    $user = Contact::create($this->conf, null, $user_req);
+                    ])->store();
                     $this->tf->check_and_save($this->user, $prow, null);
                 }
             }
-            foreach ($this->tf->message_texts() as $te) {
-                fwrite(STDERR, $prefix . htmlspecialchars_decode($te) . "\n");
+            foreach ($this->tf->message_list() as $mi) {
+                fwrite(STDERR, $prefix . $mi->message_as(0) . "\n");
             }
             $this->tf->clear_messages();
         }
 
-        if ($ps->diffs && $this->log) {
+        if ($ps->has_change() && $this->log) {
             $ps->log_save_activity($this->user, "save", "via CLI");
         }
         ++$this->nsuccesses;
@@ -317,8 +302,7 @@ class BatchSavePapers {
             fwrite(STDERR, "{$this->errprefix}invalid JSON, expected array of objects\n");
             ++$this->nerrors;
         } else {
-            $jp = is_object($jp) ? (array) $jp : $jp;
-            foreach (is_object($jp) ? get_object_vars($jp) : $jp as &$j) {
+            foreach (is_object($jp) ? [$jp] : $jp as $j) {
                 $this->run_one(clone $j);
                 if ($this->nerrors && !$this->ignore_errors) {
                     break;
@@ -332,16 +316,32 @@ class BatchSavePapers {
             return 0;
         }
     }
-}
 
-$bf = new BatchSavePapers($Conf);
-$bf->set_args($arg);
-try {
-    if (($content = $bf->set_file(count($arg["_"]) ? $arg["_"][0] : "-")) === false) {
-        throw new Exception("Read error");
+    /** @return int */
+    static function run_args($argv) {
+        $arg = (new Getopt)->long(
+            "name:,n: !",
+            "config: !",
+            "help,h !",
+            "r,reviews Save reviews as well as paper information",
+            "f[],filter[] =FUNCTION Pass JSON through FUNCTION",
+            "q,quiet Don’t print progress information",
+            "ignore-errors Don’t exit after first error",
+            "disable-users,disable Disable all newly created users",
+            "ignore-pid Ignore `pid` JSON elements",
+            "match-title Match papers by title if no `pid`",
+            "add-topics Add all referenced topics to conference",
+            "no-log Don’t modify the action log"
+        )->helpopt("help")
+         ->description("Change papers as specified by FILE, a JSON object or array of objects.
+Usage: php batch/savepapers.php [OPTIONS] [FILE]")
+         ->maxarg(1)
+         ->otheropt(false)
+         ->parse($argv);
+
+        $conf = initialize_conf($arg["config"] ?? null, $arg["name"] ?? null);
+        $bf = (new SavePapers_Batch($conf))->set_args($arg);
+        $content = $bf->set_file(count($arg["_"]) ? $arg["_"][0] : "-");
+        return $bf->run($content);
     }
-    exit($bf->run($content));
-} catch (Exception $exception) {
-    fwrite(STDERR, $bf->errprefix . $exception->getMessage() . "\n");
-    exit(1);
 }

@@ -1,5 +1,5 @@
 ## dbhelper.sh -- shell program helpers for HotCRP database access
-## Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+## Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 echo_n () {
         # suns can't echo -n, and Mac OS X can't echo "x\c"
@@ -265,4 +265,5 @@ fi
 CONFDIR="`echo "${MAINDIR}conf/" | sed 's,^\./\(.\),\1,'`"
 OLDCONFDIR="`echo "${MAINDIR}Code/" | sed 's,^\./\(.\),\1,'`"
 SRCDIR="`echo "${MAINDIR}src/" | sed 's,^\./\(.\),\1,'`"
-export MAINDIR LIBDIR CONFDIR OLDCONFDIR SRCDIR
+ETCDIR="`echo "${MAINDIR}etc/" | sed 's,^\./\(.\),\1,'`"
+export MAINDIR LIBDIR CONFDIR OLDCONFDIR SRCDIR ETCDIR

@@ -1,6 +1,6 @@
 <?php
 // curls3result.php -- S3 access using curl functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 /** @template T
  * @inherits S3Result<T> */
@@ -19,8 +19,11 @@ class CurlS3Result extends S3Result {
     private $_xsize = 0;
     /** @var int */
     public $runindex = 0;
+    /** @var list */
     private $tries;
+    /** @var float */
     private $start;
+    /** @var ?float */
     private $first_start;
     private $observed_success_timeout;
 
@@ -165,6 +168,7 @@ class CurlS3Result extends S3Result {
             S3Client::$retry_timeout_allowance -= $timeout;
             usleep((int) (1000000 * $timeout));
         }
+        Conf::$blocked_time += microtime(true) - $this->first_start;
         return $this;
     }
 

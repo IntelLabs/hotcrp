@@ -1,9 +1,9 @@
 <?php
-// src/help/h_formulas.php -- HotCRP help functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// help/h_formulas.php -- HotCRP help functions
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Formulas_HelpTopic {
-    static function render(HelpRenderer $hth) {
+    static function print(HelpRenderer $hth) {
         echo "<p>Program committee members and administrators can search and display <em>formulas</em>
 that calculate properties of paper scores&mdash;for instance, the
 standard deviation of papers’ Overall merit scores, or average Overall
@@ -12,7 +12,7 @@ merit among reviewers with high Reviewer expertise.</p>
 <p>To display a formula, use a search term such as “",
 $hth->search_link("show:var(OveMer)"), "” (show
 the variance in Overall merit scores, along with statistics for all papers).
-You can also ", $hth->hotlink("graph formulas", "graph", "g=formula"), ".
+You can also ", $hth->hotlink("graph formulas", "graph", "group=formula"), ".
 To search for a formula, use a search term such as “",
 $hth->search_link("formula:var(OveMer)>0.5"), "”
 (select papers with variance in Overall merit greater than 0.5).

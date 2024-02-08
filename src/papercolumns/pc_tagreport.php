@@ -1,9 +1,11 @@
 <?php
 // pc_tagreport.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class TagReport_PaperColumn extends PaperColumn {
+    /** @var string */
     private $tag;
+    /** @var int */
     private $viewtype;
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
@@ -42,7 +44,7 @@ class TagReport_PaperColumn extends PaperColumn {
             if ($this->viewtype != 1) {
                 $n .= " (" . $m[2][$i] . ")";
             }
-            $a[$m[1][$i]] = $n;
+            $a[intval($m[1][$i])] = $n;
         }
         if (empty($a)) {
             return "";

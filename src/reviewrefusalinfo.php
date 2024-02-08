@@ -1,6 +1,6 @@
 <?php
 // reviewrefusalinfo.php -- HotCRP PaperReviewRefused objects
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ReviewRefusalInfo {
     /** @var int */
@@ -39,7 +39,7 @@ class ReviewRefusalInfo {
     /** @var int */
     public $reviewType = REVIEW_REFUSAL;
 
-    private function merge() {
+    private function fetch_incorporate() {
         $this->paperId = (int) $this->paperId;
         $this->contactId = (int) $this->contactId;
         if ($this->refusedReviewId !== null) {
@@ -65,7 +65,7 @@ class ReviewRefusalInfo {
     /** @return ?ReviewRefusalInfo */
     static function fetch($result) {
         if (($row = $result->fetch_object("ReviewRefusalInfo"))) {
-            $row->merge();
+            $row->fetch_incorporate();
         }
         return $row;
     }

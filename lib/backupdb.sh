@@ -1,6 +1,6 @@
 #! /bin/sh
 ## backupdb.sh -- HotCRP database backup to stdout
-## Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+## Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 export LC_ALL=C LC_CTYPE=C LC_COLLATE=C CONFNAME=
 if ! expr "$0" : '.*[/]' >/dev/null; then LIBDIR=./
@@ -36,6 +36,7 @@ pc=false
 gzip=false
 max_allowed_packet=1000M
 column_statistics=
+tablespaces=" --no-tablespaces"
 output=
 options_file=
 while [ $# -gt 0 ]; do
@@ -61,6 +62,10 @@ while [ $# -gt 0 ]; do
         max_allowed_packet="`echo "$1" | sed 's/^[^=]*=//'`";;
     --column_statistics=*|--column-statistics=*)
         column_statistics=" $1";;
+    --no-tablespaces)
+        tablespaces=" --no-tablespaces";;
+    --tablespaces)
+        tablespaces="";;
     --help) help;;
     -*) FLAGS="$FLAGS $1";;
     *)  test -z "$output" || usage; output="$1";;
@@ -80,8 +85,8 @@ FLAGS="$FLAGS --max_allowed_packet=$max_allowed_packet"
 check_mysqlish MYSQL mysql
 check_mysqlish MYSQLDUMP mysqldump
 set_myargs "$dbuser" "$dbpass"
-mydumpargs="$myargs$column_statistics"
-mydumpargs_redacted="$myargs_redacted$column_statistics"
+mydumpargs="$myargs$column_statistics$tablespaces"
+mydumpargs_redacted="$myargs_redacted$column_statistics$tablespaces"
 
 if $gzip && test -n "$output"; then
     echotail="$dbname | gzip > $output"
@@ -110,7 +115,7 @@ database_dump () {
     echo "--"
     echo "-- Force HotCRP to invalidate server caches"
     echo "--"
-    echo "INSERT INTO "'`Settings` (`name`,`value`)'" VALUES ('frombackup',UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE value=greatest(value,values(value));"
+    echo "INSERT INTO "'`Settings` (`name`,`value`)'" VALUES ('frombackup',UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE value=greatest(value,UNIX_TIMESTAMP());"
 }
 
 get_sversion () {

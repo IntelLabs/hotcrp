@@ -1,6 +1,6 @@
 /* -*- mode: css; indent-tabs-mode: t; css-indent-offset: 8 -*- */
 /* mobile.css -- HotCRP mobile CSS styles */
-/* Copyright (c) 2006-2020 Eddie Kohler; see LICENSE. */
+/* Copyright (c) 2006-2022 Eddie Kohler; see LICENSE. */
 
 @media screen and (max-width: 1100px) {
 .pcard-left {
@@ -16,6 +16,12 @@ body.paper {
 	margin-left: 24px;
 	margin-right: 24px;
 }
+.cmtadminvis, .cmtcolor {
+    width: auto;
+}
+.cmtadminvis > .cmttext, .cmtcolor > .cmttext {
+    min-width: initial;
+}
 }
 @media screen and (max-width: 1024px) {
 .paperinfo, .paperinfo-c {
@@ -24,6 +30,10 @@ body.paper {
 }
 .paperinfo-c {
 	padding-right: 0;
+}
+.settings-rf.fold2c, .settings-sf.fold2c {
+	width: auto;
+	min-width: initial;
 }
 }
 @media screen and (max-width: 768px) {
@@ -59,6 +69,9 @@ body.paper > #top {
 .home-content {
 	display: flex;
 	flex-direction: column;
+}
+.avoid-home-sidebar {
+	max-width: initial;
 }
 .home-sidebar {
 	float: none;
@@ -103,7 +116,7 @@ h2.paptitle {
 .pspcard-open {
 	padding-bottom: 4px;
 }
-.pslcard {
+.pslcard-nav {
 	display: none;
 }
 .leftmenu-menu {
@@ -176,12 +189,14 @@ input, textarea {
 table.pltable {
 	font-size: smaller;
 }
-.reviewersdiv {
+td.pl.pl_title, td.pl.pl_text {
+	min-width: 20rem;
+}
+.reinfotable {
 	font-size: smaller;
-	overflow-x: scroll;
 	margin-top: -0.25em;
 }
-.rvl, .rvr {
+.rfd1, .rfd2 {
 	max-width: none;
 }
 }

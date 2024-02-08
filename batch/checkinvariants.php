@@ -1,61 +1,47 @@
 <?php
 // checkinvariants.php -- HotCRP batch invariant checking script
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
-require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
-
-$arg = Getopt::rest($argv, "hn:", array("help", "name:", "json-reviews", "fix-json-reviews", "fix-autosearch"));
-if (isset($arg["h"]) || isset($arg["help"])
-    || count($arg["_"]) > 0) {
-    fwrite(STDOUT, "Usage: php batch/checkinvariants.php [-n CONFID] [--fix-autosearch]\n");
-    exit(0);
+if (realpath($_SERVER["PHP_SELF"]) === __FILE__) {
+    require_once(dirname(__DIR__) . "/src/init.php");
+    exit(CheckInvariants_Batch::make_args($argv)->run());
 }
 
-require_once(SiteLoader::find("src/init.php"));
+class CheckInvariants_Batch {
+    /** @var Conf */
+    public $conf;
+    /** @var bool */
+    public $fix_autosearch;
 
-$ic = new ConfInvariants($Conf);
-$ic->exec_all();
-
-if (isset($ic->problems["autosearch"]) && isset($arg["fix-autosearch"])) {
-    $Conf->update_automatic_tags();
-}
-
-if ($Conf->sversion == 174 && (isset($arg["json-reviews"]) || isset($arg["fix-json-reviews"]))) {
-    $result = $Conf->qe("select * from PaperReview");
-    $q = $qv = [];
-    while (($rrow = ReviewInfo::fetch($result, null, $Conf))) {
-        $tfields = $rrow->tfields ? json_decode($rrow->tfields) : null;
-        $need_fix = $unfixable = false;
-        foreach (ReviewInfo::$text_field_map as $kin => $kout) {
-            $oldv = (string) $rrow->$kin;
-            $newv = $tfields ? $tfields->$kout ?? "" : "";
-            if ($oldv !== $newv) {
-                error_log("{$Conf->dbname}: #{$rrow->paperId}/{$rrow->reviewId}: {$kin} ["
-                    . simplify_whitespace(UnicodeHelper::utf8_abbreviate($oldv === "" ? "EMPTY" : $oldv, 20))
-                    . "] != tf/{$kout} ["
-                    . simplify_whitespace(UnicodeHelper::utf8_abbreviate($newv === "" ? "EMPTY" : $newv, 20))
-                    . "]");
-                $need_fix = true;
-                if ($newv === "") {
-                    $tfields = $tfields ? : (object) [];
-                    $tfields->$kout = $oldv;
-                } else {
-                    $unfixable = true;
-                }
-            }
-        }
-        if ($need_fix && isset($arg["fix-json-reviews"])) {
-            if (!$unfixable) {
-                $q[] = "update PaperReview set tfields=? where paperId=? and reviewId=? and tfields?e";
-                array_push($qv, json_encode_db($tfields), $rrow->paperId, $rrow->reviewId, $rrow->tfields);
-            } else {
-                error_log("{$Conf->dbname}: #{$rrow->paperId}/{$rrow->reviewId}: differences unfixable");
-            }
-        }
+    function __construct(Conf $conf, $arg) {
+        $this->conf = $conf;
+        $this->fix_autosearch = isset($arg["fix-autosearch"]);
     }
-    Dbl::free($result);
-    if ($q) {
-        $mresult = Dbl::multi_ql_apply($Conf->dblink, join("; ", $q), $qv);
-        $mresult->free_all();
+
+    /** @return int */
+    function run() {
+        $ic = new ConfInvariants($this->conf);
+        $ic->exec_all();
+        if (isset($ic->problems["autosearch"]) && $this->fix_autosearch) {
+            $this->conf->update_automatic_tags();
+        }
+        return 0;
+    }
+
+    /** @return CheckInvariants_Batch */
+    static function make_args($argv) {
+        $arg = (new Getopt)->long(
+            "name:,n: !",
+            "config:,c: !",
+            "help,h !",
+            "fix-autosearch Repair any incorrect autosearch tags"
+        )->helpopt("help")
+         ->description("Check invariants in a HotCRP database.
+Usage: php batch/checkinvariants.php [-n CONFID] [--fix-autosearch]\n")
+         ->maxarg(0)
+         ->parse($argv);
+
+        $conf = initialize_conf($arg["config"] ?? null, $arg["name"] ?? null);
+        return new CheckInvariants_Batch($conf, $arg);
     }
 }

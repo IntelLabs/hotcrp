@@ -218,7 +218,7 @@
     {
         "name": "r",
         "parse_function": "Review_SearchTerm::parse",
-        "retype": null, "recompleteness": null, "has": ">0"
+        "retype": null, "recompleteness": null, "reblank": true, "has": ">0"
     },
     {
         "name": "token",
@@ -273,10 +273,6 @@
     },
     {
         "name": "show",
-        "parse_function": "Show_SearchTerm::parse", "allow_parens": true
-    },
-    {
-        "name": "as",
         "parse_function": "Show_SearchTerm::parse", "allow_parens": true
     },
     {

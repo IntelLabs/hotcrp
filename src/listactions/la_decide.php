@@ -1,16 +1,16 @@
 <?php
 // listactions/la_decide.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Decide_ListAction extends ListAction {
     function allow(Contact $user, Qrequest $qreq) {
-        return $user->can_set_some_decision() && $qreq->page() !== "reviewprefs";
+        return $user->can_set_some_decision();
     }
     static function render(PaperList $pl, Qrequest $qreq) {
-        $opts = ["" => "Choose decision..."] + $pl->conf->decision_map();
+        $opts = $pl->conf->decision_map();
         return ["Set to &nbsp;"
                 . Ht::select("decision", $opts, "", ["class" => "want-focus js-submit-action-info-decide"])
-                . " &nbsp;" . Ht::submit("fn", "Go", ["value" => "decide", "class" => "uic js-submit-mark"])];
+                . $pl->action_submit("decide")];
     }
     function run(Contact $user, Qrequest $qreq, SearchSelection $ssel) {
         $aset = new AssignmentSet($user, true);
@@ -20,9 +20,9 @@ class Decide_ListAction extends ListAction {
         }
         $aset->parse("paper,action,decision\n" . join(" ", $ssel->selection()) . ",decision," . CsvGenerator::quote($decision));
         if ($aset->execute()) {
-            $user->conf->redirect_self($qreq, ["atab" => "decide", "decision" => $qreq->decision]);
+            return new Redirection($user->conf->site_referrer_url($qreq, ["atab" => "decide", "decision" => $qreq->decision], Conf::HOTURL_RAW));
         } else {
-            Conf::msg_error($aset->messages_div_html());
+            $user->conf->feedback_msg($aset->message_list());
         }
     }
 }

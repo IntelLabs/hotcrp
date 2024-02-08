@@ -1,6 +1,6 @@
 <?php
 // mergecontacts.php -- HotCRP helper class for merging users
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class MergeContacts extends MessageSet {
     /** @var Conf */
@@ -18,6 +18,7 @@ class MergeContacts extends MessageSet {
         $this->conf = $oldu->conf;
         $this->oldu = $oldu;
         $this->newu = $newu;
+        $this->set_want_ftext(true, 5);
     }
 
     private function add_error($msg) {
@@ -28,13 +29,13 @@ class MergeContacts extends MessageSet {
     private function q($q, ...$args) {
         $result = $this->conf->q_apply($q, $args);
         if ($result->errno) {
-            $this->add_error($this->conf->db_error_html(true));
+            $this->add_error("<5>" . $this->conf->db_error_html(true));
         }
     }
     private function qx($q, ...$args) {
         $result = Dbl::qx_apply($this->conf->dblink, $q, $args);
         if ($result->errno) {
-            $this->add_error($this->conf->db_error_html(true));
+            $this->add_error("<5>" . $this->conf->db_error_html(true));
         }
     }
     private function merge1($table, $idfield) {
@@ -99,7 +100,7 @@ class MergeContacts extends MessageSet {
             }
         }
         if (!empty($qv)) {
-            $this->q("insert into PaperConflict (paperId,contactId,conflictType) values ?v on duplicate key update conflictType=values(conflictType)", $qv);
+            $this->q("insert into PaperConflict (paperId,contactId,conflictType) values ?v ?U on duplicate key update conflictType=?U(conflictType)", $qv);
         }
         $this->q("delete from PaperConflict where contactId=?", $this->oldu->contactId);
         $this->conf->q_raw("unlock tables");
@@ -158,22 +159,22 @@ class MergeContacts extends MessageSet {
         }
         $cj->tags = [];
         foreach (Tagger::split_unpack($this->newu->contactTags) as $ti) {
-            $cj->tags[] = $ti[0] . "#" . ($ti[1] ? : 0);
+            $cj->tags[] = $ti[0] . "#" . ($ti[1] ?? 0);
         }
         foreach (Tagger::split_unpack($this->oldu->contactTags) as $ti) {
             if ($this->newu->tag_value($ti[0]) === null) {
-                $cj->tags[] = $ti[0] . "#" . ($ti[1] ? : 0);
+                $cj->tags[] = $ti[0] . "#" . ($ti[1] ?? 0);
             }
         }
         $us = new UserStatus($this->conf->root_user());
-        $us->save($cj, $this->newu);
+        $us->save_user($cj, $this->newu);
 
         // remove the old contact record
         if (!$this->has_error()) {
             $this->conf->q("insert into DeletedContactInfo set contactId=?, firstName=?, lastName=?, unaccentedName=?, email=?, affiliation=?", $this->oldu->contactId, $this->oldu->firstName, $this->oldu->lastName, $this->oldu->unaccentedName, $this->oldu->email, $this->oldu->affiliation);
             $result = $this->conf->q("delete from ContactInfo where contactId=?", $this->oldu->contactId);
             if ($result->errno) {
-                $this->add_error($this->conf->db_error_html(true));
+                $this->add_error("<5>" . $this->conf->db_error_html(true));
             }
         }
 
@@ -191,14 +192,12 @@ class MergeContacts extends MessageSet {
             if ($this->oldu->contactId) {
                 // new user in contactdb, old user in database
                 $user_status->user = $this->newu;
-                $user_status->save($user_status->user_json(), $this->oldu);
+                $user_status->save_user($user_status->user_json(), $this->oldu);
             } else {
                 // old user in contactdb, new user in database
-                $user_status->save($this->basic_user_json(), $this->newu);
+                $user_status->save_user($this->basic_user_json(), $this->newu);
             }
-            foreach ($user_status->error_texts() as $e) {
-                $this->add_error($e);
-            }
+            $this->append_set($user_status);
         }
         return !$this->has_error();
     }

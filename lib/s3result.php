@@ -1,6 +1,6 @@
 <?php
 // s3result.php -- document helper class for HotCRP papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 /** @template T */
 abstract class S3Result {
@@ -148,7 +148,7 @@ class StreamS3Result extends S3Result {
             fclose($stream);
         }
         if (S3Client::$verbose) {
-            error_log($this->method . " " . $this->url . " -> " . $this->status . " " . $this->status_text);
+            error_log("{$this->method} {$this->url} -> {$this->status} {$this->status_text}");
             if ($this->status > 299 && ($this->body ?? "") !== "") {
                 error_log(substr($this->body, 0, 1024));
             }
