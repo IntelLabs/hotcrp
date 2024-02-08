@@ -1,6 +1,6 @@
 <?php
 // pc_assignreview.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class AssignReview_PaperColumn extends PaperColumn {
     /** @var Contact */
@@ -70,9 +70,9 @@ class AssignReview_PaperColumn extends PaperColumn {
             return '<span class="author">Author</span>';
         }
         if ($ci->conflictType > CONFLICT_MAXUNCONFLICTED) {
-            $rt = -1;
+            $rt = "conflict";
         } else {
-            $rt = min(max($ci->reviewType, 0), REVIEW_META);
+            $rt = ReviewInfo::unparse_type(min(max($ci->reviewType, 0), REVIEW_META));
         }
         $rs = $ci->reviewSubmitted ? " s" : "";
         $pl->need_render = true;

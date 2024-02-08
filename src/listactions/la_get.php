@@ -1,9 +1,9 @@
 <?php
 // listactions/la_get.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Get_ListAction {
-    static function render(PaperList $pl, Qrequest $qreq, GroupedExtensions $gex) {
+    static function render(PaperList $pl, Qrequest $qreq, ComponentSet $gex) {
         $sel_opt = ListAction::members_selector_options($gex, "get");
         if (!empty($sel_opt)) {
             // Note that `js-submit-paperlist` JS handler depends on this

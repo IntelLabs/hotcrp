@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getjson.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class GetJson_ListAction extends ListAction {
     /** @var bool */
@@ -32,9 +32,10 @@ class GetJson_ListAction extends ListAction {
             if ($pj1) {
                 $pj[] = $pj1;
             } else {
-                $pj[] = (object) ["pid" => $prow->paperId, "error" => "You don’t have permission to administer this paper."];
+                $pj[] = (object) ["pid" => $prow->paperId, "error" => "You don’t have permission to administer this submission"];
                 if ($this->iszip) {
-                    $this->zipdoc->add_error_html("#$prow->paperId: You don’t have permission to administer this paper.");
+                    $mi = $this->zipdoc->error("You don’t have permission to administer this submission");
+                    $mi->landmark = "#{$prow->paperId}";
                 }
             }
         }

@@ -1,6 +1,6 @@
 <?php
 // search/st_topic.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Topic_SearchTerm extends SearchTerm {
     /** @var true|list<int> */
@@ -23,7 +23,7 @@ class Topic_SearchTerm extends SearchTerm {
             $value = true;
             $negated = true;
         } else if ($word === "") {
-            $srch->warning("Topic missing.");
+            $srch->lwarning($sword, "<0>Topic required");
             return new False_SearchTerm;
         } else {
             $tam = $srch->conf->topic_abbrev_matcher();
@@ -41,13 +41,10 @@ class Topic_SearchTerm extends SearchTerm {
                 $value = $tam->find_all($word);
             }
             if (empty($value)) {
-                $srch->warning("“" . htmlspecialchars($word) . "” does not match any defined paper topic.");
+                $srch->lwarning($sword, "<0>Topic ‘{$word}’ not found");
             }
         }
         return new Topic_SearchTerm($value, $negated);
-    }
-    function is_sqlexpr_precise() {
-        return true;
     }
     function sqlexpr(SearchQueryInfo $sqi) {
         $tm = "";
@@ -61,6 +58,9 @@ class Topic_SearchTerm extends SearchTerm {
             $t = "not $t";
         }
         return $t;
+    }
+    function is_sqlexpr_precise() {
+        return true;
     }
     function test(PaperInfo $row, $rrow) {
         if ($this->topics === []) {

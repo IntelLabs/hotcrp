@@ -1,6 +1,6 @@
 <?php
 // polyfills.php -- HotCRP GMP shim functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 if (!function_exists("str_starts_with")) {
     /** @param string $haystack
@@ -35,6 +35,9 @@ if (!interface_exists("JsonSerializable")) {
     interface JsonSerializable {
         public function jsonSerialize();
     }
+}
+if (!function_exists("json_encode") || !function_exists("json_decode")) {
+    define("JSON_HOTCRP", 1);
 }
 if (!function_exists("json_encode")) {
     function json_encode($x, $options = 0) {

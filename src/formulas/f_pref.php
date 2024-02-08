@@ -1,6 +1,6 @@
 <?php
 // formulas/f_pref.php -- HotCRP helper class for formula expressions
-// Copyright (c) 2009-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class Pref_Fexpr extends Fexpr {
     private $is_expertise;
@@ -9,7 +9,7 @@ class Pref_Fexpr extends Fexpr {
         $is_expertise = is_object($ff) ? $ff->kwdef->is_expertise : $ff;
         parent::__construct($is_expertise ? "prefexp" : "pref");
         $this->is_expertise = $is_expertise;
-        $this->_format = $is_expertise ? self::FPREFEXPERTISE : null;
+        $this->set_format($is_expertise ? Fexpr::FPREFEXPERTISE : Fexpr::FNUMERIC);
         if (is_object($ff) && $ff->modifier) {
             $this->cids = $ff->modifier;
         }

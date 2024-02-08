@@ -1,12 +1,12 @@
 <?php
 // formulas/f_conflict.php -- HotCRP helper class for formula expressions
-// Copyright (c) 2009-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class Conflict_Fexpr extends Fexpr {
     private $ispc;
     function __construct($ispc) {
         $this->ispc = is_object($ispc) ? $ispc->kwdef->is_pc : $ispc;
-        $this->_format = self::FBOOL;
+        $this->set_format(Fexpr::FBOOL);
     }
     function inferred_index() {
         return Fexpr::IDX_PC;

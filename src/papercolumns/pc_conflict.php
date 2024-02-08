@@ -1,13 +1,19 @@
 <?php
 // pc_conflict.php -- HotCRP conflict list column
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Conflict_PaperColumn extends PaperColumn {
+    /** @var ?Contact */
     private $contact;
+    /** @var bool */
     private $show_user;
+    /** @var bool */
     private $not_me;
+    /** @var bool */
     private $show_description;
+    /** @var bool */
     private $editable = false;
+    /** @var bool */
     private $basicheader = false;
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
@@ -104,7 +110,7 @@ class Conflict_PaperColumn extends PaperColumn {
         $t = '<input type="checkbox" class="uic uikd uich js-assign-review js-range-click" '
             . 'data-range-type="assrevu' . $this->contact->contactId
             . '" name="assrev' . $row->paperId . 'u' . $this->contact->contactId
-            . '" value="-1" autocomplete="off"'
+            . '" value="conflict" autocomplete="off"'
             . (Conflict::is_conflicted($ct) ? " checked" : "");
         if ($this->show_user) {
             $t .= ' title="' . $pl->user->name_text_for($this->contact) . ' conflict"';
@@ -136,8 +142,16 @@ class Conflict_PaperColumn extends PaperColumn {
             }
         }
         if (empty($rs)) {
-            PaperColumn::column_error($user, "No PC member matches “" . htmlspecialchars($m[2]) . "”.");
+            PaperColumn::column_error($user, "<0>PC member ‘{$m[2]}’ not found");
         }
         return $rs;
+    }
+
+    static function completions(Contact $user, $fxt) {
+        if ($user->can_view_some_conflicts()) {
+            return [($fxt->show_description ?? false) ? "pcconfdesc:<user>" : "pcconf:<user>"];
+        } else {
+            return [];
+        }
     }
 }

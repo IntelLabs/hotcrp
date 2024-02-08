@@ -1,6 +1,6 @@
 <?php
 // search/st_revpref.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class RevprefSearchMatcher extends ContactCountMatcher {
     /** @var ?CountMatcher */
@@ -103,7 +103,7 @@ class Revpref_SearchTerm extends SearchTerm {
         $value = new RevprefSearchMatcher($count, $contacts, $safe_contacts >= 0);
         if (strcasecmp($word, "any") == 0 || strcasecmp($word, "none") == 0) {
             $value->is_any = true;
-        } else if (preg_match(',\A\s*([=!<>]=?|≠|≤|≥|)\s*(-?\d*)\s*([xyz]?)\z,i', $word, $m)
+        } else if (preg_match('/\A\s*([=!<>]=?|≠|≤|≥|)\s*(-?\d*)\s*([xyz]?)\z/is', $word, $m)
                    && ($m[2] !== "" || $m[3] !== "")) {
             if ($m[2] !== "") {
                 $value->preference_match = new CountMatcher($m[1] . $m[2]);
@@ -119,24 +119,18 @@ class Revpref_SearchTerm extends SearchTerm {
     }
 
     function sqlexpr(SearchQueryInfo $sqi) {
-        if ($this->rpsm->preference_match
-            && $this->rpsm->preference_match->test(0)
-            && !$this->rpsm->expertise_match) {
+        if ($this->rpsm->test(0)
+            || ($this->rpsm->preference_match
+                && $this->rpsm->preference_match->test(0)
+                && !$this->rpsm->expertise_match)) {
             return "true";
+        } else {
+            $where = ["paperId=Paper.paperId", $this->rpsm->contact_match_sql("contactId")];
+            if (($match = $this->rpsm->preference_expertise_match())) {
+                $where[] = $match;
+            }
+            return "coalesce((select count(*) from PaperReviewPreference where " . join(" and ", $where) . "),0)" . $this->rpsm->comparison();
         }
-        $where = [$this->rpsm->contact_match_sql("contactId")];
-        if (($match = $this->rpsm->preference_expertise_match())) {
-            $where[] = $match;
-        }
-        $q = "select paperId, count(PaperReviewPreference.preference) as count"
-            . " from PaperReviewPreference";
-        if (count($where)) {
-            $q .= " where " . join(" and ", $where);
-        }
-        $q .= " group by paperId";
-        $thistab = "Revpref_" . count($sqi->tables);
-        $sqi->add_table($thistab, ["left join", "($q)"]);
-        return "coalesce($thistab.count,0)" . $this->rpsm->comparison();
     }
     function test(PaperInfo $row, $rrow) {
         $can_view = $this->user->can_view_preference($row, $this->rpsm->safe_contacts);

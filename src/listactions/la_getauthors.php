@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getauthors.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class GetAuthors_ListAction extends ListAction {
     /** @return array<mixed,Contact> */
@@ -25,7 +25,9 @@ class GetAuthors_ListAction extends ListAction {
             }
             if ($users === null) {
                 $users = self::contact_map($user->conf, $ssel);
-                Contact::ensure_contactdb_users($user->conf, $users);
+                foreach ($users as $u) {
+                    $user->conf->prefetch_cdb_user_by_email($u->email);
+                }
             }
             $admin = $user->allow_administer($prow);
             $aucid = [];

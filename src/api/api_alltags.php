@@ -1,11 +1,11 @@
 <?php
 // api_alltags.php -- HotCRP tag completion API call
-// Copyright (c) 2008-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2022 Eddie Kohler; see LICENSE.
 
 class AllTags_API {
     static function run(Contact $user) {
         if (!$user->isPC) {
-            return ["ok" => false, "error" => "Permission error.", "tags" => []];
+            return ["ok" => false, "error" => "Permission error", "tags" => []];
         } else if ($user->conf->check_track_view_sensitivity()
                    || (!$user->conf->tag_seeall
                        && ($user->privChair

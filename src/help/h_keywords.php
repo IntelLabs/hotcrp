@@ -1,9 +1,9 @@
 <?php
-// src/help/h_keywords.php -- HotCRP help functions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// help/h_keywords.php -- HotCRP help functions
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Keywords_HelpTopic {
-    static function render(HelpRenderer $hth) {
+    static function print(HelpRenderer $hth) {
         // how to report author searches?
         if ($hth->conf->submission_blindness() === Conf::BLIND_NEVER) {
             $aunote = "";
@@ -14,7 +14,7 @@ class Keywords_HelpTopic {
         }
 
         // does a reviewer tag exist?
-        $retag = $hth->meaningful_pc_tag() ? : "";
+        $retag = $hth->meaningful_pc_tag() ?? "";
 
         echo $hth->table(true);
         echo $hth->tgroup("Basics");
@@ -49,7 +49,7 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("topic:link", "selected topics match “link”");
 
         $opts = array_filter($hth->conf->options()->normal(), function ($o) {
-            return $o->form_position() !== false && $o->search_keyword() !== false;
+            return $o->form_order() !== false && $o->search_keyword() !== false;
         });
         usort($opts, function ($a, $b) {
             if ($a->final !== $b->final) {
@@ -94,9 +94,9 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("#disc*", "matches any tag that <em>starts with</em> “disc”");
 
         $cx = null;
-        $cm = array();
+        $cm = [];
         foreach ($hth->conf->tags() as $t) {
-            foreach ($t->colors ? : array() as $c) {
+            foreach ($t->colors ? : [] as $c) {
                 $cx = $cx ? : $c;
                 if ($cx === $c)
                     $cm[] = "“{$t->tag}”";
@@ -112,8 +112,9 @@ class Keywords_HelpTopic {
         echo $hth->tgroup("Reviews");
         echo $hth->search_trow("re:me", "you are a reviewer");
         echo $hth->search_trow("re:fdabek", "“fdabek” in reviewer name/email");
-        if ($retag)
+        if ($retag) {
             echo $hth->search_trow("re:#$retag", "has a reviewer tagged “#" . $retag . "”");
+        }
         echo $hth->search_trow("re:4", "four reviewers (assigned and/or completed)");
         if ($retag) {
             echo $hth->search_trow("re:#$retag>1", "at least two reviewers (assigned and/or completed) tagged “#" . $retag . "”");
@@ -125,9 +126,13 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("re:secondary", "at least one secondary reviewer");
         echo $hth->search_trow("re:external", "at least one external reviewer");
         echo $hth->search_trow("re:primary:fdabek:complete", "“fdabek” has completed a primary review");
+        if ($hth->conf->setting("extrev_chairreq") >= 0) {
+            echo $hth->search_trow("re:myreq", "has a review requested by you");
+            echo $hth->search_trow("re:myreq:not-accepted", "has a review requested by you that hasn’t been accepted or edited yet");
+        }
         if ($roundname) {
-            echo $hth->search_trow("round:$roundname", "review in round “" . htmlspecialchars($roundname) . "”");
-            echo $hth->search_trow("round:{$roundname}:jinyang", "review in round “" . htmlspecialchars($roundname) . "” by reviewer “jinyang”");
+            echo $hth->search_trow("re:{$roundname}", "review in round “" . htmlspecialchars($roundname) . "”");
+            echo $hth->search_trow("re:{$roundname}:jinyang", "review in round “" . htmlspecialchars($roundname) . "” by reviewer “jinyang”");
         }
         echo $hth->search_trow("re:auwords<100", "has a review with less than 100 words in author-visible fields");
         if ($hth->conf->setting("rev_tokens")) {
@@ -143,7 +148,7 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("cmt:>=3", "at least <em>three</em> visible reviewer comments");
         echo $hth->search_trow("has:aucmt", "at least one reviewer comment visible to authors");
         echo $hth->search_trow("cmt:sylvia", "“sylvia” (in name/email) wrote at least one visible comment; can combine with counts, use reviewer tags");
-        $rrds = $hth->conf->resp_rounds();
+        $rrds = $hth->conf->response_rounds();
         if (count($rrds) > 1) {
             echo $hth->search_trow("has:response", "has an author’s response");
             echo $hth->search_trow("has:{$rrds[1]->name}response", "has {$rrds[1]->name} response");
@@ -216,7 +221,7 @@ class Keywords_HelpTopic {
                 $gt_typical = "greater than {$r->typical_score()}";
                 $le_typical = "less than or equal to {$r->typical_score()}";
             } else {
-                $s1 = $r->parse_option_value($r->typical_score());
+                $s1 = $r->parse_value($r->typical_score());
                 if ($hth->conf->opt("smartScoreCompare")) {
                     $s1le = range($s1, 1);
                     $s1gt = range(count($r->options), $s1 + 1);
@@ -237,7 +242,6 @@ class Keywords_HelpTopic {
             echo $hth->search_trow("{$r->search_keyword()}:ext>{$r->typical_score()}", "at least one completed external review has $r->name_html score $gt_typical");
             echo $hth->search_trow("{$r->search_keyword()}:pc:2>{$r->typical_score()}", "at least two completed PC reviews have $r->name_html score $gt_typical");
             echo $hth->search_trow("{$r->search_keyword()}:sylvia={$r->typical_score()}", "“sylvia” (reviewer name/email) gave $r->name_html score {$r->typical_score()}");
-            $t = "";
         }
         if (count($farr[1])) {
             $r = $farr[1][0];

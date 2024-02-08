@@ -1,6 +1,6 @@
 <?php
 // search/st_proposal.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ReviewRequestSearchMatcher extends ContactCountMatcher {
     public $round;
@@ -12,11 +12,12 @@ class ReviewRequestSearchMatcher extends ContactCountMatcher {
     }
 
     function apply_round($word, Conf $conf) {
-        if (($round = $conf->round_number($word, false)) === false) {
+        if (($round = $conf->round_number($word, false)) !== null) {
+            $this->round[] = $round;
+            return true;
+        } else {
             return false;
         }
-        $this->round[] = $round;
-        return true;
     }
     function apply_comparison($word) {
         $a = CountMatcher::unpack_search_comparison($word);
@@ -79,7 +80,7 @@ class Proposal_SearchTerm extends SearchTerm {
                 $qword = $m[2];
             } else if (preg_match('/\A(..*?|"[^"]+(?:"|\z))' . $tailre, $qword, $m)) {
                 if (($quoted = $m[1][0] === "\"")) {
-                    $m[1] = str_replace(array('"', '*'), array('', '\*'), $m[1]);
+                    $m[1] = str_replace(['"', '*'], ['', '\*'], $m[1]);
                 }
                 $contacts = $m[1];
                 $qword = $m[2];
@@ -89,7 +90,7 @@ class Proposal_SearchTerm extends SearchTerm {
             }
         }
 
-        if (($qr = PaperSearch::check_tautology($rqsm->comparison()))) {
+        if (($qr = SearchTerm::make_constant($rqsm->tautology()))) {
             return $qr;
         }
 

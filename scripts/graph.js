@@ -1,5 +1,5 @@
 // graph.js -- HotCRP JavaScript library for graph drawing
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 hotcrp.graph = (function ($, d3) {
 var handle_ui = hotcrp.handle_ui;
@@ -391,14 +391,14 @@ function pid_renderer(ps, cc) {
         }
         if (cx) {
             make_pattern_fill(cx);
-            p = '<span class="' + cx + '">#' + p + '</span>';
+            p = '<span class="'.concat(cx, '">#', p, '</span>');
         } else
             p = '#' + p;
         var comma = i === ps.length - 1 ? "" : ","
         if (rest)
-            a.push('<span class="nw">' + p + rest + comma + '</span>');
+            a.push('<span class="nw">'.concat(p, rest, comma, '</span>'));
         else if (cx && comma)
-            a.push('<span class="nw">' + p + comma + '</span>');
+            a.push('<span class="nw">'.concat(p, comma, '</span>'));
         else
             a.push(p + comma);
     }
@@ -430,6 +430,12 @@ function clicker(pids, event) {
         x.sort(pid_sorter);
         clicker_go(hoturl("search", {q: x.join(" ")}), event);
     }
+}
+
+function make_reviewer_clicker(email) {
+    return function (event) {
+        clicker_go(hoturl("search", {q: "re:" + email}), event);
+    };
 }
 
 function clicker_go(url, event) {
@@ -484,7 +490,7 @@ function make_args(selector, args) {
 function position_label(axis, p, prefix) {
     var aa = axis.axis_args, t = '<span class="nw">' + (prefix || "");
     if (aa.label)
-        t += escape_entities(aa.label) + " ";
+        t += escape_html(aa.label) + " ";
     return t + aa.ticks.unparse_html.call(axis, p, true) + '</span>';
 }
 
@@ -564,37 +570,41 @@ function graph_cdf(selector, args) {
         .style("pointer-events", "all")
         .on("mouseover", mousemoved)
         .on("mousemove", mousemoved)
-        .on("mouseout", mouseout);
+        .on("mouseout", mouseout)
+        .on("click", mouseclick);
 
-    var hovered_path, hubble;
+    var hovered_path, hovered_series, hubble;
     function mousemoved(event) {
         var m = d3.pointer(event), p = {distance: 16};
         m.clientX = event.clientX;
         m.clientY = event.clientY;
-        for (var i in data)
+        for (var i in data) {
             if (series[i].label || args.cdf_tooltip_position)
                 p = closestPoint(svg.select("[data-index='" + i + "']").node(), m, p);
-        if (p.pathNode != hovered_path) {
-            if (p.pathNode)
-                hovers.datum(data[p.pathNode.getAttribute("data-index")])
-                    .attr("d", line).style("display", null);
-            else
+        }
+        if (p.pathNode !== hovered_path) {
+            if (p.pathNode) {
+                i = p.pathNode.getAttribute("data-index");
+                hovered_series = series[i];
+                hovers.datum(data[i]).attr("d", line).style("display", null);
+            } else {
+                hovered_series = null;
                 hovers.style("display", "none");
+            }
             hovered_path = p.pathNode;
         }
-        var u = p.pathNode ? series[p.pathNode.getAttribute("data-index")] : null;
-        if (u && (u.label || args.cdf_tooltip_position)) {
+        if (hovered_series && (hovered_series.label || args.cdf_tooltip_position)) {
             hubble = hubble || make_bubble("", {color: args.tooltip_class || "graphtip", "pointer-events": "none"});
             var dir = Math.abs(tangentAngle(p.pathNode, p.pathLength));
             if (args.cdf_tooltip_position) {
                 var xp = x.invert(p[0]), yp = y.invert(p[1]);
-                var label = (u.label ? text_to_html(u.label) + " " : "") +
+                var label = (hovered_series.label ? text_to_html(hovered_series.label) + " " : "") +
                     args.x.ticks.unparse_html.call(xAxis, x.invert(p[0]), true) +
                     ", " +
                     args.y.ticks.unparse_html.call(yAxis, y.invert(p[1]), true);
                 hubble.html(label);
             } else
-                hubble.text(u.label);
+                hubble.text(hovered_series.label);
             hubble.anchor(dir >= 0.25*Math.PI && dir <= 0.75*Math.PI ? "e" : "s")
                 .at(p[0] + args.left, p[1], this);
         } else if (hubble) {
@@ -605,7 +615,12 @@ function graph_cdf(selector, args) {
     function mouseout() {
         hovers.style("display", "none");
         hubble && hubble.remove();
-        hovered_path = hubble = null;
+        hovered_path = hovered_series = hubble = null;
+    }
+
+    function mouseclick(evt) {
+        if (hovered_series && hovered_series.click)
+            hovered_series.click.call(this, evt);
     }
 };
 
@@ -617,8 +632,12 @@ function procrastination_filter(revdata) {
     var alldata = [], d, i, l, cid, u;
     for (cid in revdata.reviews) {
         var d = {d: revdata.reviews[cid], className: "gcdf-many"};
-        if ((u = revdata.users[cid]) && u.name)
-            d.label = u.name;
+        if ((u = revdata.users[cid])) {
+            if (u.name)
+                d.label = u.name;
+            if (u.email)
+                d.click = make_reviewer_clicker(u.email);
+        }
         if (cid && cid == siteinfo.user.cid) {
             d.className = "gcdf-highlight";
             d.priority = 1;
@@ -810,11 +829,11 @@ function remap_scatter_data(data, rv, map) {
     }
 }
 
-var scatter_annulus = d3.arc()
+var scatter_annulus = d3 ? d3.arc()
     .innerRadius(function (d) { return d.r0 ? d.r0 - 0.5 : 0; })
     .outerRadius(function (d) { return d.r - 0.5; })
     .startAngle(0)
-    .endAngle(Math.PI * 2);
+    .endAngle(Math.PI * 2) : null;
 
 function scatter_transform(d) {
     return "translate(" + d[0] + "," + d[1] + ")";
@@ -1623,13 +1642,13 @@ handle_ui.on("js-hotgraph-highlight", function () {
 });
 
 var graphers = {
-    procrastination: {filter: true, callback: procrastination_filter},
-    scatter: {callback: graph_scatter},
-    cdf: {callback: graph_cdf},
-    "cumulative-count": {callback: graph_cdf},
-    bar: {callback: graph_bars},
-    "full-stack": {callback: graph_bars},
-    box: {callback: graph_boxplot}
+    procrastination: {filter: true, function: procrastination_filter},
+    scatter: {function: graph_scatter},
+    cdf: {function: graph_cdf},
+    "cumulative-count": {function: graph_cdf},
+    bar: {function: graph_bars},
+    "full-stack": {function: graph_bars},
+    box: {function: graph_boxplot}
 };
 
 return function (selector, args) {
@@ -1637,17 +1656,24 @@ return function (selector, args) {
         var g = graphers[args.type];
         if (!g)
             return null;
-        else if (g.filter)
-            args = g.callback(args);
+        else if (!d3) {
+            var $err = $('<div class="msg msg-error"></div>').appendTo(selector);
+            append_feedback_near($err[0], {message: "<0>Graphs are not supported on this browser", status: 2});
+            if (document.documentMode) {
+                append_feedback_near($err[0], {message: "<5>You appear to be using a version of Internet Explorer, which is no longer supported. <a href=\"https://browsehappy.com\">Edge, Firefox, Chrome, and Safari</a> are supported, among others.", status: -5});
+            }
+            return null;
+        } else if (g.filter)
+            args = g["function"](args);
         else {
             args = make_args(selector, args);
             var svg = d3.select(selector).append("svg")
                 .attr("width", args.width + args.left + args.right)
                 .attr("height", args.height + args.top + args.bottom)
               .append("g")
-                .attr("transform", "translate(" + args.left + "," + args.top + ")");
-            return g.callback.call(svg, selector, args);
+                .attr("transform", "translate(".concat(args.left, ",", args.top, ")"));
+            return g["function"].call(svg, selector, args);
         }
     }
 };
-})(jQuery, d3);
+})(jQuery, window.d3);

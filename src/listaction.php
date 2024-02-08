@@ -1,22 +1,28 @@
 <?php
 // listaction.php -- HotCRP helper class for paper search actions
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class ListAction {
-    public $subname;
-    const ENOENT = "No such action.";
-    const EPERM = "Permission error.";
     function allow(Contact $user, Qrequest $qreq) {
         return true;
     }
+    /** @return null|MessageItem|CsvGenerator|Redirection */
     function run(Contact $user, Qrequest $qreq, SearchSelection $ssel) {
-        return "Unsupported.";
+        return MessageItem::error("<0>No such action");
     }
 
+    /** @return MessageItem */
+    static function enoent() {
+        return MessageItem::error("<0>No such action");
+    }
+    /** @return MessageItem */
+    static function eperm() {
+        return MessageItem::error("<0>Permission error");
+    }
 
-    /** @return GroupedExtensions */
+    /** @return ComponentSet */
     static function grouped_extensions(Contact $user) {
-        $gex = new GroupedExtensions($user, ["etc/listactions.json"], $user->conf->opt("listActions"));
+        $gex = new ComponentSet($user, ["etc/listactions.json"], $user->conf->opt("listActions"));
         foreach ($gex->members("__expand") as $gj) {
             if (!isset($gj->allow_if) || $gex->allowed($gj->allow_if, $gj)) {
                 Conf::xt_resolve_require($gj);
@@ -26,7 +32,7 @@ class ListAction {
         return $gex;
     }
 
-    /** @param GroupedExtensions $gex
+    /** @param ComponentSet $gex
      * @param string $group
      * @return list */
     static function members_selector_options($gex, $group) {
@@ -41,15 +47,22 @@ class ListAction {
                         $sel_opt[] = ["optgroup", false];
                     }
                     $last_group = null;
-                    $sel_opt[] = ["value" => substr($rf->name, $p), "label" => $rf->title];
                 } else {
                     $group = substr($rf->title, 0, $as);
                     if ($group !== $last_group) {
                         $sel_opt[] = ["optgroup", $group];
                         $last_group = $group;
                     }
-                    $sel_opt[] = ["value" => substr($rf->name, $p), "label" => substr($rf->title, $as + 1)];
                 }
+                $opt = [
+                    "value" => substr($rf->name, $p),
+                    "label" => $as === false ? $rf->title : substr($rf->title, $as + 1)
+                ];
+                foreach ($rf as $k => $v) {
+                    if (str_starts_with($k, "data-"))
+                        $opt[$k] = $v;
+                }
+                $sel_opt[] = $opt;
             }
         }
         return $sel_opt;
@@ -62,7 +75,7 @@ class ListAction {
         if ($qreq->method() !== "GET"
             && $qreq->method() !== "HEAD"
             && !$qreq->valid_token()) {
-            return new JsonResult(403, "Missing credentials.");
+            return JsonResult::make_error(403, "<0>Missing credentials");
         }
         $conf = $user->conf;
         $gex = self::grouped_extensions($user);
@@ -78,16 +91,16 @@ class ListAction {
             $uf1 = $gex->get($name);
             $conf->_xt_allow_callback = null;
             if ($uf1) {
-                return new JsonResult(405, "Method not supported.");
+                return JsonResult::make_error(405, "<0>Method not supported");
             }
         }
         if (is_array($selection)) {
             $selection = new SearchSelection($selection);
         }
         if (!$uf || !Conf::xt_resolve_require($uf) || !is_string($uf->function)) {
-            return new JsonResult(404, "No such action.");
+            return JsonResult::make_error(404, "<0>No such action");
         } else if (($uf->paper ?? false) && $selection->is_empty()) {
-            return new JsonResult(400, "No papers selected.");
+            return JsonResult::make_error(400, "<0>No papers selected");
         } else if ($uf->function[0] === "+") {
             $class = substr($uf->function, 1);
             /** @phan-suppress-next-line PhanTypeExpectedObjectOrClassName */
@@ -96,7 +109,7 @@ class ListAction {
             $action = call_user_func($uf->function, $user->conf, $uf);
         }
         if (!$action || !$action->allow($user, $qreq)) {
-            return new JsonResult(403, "Permission error.");
+            return JsonResult::make_error(403, "<0>Permission error");
         } else {
             return $action->run($user, $qreq, $selection);
         }
@@ -106,12 +119,11 @@ class ListAction {
      * @param SearchSelection|array<int> $selection */
     static function call($name, Contact $user, Qrequest $qreq, $selection) {
         $res = self::do_call($name, $user, $qreq, $selection);
-        if (is_string($res)) {
-            $res = new JsonResult(400, ["ok" => false, "error" => $res]);
-        }
         if ($res instanceof JsonResult) {
             if ($res->status >= 300 && !$qreq->ajax) {
-                Conf::msg_error($res->content["error"]);
+                if (isset($res->content["message_list"])) {
+                    $user->conf->feedback_msg($res->content["message_list"]);
+                }
             } else {
                 json_exit($res);
             }

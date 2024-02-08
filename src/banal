@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # Copyright (C) 2007 Geoffrey M. Voelker
-# Copyright (c) 2016-2020 Eddie Kohler; see LICENSE.
+# Copyright (c) 2016-2022 Eddie Kohler; see LICENSE.
 #
 # banal -- analyze pdf formatting
 #
@@ -57,6 +57,7 @@ banal has three modes of operation:
 
 -json     print JSON output
 -pagenum  include page numbers and headings
+-debug-words debug words
 
 -zoom=N   passed to pdftohtml
 
@@ -74,7 +75,7 @@ my($banal_version) = 1.2;
 # parse args
 my ($banal_mode) = "report";
 my (%banal_param, $json_pagenum);
-my ($debug_pdftohtml);
+my ($debug_pdftohtml, $debug_words);
 for (my $i = 0; $i < @ARGV; ) {
     if ($ARGV[$i] =~ /\A--?(stats|json|report|version)\z/) {
         $banal_mode = $1;
@@ -82,7 +83,10 @@ for (my $i = 0; $i < @ARGV; ) {
     } elsif ($ARGV[$i] =~ /\A--?debug[-_]pdftohtml\z/) {
         $debug_pdftohtml = 1;
         splice @ARGV, $i, 1;
-    } elsif ($ARGV[$i] =~ /\A--?pagen(?:um|o)\z/) {
+    } elsif ($ARGV[$i] =~ /\A--?debug[-_]words\z/) {
+        $debug_words = 1;
+        splice @ARGV, $i, 1;
+    } elsif ($ARGV[$i] =~ /\A--?(?:pagen(?:um|o)|headings|headers)\z/) {
         $json_pagenum = 1;
         splice @ARGV, $i, 1;
     } elsif ($ARGV[$i] =~ /\A--?(zoom|max[-_]pages)=(.*)\z/) {
@@ -245,7 +249,7 @@ sub bodyfontsize (\%\%) {
     $asize;
 }
 
-sub calc_page_leading ($$$) {
+sub calc_page_leading ($\@$) {
     my ($page, $texts, $bodyfontsize) = @_;
     my ($minlead) = in2pdf(1/16);
 
@@ -402,7 +406,7 @@ sub calc_page_text_region ($$$) {
     }
 }
 
-sub calc_page_nchars ($$$) {
+sub calc_page_nchars ($\%$) {
     my ($page, $tlen_bysize, $bodyfontsize) = @_;
 
     my ($nc) = 0;
@@ -411,6 +415,67 @@ sub calc_page_nchars ($$$) {
         $nc += $tlen_bysize->{$size};
     }
     $page->{nchars} = $nc;
+}
+
+sub calc_page_nwords ($\@$) {
+    my ($page, $texts, $bodyfontsize) = @_;
+    my ($colpos) = $page->{colpos};
+    my ($slack) = in2pdf(1/8);
+    $bodyfontsize *= 0.95;
+
+    my ($nw) = 0;
+    my ($prehyphen) = undef;
+    for (my $tpos = 0; $tpos < @$texts; ++$tpos) {
+        my ($text) = $texts->[$tpos];
+        last if $text->{is_references};
+        next if $text->{sz} < $bodyfontsize;
+
+        my ($content) = $text->{content};
+        $content = $prehyphen . $content if defined($prehyphen);
+        $prehyphen = undef;
+
+        my ($tt) = $text->{t};
+        my ($th) = $text->{h};
+        my ($tr) = $text->{l} + $text->{w};
+        while ($tpos + 1 < @$texts) {
+            my $ntext = $texts->[$tpos + 1];
+            if ($ntext->{l} >= $tr - $slack
+                && $ntext->{l} < $tr + 3 * $slack
+                && interval_overlap($tt, $th, $ntext->{t}, $ntext->{h})) {
+                $content .= " " if $ntext->{l} - $tr > $text->{sz} / 6;
+                $content .= $ntext->{content};
+                $tr = $ntext->{l} + $ntext->{w};
+                ++$tpos;
+            } else {
+                last;
+            }
+        }
+
+        # remove references
+        $content =~ s/\[[\s\d,-]+\]//g;
+
+        if (substr($content, -1) eq "-") {
+            my ($i, $r) = (1, $text->{l} + $text->{w});
+            while ($i < @$colpos && $colpos->[$i] + $slack < $r) {
+                $i += 2;
+            }
+            if ($i < @$colpos && abs($r - $colpos->[$i]) < 2 * $slack) {
+                $content =~ s/([\w()\[\]\{\}\200-\377]+)-\z//;
+                $prehyphen = $1;
+            }
+        }
+        while ($content =~ /[\w\200-\377][\w\[\]\{\},.\200-\377]+(?:\(s\))?/g) {
+            # print STDERR $&, "\n" if $debug_words;
+            ++$nw;
+        }
+    }
+    if (defined($prehyphen)) {
+        while ($prehyphen =~ /[\w\200-\377][\w\[\]\{\},.\200-\377]+(?:\(s\))?/g) {
+            # print STDERR $&, "\n" if $debug_words;
+            ++$nw;
+        }
+    }
+    $page->{nwords} = $nw;
 }
 
 sub interval_overlap ($$$$) {
@@ -496,16 +561,20 @@ sub calc_page_headings ($$$$) {
         my ($colr) = $colpos->[$colri + 1];
 
         # skip if not left-aligned or centered
+        # (“References” is a special case b/c of some fancy formats)
         if (($coll < $tl - 2 * $slack
-             && abs(($tl - $coll) - ($colr - $tr)) > in2pdf(1/4))
+             && abs(($tl - $coll) - ($colr - $tr)) > in2pdf(1/4)
+             && (length($content) != 10 || lc($content) ne "references"))
             || ($tr >= $colr - $slack && $text->{sz} <= $bodyfontsize)) {
             next;
         }
 
         # check for expected headings
         $content =~ s/\s+\z//;
-        next if $content !~ /\A(?:(?:X*(?:I?[XV]|V?I+))\.? +[^,;()]*|\d\d?\d?(?:\.\d+)*\.? +[A-Za-z_][^,;()]*|[ABCDEFGH](?:\.\d+)*\.? +[A-Z_][^,;()]*|(?:(?i)Abstract|Acknowledge?ments?|Contents|References?|Bibliography|Introduction|Appendix(?:es)?[^,;()]*))\z/
-            || $content =~ /[.,:]\z/;
+        if ($content !~ /\A(?:(?:X*(?:I?[XV]|V?I+))\.? +[^,;()]*|\d\d?\d?(?:\.\d+)*\.? +[A-Za-z_][^,;()]*|[ABCDEFGHJKLM](?:\.\d+)*\.? +[A-Z_][^,;()]*|(?:(?i)Abstract|Acknowledge?ments?|Contents|References?|Bibliography|Introduction|Appendices|Appendix(?:es)?[^,;()]*))\z/
+            || $content =~ /[.,:]\z/) {
+            next;
+        }
 
         # skip if part of paragraph
         if ($text->{sz} <= $bodyfontsize) {
@@ -515,7 +584,9 @@ sub calc_page_headings ($$$$) {
             while ($tposl >= 0 || $tposr < @$texts) {
                 $gaps |= column_gap_overlap($texts->[$tposl], $coll, $colr, $tt, $th, $bodyfontsize) if $tposl >= 0;
                 $gaps |= column_gap_overlap($texts->[$tposr], $coll, $colr, $tt, $th, $bodyfontsize) if $tposr < @$texts;
-                next TPOS if $gaps == 3;
+                if ($gaps == 3) {
+                    next TPOS;
+                }
                 --$tposl;
                 ++$tposr;
             }
@@ -523,9 +594,12 @@ sub calc_page_headings ($$$$) {
 
         # skip if already seen or unexpected
         if ($content =~ /\A(\d+)((?:\.\d+)*)/) {
-            next TPOS if $1 > 99 && $doc->{max_numeric_heading} > 0
-                         && $doc->{max_numeric_heading} < 20;
-            next TPOS if exists($doc->{headings}->{$1 . $2});
+            if ($1 > 99 && $doc->{max_numeric_heading} > 0 && $doc->{max_numeric_heading} < 20) {
+                next TPOS;
+            }
+            if (exists($doc->{headings}->{$1 . $2})) {
+                next TPOS;
+            }
             $doc->{max_numeric_heading} = +$1 if $1 > $doc->{max_numeric_heading};
             $doc->{headings}->{$1} = 1;
         }
@@ -592,8 +666,17 @@ sub calc_doc_text_region ($) {
         $mint = $tbb->{top} if !defined($mint) || $mint > $tbb->{top};
     }
 
-    my ($rmarg) = $doc->{pagebb}->{width} - ($maxw + $minl);
-    my ($bmarg) = $doc->{pagebb}->{height} - ($maxh + $mint);
+    my ($rmarg, $bmarg);
+    if (defined($maxw) && defined($minl)) {
+        $rmarg = $doc->{pagebb}->{width} - ($maxw + $minl);
+    } else {
+        $rmarg = $minl = $maxw = 0;
+    }
+    if (defined($maxh) && defined($mint)) {
+        $bmarg = $doc->{pagebb}->{height} - ($maxh + $mint);
+    } else {
+        $bmarg = $mint = $maxh = 0;
+    }
     if ($rmarg < 0) {
         print STDERR "r MARGIN\n";
     }
@@ -619,6 +702,13 @@ sub version_compare ($$) {
         my ($al) = scalar($a[$i] =~ /\A[A-Z]\z/);
         my ($bl) = scalar($b[$i] =~ /\A[A-Z]\z/);
         if ($al != $bl) {
+            if ($i == 0) {
+                if (substr($a[0], 0, 1) eq "A") {
+                    return 1;
+                } elsif (substr($b[0], 0, 1) eq "A") {
+                    return -1;
+                }
+            }
             return -100;
         } elsif ($al ? $a[$i] lt $b[$i] : +$a[$i] < +$b[$i]) {
             return -1;
@@ -647,20 +737,19 @@ sub calc_doc_page_types ($) {
 
     foreach my $i (1..$doc->{npages}) {
         my ($page) = $doc->{pages}->{$i};
-        my ($type) = 'body';
 
         my ($see_acks_refs) = $saw_acks_refs;
         my ($see_appendix) = $saw_appendix;
         if (exists $page->{headings}) {
             my ($is_first) = exists $page->{heading1};
             foreach my $h (@{$page->{headings}}) {
-                if ($h =~ /\A(?:[\dIVX]+\.? *|[ABCDE]\.? *|)(?:Acknowledge?ments?|References?|Bibliography|\AAppendix(?:es)?)\z/i) {
+                if ($h =~ /\A(?:[\dIVX]+\.? *|[ABCDE]\.? *|)(?:Acknowledge?ments?|References?|Bibliography|\AAppendices|\AAppendix(?:es)?)\z/i) {
                     $see_acks_refs = 1;
                     $saw_acks_refs = 1 if $is_first;
                     $see_appendix = 0;
                 } elsif ($h =~ /\A[\dIVX]+\.? *Conclusions?(?: and future work|)\z/i) {
                     $saw_conclusion = 1;
-                } elsif ($h =~ /\A(Appendix\s* |)((?:[A-F]|\d+)(?:\.\d+)*)\.?\s+(Appendix(?:es)?\z|)(.*)\z/i
+                } elsif ($h =~ /\A(Appendix\s* |)((?:[A-M]|\d+)(?:\.\d+)*)\.?\s+(Appendices\z|Appendix(?:es|)\z|)(.*)\z/i
                          && ($see_acks_refs || $saw_conclusion)
                          && ($see_appendix
                              ? version_compare($2, $see_appendix) == 1
@@ -671,24 +760,25 @@ sub calc_doc_page_types ($) {
                 } elsif ($h =~ /\AAppendix/i) {
                     $see_appendix = "yes";
                     $saw_appendix = $see_appendix if $saw_acks_refs || $is_first;
-                } else {
+                } elsif (!$see_appendix || $h =~ /\A[\dIVX]+[\. ]/) {
                     $see_acks_refs = $saw_acks_refs = $saw_appendix = $saw_conclusion = 0;
                 }
                 $is_first = 0;
             }
         }
 
-        if (!exists $page->{nchars}) {
-            $type = 'blank';
+        my ($type) = "body";
+        if (!exists $page->{nchars} || $page->{nchars} == 0) {
+            $type = "blank";
         } elsif ($i == 1 && $page->{nchars} < 800) {
-            $type = 'cover';
+            $type = "cover";
         } elsif ($saw_appendix) {
-            $type = 'appendix';
+            $type = "appendix";
         } elsif ($saw_acks_refs) {
-            $type = 'bib';
+            $type = "bib";
         } elsif ($page->{nchars} < $banal_min_nchars
                  || $page->{ncols} == 0) {
-            $type = 'figure';
+            $type = "figure";
         }
 
         $page->{type} = $type;
@@ -725,7 +815,7 @@ sub calc_doc_columns ($) {
 sub p2h_font_bug ($) {
     my ($doc) = @_;
 
-    return 1 if ($doc->{bodyfont_pt} <= 0);
+    return 1 if !defined($doc->{bodyfont_pt}) || $doc->{bodyfont_pt} <= 0;
     return 0;
 }
 
@@ -764,8 +854,10 @@ sub report_json ($) {
     my $dx = {"pw" => {}, "ph" => {}, "tw" => {}, "th" => {}, "mt" => {}, "ml" => {}, "mr" => {}, "mb" => {}};
     my $px = {};
     my $nummargin = 10000;
+    my $nwords = 0;
     for my $i (1 .. $doc->{npages}) {
         my $page = $doc->{pages}->{$i};
+        $nwords += $page->{nwords} if exists($page->{nwords});
 
         my($pbb) = $page->{pagebb};
         my($pw) = POSIX::floor(pdf2pt($pbb->{width}) + 0.5);
@@ -801,20 +893,27 @@ sub report_json ($) {
     my($mr, $mb) = (modevalkey($dx->{mr}), modevalkey($dx->{mb}));
 
     my ($doc_ps) = sprintf "\"papersize\": [%.0f,%.0f]", $ph, $pw;
-    my ($doc_margin) = sprintf "\"margin\": [%.0f,%.0f,%.0f,%.0f]", $mt, $mr, $mb, $ml;
-    my ($doc_bfs);
+    my ($doc_margin);
+    if (defined($mt) && defined($mr)) {
+        $doc_margin = sprintf "\"margin\": [%.0f,%.0f,%.0f,%.0f]", $mt, $mr, $mb, $ml;
+    } else {
+        $doc_margin = "\"margin\": [0,0,0,0]";
+    }
+    my ($doc_bfs, $doc_l);
     if (p2h_font_bug($doc)) {
         $doc_bfs = "\"bodyfontsize\": null";
+        $doc_l = "\"leading\": null";
     } else {
         $doc_bfs = sprintf "\"bodyfontsize\": %g", $doc->{bodyfont_pt};
+        $doc_l = sprintf "\"leading\": %g", $doc->{lead_pt};
     }
-    my ($doc_l) = sprintf "\"leading\": %g", $doc->{lead_pt};
     my ($doc_c) = sprintf "\"columns\": %d", $doc->{ncols};
     print "  $doc_ps,\n  $doc_margin,\n  $doc_bfs,\n  $doc_l,\n  $doc_c,\n";
     printf "  \"nummargin\": %.0f,\n", $nummargin if $nummargin < 10000;
     if (exists $banal_param{max_pages} && $doc->{npages} > $banal_param{max_pages}) {
         printf "  \"npages\": %d,\n", $doc->{npages};
     }
+    printf "  \"w\": %d,\n", $nwords;
     print "  \"pages\": [";
     my ($sep) = "\n";
 
@@ -834,9 +933,10 @@ sub report_json ($) {
         my($page_ps) = sprintf "\"papersize\": [%.0f,%.0f]", $pd->{ph}, $pd->{pw};
         push @val, $page_ps if $page_ps ne $doc_ps;
 
-        if ($page->{type} eq "blank") {
-            push @val, sprintf "\"pagetype\": \"blank\"";
-        } else {
+        push @val, sprintf "\"type\": %s", json_quote($page->{type})
+            if $page->{type} ne "body";
+
+        if ($page->{type} ne "blank") {
             my($page_margin) = sprintf "\"margin\": [%.0f,%.0f,%.0f,%.0f]", $pd->{mt}, $pd->{pw} - ($pd->{ml} + $pd->{tw}), $pd->{ph} - ($pd->{mt} + $pd->{th}), $pd->{ml};
             push @val, $page_margin if $page_margin ne $doc_margin;
             if (exists($page->{bodyfont_pt})) {
@@ -855,8 +955,9 @@ sub report_json ($) {
                 $page->{type} ne "figure" &&
                 $page->{type} ne "appendix";
             push @val, sprintf "\"c\": %d", $page->{nchars};
-            push @val, sprintf "\"pagetype\": %s", json_quote($page->{type})
-                if $page->{type} ne "body";
+            if (exists($page->{nwords}) && $page->{nwords} > 0) {
+                push @val, sprintf "\"w\": %d", $page->{nwords};
+            }
             if (exists $page->{headings} && $json_pagenum) {
                 my (@ht);
                 foreach my $heading (@{$page->{headings}}) {
@@ -879,7 +980,7 @@ sub report_verbose ($) {
     print $doc->{fullpath}, "\n";
     if (p2h_font_bug ($doc)) {
         print STDERR $doc->{fullpath}, "\n";
-        print STDERR "$banal_filename: Error: pdftohtml encountered font problems...some info likely bogus.\n";
+        print STDERR "$banal_filename: Error: $pdftohtml encountered font problems...some info likely bogus.\n";
     }
     printf "Paper size: %.2fin x %.2fin\n",
         pdf2in($doc->{pagebb}->{width}),
@@ -923,7 +1024,7 @@ sub report_verbose ($) {
         printf "  body font: %gpt\n", $page->{bodyfont_pt};
         printf "  leading: %gpt\n", $page->{lead_pt};
         printf "  columns: %d\n", $page->{ncols};
-        print   "  type: ", $page->{type}, "\n";
+        print  "  type: ", $page->{type}, "\n";
 
         my ($nchars) = $page->{nchars};
         printf "  nchars: %d\n", $nchars;
@@ -935,12 +1036,12 @@ sub report_stats ($) {
     my ($page) = $doc->{pages}->{1};
 
     if (p2h_serious_font_bug ($doc)) {
-        print STDERR "$banal_filename: Error: pdftohtml encountered font problems...skipping.\n";
+        print STDERR "$banal_filename: Error: $pdftohtml encountered font problems...skipping.\n";
         return;
     }
 
     if (p2h_font_bug ($doc)) {
-        print STDERR "$banal_filename: Warning: pdftohtml encountered font problems...some info likely bogus.\n";
+        print STDERR "$banal_filename: Warning: $pdftohtml encountered font problems...some info likely bogus.\n";
     }
 
     printf  "%s\t%.2fx%.2f\t%.2fx%.2f\t%.2fx%.2fx%.2fx%.2f\t%d\t%.1f\t%d\t%d\t%s\n",
@@ -1181,7 +1282,8 @@ sub unxml ($) {
 
 sub account_text_sizes ($\%\%) {
     my($text, $alens, $tlens) = @_;
-    my($size, $len) = ($text->{sz}, length($text->{content}) + 1);
+    my($content) = $text->{content};
+    my($size, $len) = ($text->{sz}, length($content) + 1);
     $alens->{$size} = 0 if !exists $alens->{$size};
     $alens->{$size} += $len;
     if (!$text->{num}) {
@@ -1220,6 +1322,7 @@ sub parse_p2h_text ($$$) {
     my ($doc, $line, $page) = @_;
     my ($pagewidth) = $page->{pagebb}->{width};
     my ($pageheight) = $page->{pagebb}->{height};
+    my ($fontsizefix) = $banal_param{fontsizefix};
 
     my (@texts, %alens, %tlens);
     my ($lowest_number) = 0;
@@ -1244,7 +1347,8 @@ sub parse_p2h_text ($$$) {
 
         my ($top) = rpdf($1);
         my ($left) = rpdf($2);
-        my ($bottom) = $top + rpdf($4);
+        my ($inheight) = +$4;
+        my ($bottom) = $top + rpdf($inheight);
         my ($right) = $left + rpdf($3);
         my ($fontspec) = $page->{doc}->{fonts}->{$5};
         my ($font) = $fontspec->{id};
@@ -1275,7 +1379,12 @@ sub parse_p2h_text ($$$) {
 
         my ($content) = "";
         if ($line =~ /<text.*?>(.*)<\/text>/s) {
-            $content = unxml($1);
+            my ($core_content) = $1;
+            $content = unxml($core_content);
+            if ($fontsizefix && $core_content =~ /<span/) {
+                my ($size2) = rpdffont($inheight);
+                $size = $size2 if $size < $size2 && $size * 1.33 >= $size2;
+            }
         }
         my ($isnum) = length($content) <= 5 && $content =~ /\A[- ,.:\/0-9]*\z/;
         my ($text) = {
@@ -1351,10 +1460,15 @@ sub parse_p2h_text ($$$) {
     my($fontsize) = $bodyfontsize ? $bodyfontsize : $reffontsize;
 
     # compute leading using bodyfontsize and column specs
-    calc_page_leading($page, \@texts, $fontsize);
+    calc_page_leading($page, @texts, $fontsize);
 
     # compute page character count using content lengths
-    calc_page_nchars($page, \%alens, $fontsize);
+    calc_page_nchars($page, %alens, $fontsize);
+
+    # compute page word count using body font size only
+    if ($bodyfontsize) {
+        calc_page_nwords($page, @texts, $bodyfontsize);
+    }
 }
 
 sub parse_p2h_page ($) {
@@ -1477,7 +1591,7 @@ sub banal_file ($) {
     $banal_filename = $doc->{filename};
 
     if (!parse_p2h_header ($doc)) {
-        print STDERR "$banal_filename: Error: No pdftohtml output...corrupted pdf file?\n";
+        print STDERR "$banal_filename: Error: No $pdftohtml output...corrupted pdf file?\n";
         return;
     }
 
@@ -1525,7 +1639,7 @@ sub banal_open_input ($) {
             . " -zoom " . $banal_param{zoom}
             . ($banal_param{noroundcoord} ? " -noroundcoord" : "")
             . " " . shell_quote($fname) . " " . shell_quote($oname) . " 2>&1";
-        print STDERR "$cmd\n" if ($debug_pdftohtml);
+        print STDERR "$cmd\n" if $debug_pdftohtml;
 
         my($ignore_output) = `$cmd`;
         # Some bad `pdftohtml`s add an extra `.xml` suffix.
@@ -1605,6 +1719,9 @@ sub banal_config_p2h ($) {
 
     print "leading policy: $banal_leading_policy\n" if ($debug_leading);
 
+    if (!exists $banal_param{fontsizefix}) {
+        $banal_param{fontsizefix} = $major == 0.40;
+    }
 
     $p2h_font_size_compensation = $major >= 0.85 ? 1 : 3;
     $p2h_scale = 10 / $banal_param{zoom};

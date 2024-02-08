@@ -1,6 +1,6 @@
 <?php
 // tagrankparser.php -- HotCRP offline rank parsing
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class TagRankParser {
     /** @var Contact */
@@ -45,7 +45,6 @@ class TagRankParser {
         $csv->add_synonym("action", "index");
 
         $settings = $pids = [];
-        $found = 0;
         $tagger = new Tagger($this->user);
         $tag = $this->tag;
         $curIndex = 0;

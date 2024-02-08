@@ -1,6 +1,6 @@
 <?php
 // searchsplitter.php -- HotCRP helper class for splitting search strings
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class SearchSplitter {
     /** @var string */
@@ -18,17 +18,21 @@ class SearchSplitter {
     function __construct($str) {
         $this->str = $str;
         $this->len = strlen($str);
-        $this->utf8q = strpos($str, chr(0xE2)) !== false;
+        $this->utf8q = strpos($str, chr(0xE2)) !== false
+            && is_valid_utf8($str);
         $this->set_span_and_pos(0);
     }
+
     /** @return bool */
     function is_empty() {
         return $this->pos >= $this->len;
     }
+
     /** @return string */
     function rest() {
         return substr($this->str, $this->pos);
     }
+
     /** @return string */
     function shift_keyword() {
         if ($this->utf8q
@@ -40,6 +44,7 @@ class SearchSplitter {
             return "";
         }
     }
+
     /** @param string $exceptions
      * @return string */
     function shift($exceptions = null) {
@@ -58,32 +63,48 @@ class SearchSplitter {
             return "";
         }
     }
+
     /** @param string $str */
     function shift_past($str) {
         assert(substr_compare($this->str, $str, $this->pos, strlen($str)) === 0);
         $this->set_span_and_pos(strlen($str));
     }
+
     /** @return bool */
     function skip_whitespace() {
         $this->set_span_and_pos(0);
         return $this->pos < $this->len;
     }
-    /** @return string */
-    function shift_balanced_parens() {
+
+    /** @param string $chars
+     * @return bool */
+    function skip_span($chars) {
+        while ($this->pos < $this->len && strpos($chars, $this->str[$this->pos]) !== false) {
+            ++$this->pos;
+        }
+        return $this->pos < $this->len;
+    }
+
+    /** @param ?string $endchars
+     * @return string */
+    function shift_balanced_parens($endchars = null) {
         $pos0 = $this->pos;
-        $pos1 = self::span_balanced_parens($this->str, $pos0);
+        $pos1 = self::span_balanced_parens($this->str, $pos0, $endchars);
         $this->set_span_and_pos($pos1 - $pos0);
         return substr($this->str, $pos0, $pos1 - $pos0);
     }
+
     /** @param string $re
      * @param list<string> &$m @phan-output-reference */
     function match($re, &$m = null) {
         return preg_match($re, $this->str, $m, 0, $this->pos);
     }
+
     /** @param string $substr */
     function starts_with($substr) {
         return substr_compare($this->str, $substr, $this->pos, strlen($substr)) === 0;
     }
+
     /** @param int $len */
     private function set_span_and_pos($len) {
         $this->last_pos = $this->pos = $this->pos + $len;
@@ -97,11 +118,12 @@ class SearchSplitter {
             }
         }
     }
+
     /** @param string $str
      * @param int $pos
-     * @param ?callable(string,int):bool $endf
+     * @param ?string $endchars
      * @return int */
-    static function span_balanced_parens($str, $pos = 0, $endf = null) {
+    static function span_balanced_parens($str, $pos = 0, $endchars = null) {
         $pstack = "";
         $plast = "";
         $quote = 0;
@@ -111,7 +133,7 @@ class SearchSplitter {
             // stop when done
             if ($plast === ""
                 && !$quote
-                && ($endf === null ? ctype_space($ch) : $endf($ch, $pos))) {
+                && ($endchars === null ? ctype_space($ch) : strpos($endchars, $ch) !== false)) {
                 break;
             }
             // translate “” -> "
@@ -153,6 +175,7 @@ class SearchSplitter {
         }
         return $pos;
     }
+
     /** @param string $s
      * @return list<string> */
     static function split_balanced_parens($s) {

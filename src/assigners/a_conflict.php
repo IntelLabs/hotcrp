@@ -1,6 +1,6 @@
 <?php
 // a_conflict.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2022 Eddie Kohler; see LICENSE.
 
 class Conflict_Assignable extends Assignable {
     /** @var int */
@@ -23,7 +23,9 @@ class Conflict_Assignable extends Assignable {
 }
 
 class Conflict_AssignmentParser extends AssignmentParser {
+    /** @var bool */
     private $remove;
+    /** @var bool */
     private $iscontact;
     function __construct(Conf $conf, $aj) {
         parent::__construct("conflict");
@@ -43,17 +45,20 @@ class Conflict_AssignmentParser extends AssignmentParser {
         self::load_conflict_state($state);
     }
     function allow_paper(PaperInfo $prow, AssignmentState $state) {
-        if (!$state->user->can_administer($prow)
-            && !$state->user->privChair
-            && !$prow->has_author($state->user)) {
-            return "You can’t administer #{$prow->paperId}.";
-        } else if (!$this->iscontact
-                   && !$state->user->can_administer($prow)
-                   && ($whyNot = $state->user->perm_edit_paper($prow))) {
-            return $whyNot->unparse_html();
-        } else {
+        if ($state->user->can_administer($prow)) {
             return true;
+        } else if ($prow->has_author($state->user)) {
+            if ($this->iscontact || !($whyNot = $state->user->perm_edit_paper($prow))) {
+                return true;
+            } else {
+                return new AssignmentError($whyNot);
+            }
+        } else {
+            return false;
         }
+    }
+    function user_universe($req, AssignmentState $state) {
+        return $this->iscontact ? "any" : "pc";
     }
     /** @return ?CountMatcher */
     private function _matcher($req, Conf $conf) {
@@ -81,7 +86,7 @@ class Conflict_AssignmentParser extends AssignmentParser {
             $cids = array_map(function ($x) { return $x->cid; }, $m);
             return $state->users_by_id($cids);
         } else {
-            return false;
+            return null;
         }
     }
     function allow_user(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
@@ -117,7 +122,7 @@ class Conflict_AssignmentParser extends AssignmentParser {
                 $ct = $state->conf->conflict_types()->parse_assignment($text, $old_ct_na);
             }
             if ($ct === false || Conflict::is_author($ct)) {
-                return "Bad conflict type “{$text}”.";
+                return new AssignmentError("Bad conflict type “{$text}”.");
             }
             if (!$admin) {
                 $ct = Conflict::set_pinned($ct, false);
@@ -155,7 +160,7 @@ class Conflict_Assigner extends Assigner {
                     ++$ncontacts;
             }
             if ($ncontacts === 0) {
-                throw new Exception("Each submission must have at least one contact.");
+                throw new AssignmentError("<0>Each submission must have at least one contact.");
             }
         }
         return new Conflict_Assigner($item, $state);
@@ -166,20 +171,26 @@ class Conflict_Assigner extends Assigner {
         $cid = isset($item["cid"]) ? $item["cid"] : $item["_cid"];
         $cflt = $state->query(new Conflict_Assignable($pid, $cid));
         if ($cflt && Conflict::is_conflicted($cflt[0]->_ctype)) {
-            $uname = $state->user_by_id($cid)->name_h(NAME_E);
+            $uname = $state->user_by_id($cid)->name(NAME_E);
             if (isset($item["_override"])
                 && $state->user->can_administer($state->prow($pid))) {
-                $state->warning_near($item->landmark, "Overriding {$uname} conflict with #{$pid}.");
-            } else if (($state->flags & AssignmentState::FLAG_CSV_CONTEXT) !== 0
-                       && $state->user->allow_administer($state->prow($pid))) {
-                throw new Exception("{$uname} has a conflict with #{$pid}. Set an “override” column to “yes” to assign the " . $item["type"] . " anyway.");
+                $state->msg_near($item->landmark, "<0>Overriding {$uname} conflict with #{$pid}", 1);
             } else {
-                throw new Exception("{$uname} has a conflict with #{$pid}.");
+                $state->msg_near($item->landmark, "<0>{$uname} has a conflict with #{$pid}", 2);
+                if (($state->flags & AssignmentState::FLAG_CSV_CONTEXT) !== 0
+                    && $state->user->allow_administer($state->prow($pid))) {
+                    $state->msg_near($item->landmark, "<0>Set an “override” column to “yes” to assign the " . $item["type"] . " anyway.", MessageSet::INFORM);
+                }
+                throw new AssignmentError("");
             }
         } else if ($item->post("_rtype")
                    && ($u = $state->user_by_id($cid))
                    && ($potconf = $state->prow($pid)->potential_conflict_html($u))) {
-            $state->warning_near($item->landmark, $u->name_h(NAME_E) . " has a potential conflict with #{$pid}:<br>" . join("<br>", $potconf[1]));
+            $uname = $u->name(NAME_E);
+            $state->msg_near($item->landmark, "<0>{$uname} has a potential conflict with #{$pid}", 1);
+            foreach ($potconf[1] as $confhtml) {
+                $state->msg_near($item->landmark, "<5>{$confhtml}", MessageSet::INFORM);
+            }
         }
     }
 
@@ -235,7 +246,7 @@ class Conflict_Assigner extends Assigner {
     }
     function execute(AssignmentSet $aset) {
         if ($this->ctype) {
-            $aset->stage_qe("insert into PaperConflict set paperId=?, contactId=?, conflictType=? on duplicate key update conflictType=values(conflictType)", $this->pid, $this->cid, $this->ctype);
+            $aset->stage_qe("insert into PaperConflict set paperId=?, contactId=?, conflictType=? on duplicate key update conflictType=?", $this->pid, $this->cid, $this->ctype, $this->ctype);
         } else {
             $aset->stage_qe("delete from PaperConflict where paperId=? and contactId=?", $this->pid, $this->cid);
         }

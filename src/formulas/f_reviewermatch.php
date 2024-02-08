@@ -1,6 +1,6 @@
 <?php
 // formulas/f_reviewermatch.php -- HotCRP helper class for formula expressions
-// Copyright (c) 2009-2021 Eddie Kohler; see LICENSE.
+// Copyright (c) 2009-2022 Eddie Kohler; see LICENSE.
 
 class ReviewerMatch_Fexpr extends Fexpr {
     /** @var Contact */
@@ -16,7 +16,7 @@ class ReviewerMatch_Fexpr extends Fexpr {
     function __construct(Contact $user, $arg) {
         parent::__construct("reviewermatch");
         $this->user = $user;
-        $this->_format = self::FBOOL;
+        $this->set_format(Fexpr::FBOOL);
         $this->arg = $arg;
         $this->istag = $arg[0] === "#" || ($arg[0] !== "\"" && $user->conf->pc_tag_exists($arg));
         $flags = ContactSearch::F_USER;
@@ -47,5 +47,14 @@ class ReviewerMatch_Fexpr extends Fexpr {
     }
     function matches_at_most_once() {
         return count($this->csearch->user_ids()) <= 1;
+    }
+    #[\ReturnTypeWillChange]
+    function jsonSerialize() {
+        $x = parent::jsonSerialize();
+        $x["match"] = $this->arg;
+        if ($this->csearch->is_empty()) {
+            $x["empty"] = true;
+        }
+        return $x;
     }
 }
