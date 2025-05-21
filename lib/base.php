@@ -797,7 +797,7 @@ if (PHP_VERSION_ID >= 70300) {
     function hotcrp_setcookie($name, $value = "", $options = []) {
         return setcookie($name, $value, $options["expires"] ?? 0,
                          $options["path"] ?? "", $options["domain"] ?? "",
-                         $options["secure"] ?? false, $options["httponly"] ?? false);
+                         $options["secure"] ?? true, $options["httponly"] ?? true);
     }
 }
 
