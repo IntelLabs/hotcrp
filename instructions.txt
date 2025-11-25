@@ -1,0 +1,21 @@
+1. SSH to cur-rfp.jf.intel.com
+2. sudo bash
+3. cd /opt; cp –Rp hotcrp hotcrp-XXX
+4. Edit /etc/nginx/sites-available/default   
+5. cd hotcrp-XXX; ./lib/createdb.sh --user root --password
+   a. use [the password that's in an env var on cur-rfp.jf.intel.com] for MySQL root password. 
+   b. Set database name: proposals2019
+   c. Password for database user proposals2019: proposals2019
+                (see https://gist.github.com/nc2y/46350d8ee3e257380a940fb46d25c242 for what it does)
+6. Edit /opt/hotcrp-XXX/conf/options.php: dbName (e.g., proposals2019), dbUser (e.g., proposals2019), dbPassword (e.g., proposals2019)
+7.
+for s in php7.4-fpm mysql nginx; do sudo service $s restart; done
+for s in php8.3-fpm mariadb nginx; do sudo service $s restart; done
+8. 
+Open in browser: https://cur-rfp.jf.intel.com/XXX/
+Click on Create an account link
+Enter the email address of the requestor, e.g. jolene.m.pursell@intel.com
+Use "Jolene" as password
+9.
+Select Users 
+Create account for requestor with their email address; PC chair
